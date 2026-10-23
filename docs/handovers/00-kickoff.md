@@ -17,7 +17,7 @@ Do chat C1, Research (`PLAN.md` §5.2 C1 and §6).
 - **Tests:** T-SETUP-01 passes (unit). There are no model or sim tests yet.
 - **CI:** Aren reported that CI passes after the D-010 fix.
 - **Last commit:** Aren gives the hash of the last commit on `main` at the start of C1.
-- **Decisions:** D-001 to D-010 are ACCEPTED.
+- **Decisions:** D-001 to D-011 are ACCEPTED.
 
 ## Facts that C1 needs
 
@@ -31,7 +31,7 @@ Do chat C1, Research (`PLAN.md` §5.2 C1 and §6).
 
 ## Open questions
 
-- **Chat export method (risk RK8):** open at the end of C0. The support article describes only a full data export, and it does not give the file format. Aren tests the export. If the export needs a conversion to one `.md` file for each chat, we decide that in a separate small step.
+- **Chat export (D-011):** not a C1 task. The side chat S1 handles the export format. C1 does not wait for it.
 - The research questions are in `PLAN.md` §6.1–§6.8.
 
 ## Read list for the next chat

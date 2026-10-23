@@ -191,3 +191,18 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "Option A done". Aren reported the next CI run: "CI done".
 - **Lesson for later chats:** for each GitHub Action, check that the exact tag exists (`git ls-remote --tags`), not only the release.
 - **Revisit when:** an action needs an update.
+
+## D-011. When we learn the chat export format
+
+- **Status:** ACCEPTED (2026-10-23), option A
+- **Context:** Deliverable D3 needs each chat as its own `.md` file in `chats/`, complete and unedited. **[SOURCE]** The support article describes only a full data export (Settings > Privacy > Export data, a download link by email that expires after 24 hours). It does not give the file format ([Export your Claude data](https://support.claude.com/en/articles/9450526-export-your-claude-data)).
+- **Fact found during the discussion:** the final export must come after the last message of the last chat (C8). If the format needs a conversion, the converter must exist before that. Thus a conversion always needs one earlier export to learn the format.
+- **Options:**
+  - **A.** Request one full export now, to learn the format. Do the final export after C8. Weak point: two export requests and a few minutes now.
+  - **B.** Only one export, after C8. Weak point: if the format needs a conversion, B also needs two exports, and the converter comes late with no buffer.
+  - **Not exporting:** rejected. It breaks deliverable D3, and the interview uses the original chats and the exported copies.
+- **Claude's preference:** A.
+- **Decision:** A. Aren requests the full export now. Aren shows the format (file names and the keys of one conversation, not the content) in a separate side chat, S1. The final export comes after the last message of C8.
+- **Reason (Aren's words):** "ok I see your point, I will request the format now and will present the result in a separate chat once we get it."
+- **Questions raised:** Aren first chose B, "so I only request chat exports once". Claude then showed that B gives one export only if no conversion is necessary. Aren changed to A.
+- **Revisit when:** S1 shows that the export already has one Markdown file for each chat. Then no converter is necessary.

@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.4 · **Date:** 2026-10-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4).
+**Version:** 0.5 · **Date:** 2026-10-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011.
 
 ---
 
@@ -153,8 +153,9 @@ Phase order: option B, skeleton first (D-002).
 | C6 | Weakest link | One improvement, chosen with numbers after M3 | — | 2 h |
 | C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
+| S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
 | — | Buffer | — | — | 1 h |
-| | **Total** | | | **20 h** |
+| | **Total** | | | **20.5 h** |
 
 ASR: automatic speech recognition. MT: machine translation.
 
@@ -172,7 +173,7 @@ ASR: automatic speech recognition. MT: machine translation.
   6. Claude gives Aren the commands to run (`uv sync`, `ruff`, `pytest`) and the commit message.
   7. Aren runs the commands. The result goes into `test-results/`. Claude reads it. *(done: all checks pass)*
   8. Aren reads `git diff`, commits, and pushes. CI must be green. *(done after the D-010 fix)*
-  9. Aren does a test export of this chat to Markdown. This removes the export risk early.
+  9. Aren requests the full data export, to learn its format (D-011). The format check is in the side chat S1. *(changed)*
   10. Claude writes handover H0 and copies the documents into the Project. *(done)*
 - **Decisions:** D-001 to D-008.
 - **Done when:** RULES and PLAN v0.2 are confirmed. CI is green on the first commit. The export method is known.
@@ -261,15 +262,22 @@ ASR: automatic speech recognition. MT: machine translation.
   4. Fix the problems that we find.
 - **Done when:** M4 works.
 
+#### S1. Side chat: export format
+
+- **Goal:** Learn the format of the full data export. Decide if a converter to one `.md` file for each chat is necessary (D-011).
+- **Read list:** `docs/handovers/00b-export-format.md`, `RULES.md` R15, `DECISIONS.md` D-011.
+- **Input from Aren:** the file names in the export and the keys of one conversation. Not the content of other chats.
+- **Done when:** we know the export method for C8. If a converter is necessary, it exists and has tests.
+
 #### C8. Delivery
 
 - **Goal:** Complete D1–D3.
 - **Steps:**
   1. Write the README from `DECISIONS.md`, `ARCHITECTURE.md`, and the measured numbers.
   2. Write the known limits honestly.
-  3. Aren exports all chats to `chats/`.
-  4. Check each item in §1 against the result.
-  5. Aren does a rehearsal of the interview start: install, audio setup, run.
+  3. Check each item in §1 against the result.
+  4. Aren does a rehearsal of the interview start: install, audio setup, run.
+  5. **Last step, after Claude's last message:** Aren requests the full data export and puts each project chat into `chats/` as one `.md` file (with the converter from S1, if necessary). Then Aren commits and pushes.
 - **Done when:** M5. Aren sends the repository link.
 
 ---
@@ -396,7 +404,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | RK5 | Speaker labels are not stable for short segments. | F4 fails. | Measure the minimum segment length in C5. Document the limit. |
 | RK6 | Gated models need a Hugging Face token. | Setup fails at the interview. | The token stays in a local `.env` file, never in git. The README gives the setup steps. |
 | RK7 | The cloud workspace cannot download models (§3). | Claude cannot run model tests. | Model and sim tests run automatically on Aren's laptop (D-006). Aren pastes the result. |
-| RK8 | The chat export method is not known. | D3 is late or incomplete. | Test export in C0. Export at the end of each chat, not only at the end of the project. |
+| RK8 | The chat export method is not known. | D3 is late or incomplete. | Learn the export format early, in S1. Final export after the last message of C8 (D-011). |
 | RK9 | The brief names "Claude Cowork". The Cowork capabilities are now a part of the Claude app. | An interviewer can ask about the tool. | We do all work in this Project in the Claude app. Aren can confirm with Mathrix if he is not sure. |
 | RK10 | Time overrun. The brief gives one week from receipt, and we have no calendar. | Missing features or a late delivery. | Time boxes and a time log. Cut back to the MVP. Respect the "Out of scope" list. |
 | RK11 | Context loss between chats. | Decisions are made again; work is done again. | Handovers, `DECISIONS.md`, Project documents. |
@@ -446,8 +454,9 @@ None at the end of C0.
 | C6 | 2 h | | |
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
+| S1 | 0.5 h | | |
 | Buffer | 1 h | 1.0 h | Used by C0. No buffer is left. |
-| **Total** | **20 h** | 2.5 h | |
+| **Total** | **20.5 h** | 2.5 h | S1 adds 0.5 h over the 20 h of the brief. |
 
 ---
 
@@ -459,3 +468,4 @@ None at the end of C0.
 | 0.2 | 2026-10-23 | Aren's answers: target hardware (§1.6); Aren owns the repository; option B phase order (skeleton is now C2, eval and bake-off is C3); no calendar; sim test level; new risks RK13 and RK14; new research questions §6.6 and §6.8; open questions Q6–Q11. |
 | 0.3 | 2026-10-23 | Laptop facts from Aren's commands (§1.6). Project folder on the laptop is Claude's only place to read and write (D-005). Aren runs all tests; results go to `test-results/` (D-006). Tool baseline approved (D-007). Name decision added (D-008). |
 | 0.4 | 2026-10-23 | Name `tir-asr` (D-008). Claude runs `ruff` and unit tests on a copy before Aren's official run (D-006, Q13). |
+| 0.5 | 2026-10-23 | C0 time logged. Side chat S1 for the export format; final export after C8 (D-011). |

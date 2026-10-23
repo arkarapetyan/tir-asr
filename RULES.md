@@ -1,8 +1,8 @@
 # RULES.md: Rules of Engagement
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.3 · **Date:** 2026-10-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.3).
+**Version:** 0.4 · **Date:** 2026-10-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.3). v0.4 applies D-011.
 
 ---
 
@@ -206,7 +206,7 @@ When an error occurs, the program stops or shows the error clearly. The message 
 - All work for this project happens in chats in the Claude Project "armenian asr". We keep all chats. We do not delete them.
 - Claude does not start sub-agents or hidden sessions. Each step must be visible in a chat that we can export.
   - Exception: Aren asks for a sub-agent, and we first confirm that its transcript can go into `chats/`.
-- At the end of each chat, Aren exports the full chat, unedited, as one Markdown file into `chats/`. File name: `chats/NN-<phase>.md`.
+- Aren exports all chats once, after the last message of the last chat (D-011). Each chat becomes one Markdown file, unedited: `chats/NN-<phase>.md`.
 - The "Out of scope" list in the brief is binding. To add an item from that list, we need an entry in `DECISIONS.md`.
 
 ### R16. Time budget (Brief: "about 20 hours")
@@ -235,7 +235,7 @@ When an error occurs, the program stops or shows the error clearly. The message 
 5. Claude writes the handover file `docs/handovers/NN-<phase>.md`.
 6. Claude updates the Project documents (`PLAN.md` §7.3).
 7. Aren writes the time in the `PLAN.md` time log.
-8. Aren exports the chat to `chats/`.
+8. Aren keeps the chat. Aren does not delete it (the export comes after C8, D-011).
 
 ---
 
@@ -246,3 +246,4 @@ When an error occurs, the program stops or shows the error clearly. The message 
 | 0.1 | 2026-10-23 | First draft from the tips (T1–T10) and Aren's rules (A1–A10). |
 | 0.2 | 2026-10-23 | Aren's review: Aren owns the repository and all git operations; new "sim" test level and automated model/sim tests on the laptop; parameters only after Aren's approval; rules C1–C3 renamed R14–R16, so that they do not mix with chat names C0–C8. |
 | 0.3 | 2026-10-23 | Claude reads and writes only in the project folder on Aren's laptop (D-005). Aren runs all tests on Claude's request; results go to `test-results/`. Claude first runs `ruff` and unit tests on a copy (D-006). |
+| 0.4 | 2026-10-23 | Chat export: one final export after the last chat, not one export at the end of each chat (D-011). |
