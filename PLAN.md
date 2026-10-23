@@ -173,7 +173,7 @@ ASR: automatic speech recognition. MT: machine translation.
   7. Aren runs the commands. The result goes into `test-results/`. Claude reads it. *(done: all checks pass)*
   8. Aren reads `git diff`, commits, and pushes. CI must be green. *(done after the D-010 fix)*
   9. Aren does a test export of this chat to Markdown. This removes the export risk early.
-  10. Claude writes handover H0 and copies the documents into the Project.
+  10. Claude writes handover H0 and copies the documents into the Project. *(done)*
 - **Decisions:** D-001 to D-008.
 - **Done when:** RULES and PLAN v0.2 are confirmed. CI is green on the first commit. The export method is known.
 
@@ -437,7 +437,7 @@ None at the end of C0.
 
 | Chat | Time box | Actual | Notes |
 |---|---|---|---|
-| C0 | 1.5 h | | |
+| C0 | 1.5 h | 2.5 h | 14:00–16:30 (Aren). 1.0 h over the time box. |
 | C1 | 2.5 h | | |
 | C2 | 3 h | | |
 | C3 | 2.5 h | | |
@@ -446,8 +446,8 @@ None at the end of C0.
 | C6 | 2 h | | |
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
-| Buffer | 1 h | | |
-| **Total** | **20 h** | | |
+| Buffer | 1 h | 1.0 h | Used by C0. No buffer is left. |
+| **Total** | **20 h** | 2.5 h | |
 
 ---
 
