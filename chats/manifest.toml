@@ -1,0 +1,6 @@
+# Chats for deliverable D3 (D-012). Contract: ARCHITECTURE.md §8.1.
+# title: the chat title in the app. file: the output file in this folder.
+
+[[chat]]
+title = "Armenian speech recognition app"
+file = "00-kickoff.md"

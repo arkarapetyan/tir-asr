@@ -206,3 +206,41 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "ok I see your point, I will request the format now and will present the result in a separate chat once we get it."
 - **Questions raised:** Aren first chose B, "so I only request chat exports once". Claude then showed that B gives one export only if no conversion is necessary. Aren changed to A.
 - **Revisit when:** S1 shows that the export already has one Markdown file for each chat. Then no converter is necessary.
+- **S1 result (2026-10-23):** **[RUN]** The export is one JSON file with a list of chats. It is not one Markdown file for each chat. The "Revisit when" condition did not occur. A converter is necessary (D-012).
+
+## D-012. Chat export converter: text only (option B)
+
+- **Status:** ACCEPTED (2026-10-23), option B
+- **Context:** Deliverable D3 needs one `.md` file for each chat. S1 measured the format **[RUN]** on Aren's export of C0 (a file `conversations.json`, upload of 2026-10-23 12:49 UTC). A script printed only keys, types, and counts.
+  - The export is one JSON file with a list of chats. Thus D3 needs a converter (D-011).
+  - Chat keys: `uuid`, `name`, `summary`, `created_at`, `updated_at`, `account`, `chat_messages`. No key gives the project.
+  - Message keys: `uuid`, `parent_message_uuid`, `sender`, `created_at`, `updated_at`, `text`, `content`, `attachments`, `files`.
+  - The messages are a tree, not a list. C0 has 3 branches, because Aren edited 2 messages. No key marks the branch that the app shows.
+  - `message.text` is not complete. It puts the text "This block is not supported on your current device yet." in place of the tool calls. The `content` list has the blocks.
+  - Block types in C0: `text` 27, `tool_use` 149, `tool_result` 149, `thinking` 74, `injected_prompt_block` 10, `document` 4.
+  - The `thinking` text is empty in all 74 thinking blocks. 63 of them have short summaries.
+  - `files` and `document` blocks give only a name and an ID, not the file content.
+  - Size of C0: about 310,000 characters. Most of it is tool inputs (155,000) and tool results (75,000).
+- **Options:**
+  - **A. Full converter.** All blocks and all branches. Tool calls, tool results, thinking summaries, and injected prompts in closed sections. The converter stops on an unknown block type or key.
+    - Weak points: the final export after C8 can have new block types. Then the converter stops after C8, and we must fix it. The files are long (C0: about 0.3 MB).
+  - **A2.** The same as A, but the converter writes an unknown block type as raw JSON and does not stop.
+    - Weak points: more code than B. The files are long.
+  - **B. Text only.** Only the `text` blocks of the main branch.
+    - Weak points: the file does not have the tool calls, the tool results, the thinking summaries, or the side branches. Thus it is not "complete" in the sense of D-011. The work steps are visible only in the original chats (R15).
+  - **C. Split only.** One JSON file for each chat, and a short `.md` file with a link.
+    - Weak point: D3 asks for `.md` files. JSON is hard to read in the interview.
+- **Claude's preference:** A. After Aren did not accept the main risk of A, Claude proposed A2. Fact that can show the preference is wrong: the interviewers use only the original chats to see the work steps.
+- **Decision:** B. Details:
+  - Each file starts with a note. The note tells what is not in the file, with counts, and that the original chat has all blocks.
+  - Human text goes into a code fence. Assistant text stays Markdown. The text does not change.
+  - **Main branch:** the path from the root to the newest leaf message. Aren confirmed that the app shows this branch for C0.
+  - **Chat selection:** by the chat title, in a manifest `chats/manifest.toml`. The converter stops when a title matches no chat or two or more chats. Aren selected the title, not the chat ID. He does not want to check the chat addresses: "idk and wont check".
+  - **C0 now, S1 at the end:** Aren runs the converter on the C0 export of 2026-10-23 as the real-data check. The final run after C8 replaces the C0 file and adds S1 and the other chats. D-011 does not change.
+  - **Time:** the time for this converter is not part of the 20-hour budget. Aren's words: "The time that takes you to build it is not counted under the whole project time".
+  - The contract is in `ARCHITECTURE.md` §8.1. The tests are in `TESTS.md` §2.2.
+- **Reason (Aren's words):** "let's not spend too much on this since it is not a project-related thing."
+- **Questions raised:**
+  - Claude named the main risk of A one time (R14). Aren did not accept the risk and selected B.
+  - Claude (R14): B conflicts with "complete and unedited" in D-011. Claude proposed A2, which removes the risk of A. Aren selected B again.
+- **Revisit when:** the brief or the interviewers need the tool calls in the `.md` files, or a title in the final export matches no chat or two or more chats.
