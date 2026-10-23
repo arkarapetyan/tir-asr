@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local data, models, and test results: never commit (RULES.md R11, D-006)
+data/
+models/
+test-results/
+.env
+
+# Audio files
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.m4a
+
+# Model weights
+*.nemo
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
