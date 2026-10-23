@@ -2,7 +2,7 @@
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
 **Version:** 0.3 · **Date:** 2026-10-23
-**Status:** v0.1 APPROVED by Aren on 2026-10-23, with changes. v0.2 and v0.3 contain the changes. Aren confirms the v0.3 text.
+**Status:** APPROVED by Aren on 2026-10-23 (v0.3).
 
 ---
 

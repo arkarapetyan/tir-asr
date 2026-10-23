@@ -168,3 +168,20 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Claude's preference:** A. The laptop is the interview machine (K4), so we do not change its tools without a reason. Fact that can show it is wrong: we need a uv feature or fix that exists only in 0.13 or later.
 - **Decision:** (Aren)
 - **Reason (Aren's words):** (Aren)
+
+## D-010. Pin the CI actions to commit SHAs
+
+- **Status:** PROPOSED
+- **Context:** The first CI run failed: `Unable to resolve action astral-sh/setup-uv@v10, unable to find version v10`.
+  - **Cause (Claude's error):** Claude checked that the v10 releases exist, but did not check that a `v10` tag exists (R9).
+  - **[RUN]** `git ls-remote --tags` shows that setup-uv publishes only full version tags (for example `v10.3.2`), not a `v10` tag. `actions/checkout` has a `v7` tag, which points to `v7.0.1`.
+  - **[SOURCE]** The setup-uv README pins the action to a full commit SHA with a version comment ([setup-uv README](https://github.com/astral-sh/setup-uv)).
+- **Options:**
+  - **A. Commit SHA with a version comment**, for both actions:
+    - `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`
+    - `astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2`
+    - A SHA cannot move, so the CI always runs the same code. Weak point: updates are manual.
+  - **B. Full version tag:** `actions/checkout@v7.0.1`, `astral-sh/setup-uv@v10.3.2`. Simpler to read. Weak point: a tag can move to different code.
+- **Claude's preference:** A. Fact that can show it is wrong: if the manual updates take time more than once in this project, B is enough for a 20-hour project.
+- **Decision:** (Aren)
+- **Reason (Aren's words):** (Aren)
