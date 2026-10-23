@@ -28,7 +28,7 @@ The name comes from Tir. In Armenian mythology, Tir is the god of written langua
 
 ## Development
 
-Requirements: [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 if necessary.
+Requirements: [uv](https://docs.astral.sh/uv/) version 0.12.21 (pinned in `pyproject.toml`, D-009). uv installs Python 3.12 if necessary.
 
 ```bash
 uv sync --locked              # install the environment from uv.lock
