@@ -152,7 +152,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 
 ## D-009. Pin one uv version
 
-- **Status:** PROPOSED
+- **Status:** ACCEPTED (2026-10-23), see "Status update"
 - **Context:** Three different uv versions are in use now:
   - **[RUN]** Aren's laptop: uv 0.12.21 (`test-results/c0-setup.txt`).
   - **[RUN]** Claude's workspace: uv 0.11.32.
@@ -166,12 +166,15 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - **C. No pin.** Change only the build backend range.
     - Weak point: three places run three different uv versions. The results can differ, and the warning comes back when uv changes.
 - **Claude's preference:** A. The laptop is the interview machine (K4), so we do not change its tools without a reason. Fact that can show it is wrong: we need a uv feature or fix that exists only in 0.13 or later.
-- **Decision:** (Aren)
-- **Reason (Aren's words):** (Aren)
+- **Status update:** ACCEPTED (2026-10-23), option A.
+- **Decision:** `[tool.uv] required-version = "==0.12.21"` and `uv_build>=0.12.21,<0.13` in `pyproject.toml`.
+- **Reason (Aren's words):** "ok lets pin my uv"
+- **Checks [RUN] in the workspace:** with uv 0.12.21, `uv lock`, `uv sync --locked`, `ruff`, and `pytest` pass, and the build warning is gone. `uv.lock` did not change. With uv 0.11.32, `uv sync` stops with an error: "Required uv version `==0.12.21` does not match the running version `0.11.32`" (fails loudly, R10).
+- **Revisit when:** we need a uv feature or fix from 0.13 or later.
 
 ## D-010. Pin the CI actions to commit SHAs
 
-- **Status:** PROPOSED
+- **Status:** ACCEPTED (2026-10-23), see "Status update"
 - **Context:** The first CI run failed: `Unable to resolve action astral-sh/setup-uv@v10, unable to find version v10`.
   - **Cause (Claude's error):** Claude checked that the v10 releases exist, but did not check that a `v10` tag exists (R9).
   - **[RUN]** `git ls-remote --tags` shows that setup-uv publishes only full version tags (for example `v10.3.2`), not a `v10` tag. `actions/checkout` has a `v7` tag, which points to `v7.0.1`.
@@ -183,5 +186,8 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
     - A SHA cannot move, so the CI always runs the same code. Weak point: updates are manual.
   - **B. Full version tag:** `actions/checkout@v7.0.1`, `astral-sh/setup-uv@v10.3.2`. Simpler to read. Weak point: a tag can move to different code.
 - **Claude's preference:** A. Fact that can show it is wrong: if the manual updates take time more than once in this project, B is enough for a 20-hour project.
-- **Decision:** (Aren)
-- **Reason (Aren's words):** (Aren)
+- **Status update:** ACCEPTED (2026-10-23), option A.
+- **Decision:** both actions use a commit SHA with a version comment.
+- **Reason (Aren's words):** "Option A done". Aren reported the next CI run: "CI done".
+- **Lesson for later chats:** for each GitHub Action, check that the exact tag exists (`git ls-remote --tags`), not only the release.
+- **Revisit when:** an action needs an update.

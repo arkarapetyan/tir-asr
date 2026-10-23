@@ -171,7 +171,7 @@ ASR: automatic speech recognition. MT: machine translation.
   5. Claude writes the setup files into the project folder: uv project, ruff, pytest markers, `.gitignore`, CI workflow, and templates for `ARCHITECTURE.md`, `TESTS.md`, and `README.md`. *(done; Aren added `ci.yml`, because the remote tools cannot write into `.github/workflows/`)*
   6. Claude gives Aren the commands to run (`uv sync`, `ruff`, `pytest`) and the commit message.
   7. Aren runs the commands. The result goes into `test-results/`. Claude reads it. *(done: all checks pass)*
-  8. Aren reads `git diff`, commits, and pushes. CI must be green.
+  8. Aren reads `git diff`, commits, and pushes. CI must be green. *(done after the D-010 fix)*
   9. Aren does a test export of this chat to Markdown. This removes the export risk early.
   10. Claude writes handover H0 and copies the documents into the Project.
 - **Decisions:** D-001 to D-008.
@@ -425,12 +425,11 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | Q12 | Name | `tir-asr` (D-008). |
 | Q13 | Claude's own test runs | Yes. Claude runs `ruff` and unit tests on a copy in the workspace. Aren's run is the official result (D-006). |
 | Q6 | Confirm RULES and PLAN | Confirmed: `RULES.md` v0.3 and `PLAN.md` v0.4. |
+| Q14 | uv version | Pin Aren's uv 0.12.21 (D-009). |
 
 ### 10.2 Open
 
-| ID | Question | Why it is important |
-|---|---|---|
-| Q14 | D-009: which uv version do we pin? | Three different uv versions are in use now (see `DECISIONS.md`). |
+None at the end of C0.
 
 ---
 
