@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.5 · **Date:** 2026-10-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011.
+**Version:** 0.6 · **Date:** 2026-10-24
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020).
 
 ---
 
@@ -197,6 +197,9 @@ ASR: automatic speech recognition. MT: machine translation.
 - **Goal:** The thinnest end-to-end path: microphone → VAD → ASR → MT → terminal, label "Me".
 - **Steps:**
   1. **Install check first** (mitigation for D-002): install the first candidates on Aren's laptop with GPU support. A model test loads each model and runs one known clip.
+     - ASR: ASR-1 on NeMo (RNNT). If NeMo does not install, ASR-1 on ONNX Runtime with the CTC head (D-014).
+     - MT: NLLB-200-distilled-600M on CTranslate2 with `mt_compute_type = float16`, with the CUDA 12 libraries next to the CUDA 13 build of PyTorch (D-015, D-016). Also time the same sentences on PyTorch.
+     - Aren downloads the model weights before C2 into the normal Hugging Face cache (C1 commands), so that nothing downloads two times.
   2. Write the module contracts and the data types in `ARCHITECTURE.md`.
   3. Design the tests in `TESTS.md`. Aren reviews them.
   4. Write the tests, then the thin modules, then connect them.
@@ -211,23 +214,24 @@ ASR: automatic speech recognition. MT: machine translation.
 
 - **Goal:** Make a small eval set. Compare the ASR and MT shortlists with numbers on Aren's laptop. Change the skeleton models only if a different candidate wins.
 - **Steps:**
-  1. Design and write the tests for the metric code (TDD).
+  1. Design and write the tests for the metric code (TDD). First write the Armenian text normalization rules for WER/CER (punctuation, case, numbers, and orthographic variants) and their tests.
   2. Write the scripts that make the eval set. The data stays local (`data/`, in `.gitignore`).
   3. Write the metrics: CER/WER, chrF, latency, RTF (real-time factor: processing time divided by audio duration), and VRAM use.
-  4. Aren records about 10 short Armenian phrases with the microphone and writes the reference text.
+  4. Aren records 20 short Armenian phrases with the microphone and writes the Armenian and the English reference text (D-019).
   5. Aren runs the bake-off. Claude makes the results table.
   6. We decide the ASR model and the MT model.
-- **Eval set (proposal; final in C1):**
-  - about 30 short public Armenian clips with Armenian reference text and English reference text,
-  - about 10 recordings from Aren's microphone,
-  - 1–2 audio streams with 3 or more speakers, made from clips of different speakers (for C5).
+- **Eval set (D-019 with its amendment):**
+  - ASR and MT: at least 20 recordings with several voices and several devices, from 4 conversation scripts. Aren's Armenian and English reference text. No public eval set.
+  - Some recordings go through a real call and come from the monitor source (call-path audio). The resample step to 16 kHz mono has a test.
+  - C5: the 3-person script and other recordings that Aren makes with other people.
+- **Shortlists:** ASR (D-014), MT (D-015).
 - **Done when:** The results table exists. D-ASR and D-MT are ACCEPTED.
 
 #### C4. Two audio sources
 
 - **Goal:** Capture the microphone and the system audio at the same time, with device selection.
 - **Steps:**
-  1. Write the setup guide for the system audio capture on Ubuntu (from the C1 research).
+  1. Write the setup guide for the system audio capture on Ubuntu (from the C1 research). The guide says: use wired headphones (echo handling is out of scope, §1.4).
   2. Write the script that makes the virtual devices for sim tests.
   3. Design the tests:
      - unit: device list output, flag parsing, a clear error for a missing device (no fallback),
@@ -274,7 +278,10 @@ ASR: automatic speech recognition. MT: machine translation.
 - **Goal:** Complete D1–D3.
 - **Steps:**
   1. Write the README from `DECISIONS.md`, `ARCHITECTURE.md`, and the measured numbers.
-  2. Write the known limits honestly.
+  2. Write the known limits honestly. Known limits found so far:
+     - Eastern Armenian only (D-013).
+     - Each segment is translated alone. Armenian "նա" can be "he" or "she", and the MT must guess. Context, or a fixed "he/she" output, is a possible C6 item.
+     - When two remote people speak at the same time, the segment gets one label (D-017).
   3. Check each item in §1 against the result.
   4. Aren does a rehearsal of the interview start: install, audio setup, run.
   5. **Last step, after Claude's last message:** Aren requests the full data export and puts each project chat into `chats/` as one `.md` file (with the converter from S1, if necessary). Then Aren commits and pushes.
@@ -469,3 +476,4 @@ None at the end of C0.
 | 0.3 | 2026-10-23 | Laptop facts from Aren's commands (§1.6). Project folder on the laptop is Claude's only place to read and write (D-005). Aren runs all tests; results go to `test-results/` (D-006). Tool baseline approved (D-007). Name decision added (D-008). |
 | 0.4 | 2026-10-23 | Name `tir-asr` (D-008). Claude runs `ruff` and unit tests on a copy before Aren's official run (D-006, Q13). |
 | 0.5 | 2026-10-23 | C0 time logged. Side chat S1 for the export format; final export after C8 (D-011). |
+| 0.6 | 2026-10-24 | C1 decisions: C2 install check (D-014, D-015, D-016); C3 eval set, normalization rules, and shortlists (D-014, D-015, D-019); setup guide: wired headphones; known limits list in C8. |

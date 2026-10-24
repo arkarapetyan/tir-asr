@@ -129,6 +129,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** the proposal above.
 - **Reason (Aren's words):** "agree on the tools proposed and yes some of the suggestions are provisional."
 - **Revisit when:** C1 finds a shortlisted library that does not support Python 3.12.
+- **C1 result (2026-10-24):** the revisit condition did not occur. All libraries on the C1 shortlists accept Python 3.12 in their PyPI metadata. Small risk: `nemo-toolkit` 3.0.0 lists only Python 3.10 in its classifiers (`RESEARCH.md` §0).
 
 ## D-008. Name of the application, the package, and the repository
 
@@ -244,3 +245,139 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude named the main risk of A one time (R14). Aren did not accept the risk and selected B.
   - Claude (R14): B conflicts with "complete and unedited" in D-011. Claude proposed A2, which removes the risk of A. Aren selected B again.
 - **Revisit when:** the brief or the interviewers need the tool calls in the `.md` files, or a title in the final export matches no chat or two or more chats.
+
+## D-013. Target language: Eastern Armenian only
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** Armenian has two standard forms, Eastern and Western. A model or a test set can cover only one of them. C1 needed the scope before the research tables.
+- **Options:**
+  - **A.** Eastern Armenian only.
+  - **B.** Eastern and Western Armenian.
+- **Claude's preference:** A. Weak point: we do not measure Western speech.
+- **Decision:** A. Research and evaluation use Eastern Armenian. The README lists Western Armenian as a known limit.
+- **Reason (Aren's words):** "There is no need for the dialect variations, only Eastern Armenian will be sufficient." Later: "Eastern Only that one I agree".
+- **Questions raised:** Claude (R14): a WER on a Western or mixed test set does not show the WER on Eastern speech. `RESEARCH.md` notes such sets.
+- **Revisit when:** the brief or the interviewers need Western Armenian.
+
+## D-014. ASR: first candidate and C3 shortlist
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** C1 research, `docs/research/RESEARCH.md` §1 and §10.
+- **Options for the first candidate:**
+  - **A.** ASR-1 `nvidia/stt_hy_fastconformer_hybrid_large_pc` on NeMo, RNNT decoder. Weak points: NeMo is the heaviest install (`lightning` exactly 2.4.0, torchaudio in maintenance); no streaming; "noise-sensitive"; it saw Common Voice 17.0 and FLEURS in training.
+  - **B.** ASR-1 on ONNX Runtime with the community CTC export. Weak point: the CTC head has a higher WER (MCV 17.0: 11.19 vs 9.90; FLEURS: 13.23 vs 12.32).
+  - **C.** ASR-3 `Chillarmo/whisper-large-v3-turbo-armenian`. Weak points: higher WER than ASR-1 on all 5 ArmBench sets; about 6 GB VRAM for `turbo`; no streaming.
+- **Claude's preference:** A. First shortlist proposal: ASR-1, ASR-2, ASR-3. After Aren's question, Claude removed ASR-3 and proposed ASR-5 (`BuzzASR/armenian`) for the third place. Test that can show the preference is wrong: the C2 install check fails two times, or C3 shows a different model with a lower WER on Aren's recordings within K1.
+- **Decision:**
+  - **First candidate (C2):** ASR-1 on NeMo, RNNT decoder.
+  - **Planned second path:** if NeMo does not install in C2, ASR-1 runs on ONNX Runtime with the CTC head (`OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx`). This is a decided plan, not a silent fallback (R10).
+  - **C3 shortlist:**
+    - ASR-1 in three runtime variants: NeMo-RNNT, NeMo-CTC, ONNX-CTC,
+    - ASR-2 `facebook/seamless-m4t-v2-large` (the only end-to-end option; the same weights give MT-5),
+    - ASR-5 `BuzzASR/armenian`. ASR-5 leaves the list if its WER on Aren's recordings is not lower than the WER of ASR-1.
+- **Reason (Aren's words):**
+  - On Whisper turbo: "Since it shows worse results than the fastconformer on the benchmark, what is the point of even bothering with heavier and worse model."
+  - On the weak points of A: "as the design document suggests we are fine with noise and I guess heavy installation is a problem that can be solved, especially if we resort to using ONNX".
+  - Third place: Aren selected "BuzzASR third (Recommended)" in the checkbox, with no own words.
+- **Questions raised:**
+  - Aren: can a non-streaming model meet K1? Claude: not known before the C2 measurement. K1 counts from the end of a phrase, so streaming gives no direct gain except for long phrases. A maximum segment length (a parameter, R10) limits that case.
+  - Aren: is ONNX Runtime faster than NeMo? Claude: "I do not know". No source compares them for a FastConformer model.
+  - Aren: why keep Whisper turbo? Claude: removed. ASR-1 also has the lowest open WER on the three private ArmBench sets. ASR-2 stays only as the end-to-end option and for MT-5.
+- **Revisit when:** both ASR-1 paths fail the C2 install check (D-002); the ASR time makes the C2 latency of a line more than 5 s; or C3 shows a lower WER for a different model within K1.
+
+## D-015. MT: first candidate and C3 shortlist
+
+- **Status:** ACCEPTED (2026-10-24), changed after D-016
+- **Context:** C1 research, `RESEARCH.md` §2. C1 found no Armenian → English score on one common test set for the candidates.
+- **Options for the first candidate:**
+  - **A.** MT-2 `facebook/nllb-200-distilled-600M`. Weak points: no Armenian score found in C1; "not released for production deployment"; CC-BY-NC 4.0.
+  - **B.** MT-1 `Helsinki-NLP/opus-mt-hy-en`. Weak point: 91 % of its training pairs come from JW300 and the Bible; 0.7 % from subtitles (calc).
+  - **C.** MT-5 SeamlessM4T v2, text-to-text. Weak point: 2.3B parameters (~4.6 GB in float16, calc).
+- **Claude's preference:** A. Test that can show it is wrong: in C3, MT-1 or MT-5 has a higher chrF on Aren's recordings within K1.
+- **Decision (changed for D-016):**
+  - **First candidate (C2):** MT-2 NLLB-200-distilled-600M on **CTranslate2** (first proposal: on Transformers).
+  - **New parameter `mt_compute_type = float16`** (approved 2026-10-24, R10). Reason: the CTranslate2 value `auto` selects `int8_float16`, which fails on RTX 50-series GPUs with `CUBLAS_STATUS_NOT_SUPPORTED`; a fixed value also prevents a silent choice. In the CTranslate2 GPU benchmark, float16 was the fastest mode (9297 tokens/s vs 7522 for int8, A10G).
+  - The C2 install check also times the same sentences on PyTorch (data for the D-016 revisit condition).
+  - **C3 shortlist:** MT-1 OPUS-MT (CTranslate2), MT-2 NLLB-600M (CTranslate2), MT-5 Seamless text-to-text (PyTorch; CTranslate2 support for Seamless [UNVERIFIED]).
+- **Reason (Aren's words):** "D15. Full agree" (before the change for D-016). On CTranslate2: "I see that CTranslate 2 will theoretically provide good amount of performance boost." Aren then selected "Accept D-015 as changed" in the checkbox.
+- **Questions raised:** Aren: is CTranslate2 slower on Blackwell without INT8, and is there a point in it as opposed to ONNX Runtime? Claude: in the published benchmark, float16 was faster than int8; the reported RTX 50-series errors come from the default `int8_float16`; no source compares CTranslate2 with ONNX Runtime for MT ("I do not know").
+- **Revisit when:** C3 shows a higher chrF for a different model within K1.
+
+## D-016. Runtime base: PyTorch and CTranslate2 (option B)
+
+- **Status:** ACCEPTED (2026-10-24), option B
+- **Context:** C1 research, `RESEARCH.md` §0. The RTX 5070 needs PyTorch CUDA 13 builds. ONNX Runtime GPU uses CUDA 13. CTranslate2 wheels use CUDA 12.8 and disable INT8 on sm120.
+- **Options:**
+  - **A.** PyTorch (CUDA 13) only. Add CTranslate2 or ONNX Runtime only after a measurement shows that a model is too slow. Weak point: if NeMo fails, the second path for ASR-1 comes late.
+  - **B.** PyTorch and CTranslate2 from the start (CTranslate2 for MT). Weak points: CUDA 12 libraries next to CUDA 13 in one environment, with `LD_LIBRARY_PATH`; no INT8 on Blackwell; the published speed gain is batch throughput with 2023 versions, not the latency of one segment.
+  - **C.** ONNX Runtime for all models. Weak points: no source shows a speed gain for our models; ASR-1 has a CTC-only export unless our own RNNT export works [UNVERIFIED]; an export step for each model before the MVP (R2).
+  - **E.** C2 on PyTorch/NeMo; C3 measures each model on each runtime with a working conversion; change to the faster runtime at equal quality. Weak point: more runs in C3.
+- **Claude's preference:** A, then E after Aren's objection. Test that can show it is wrong: the C2 latency is more than 5 s and MT is a large part of it (for A); C3 shows ONNX faster for all models (for E).
+- **Decision:** B. CTranslate2 runs the MT model from C2. PyTorch (CUDA 13 build) runs the models without a CTranslate2 path. The C2 install check includes CTranslate2 on the GPU, with the CUDA 12 libraries.
+- **Reason (Aren's words):** "if we know a faster framework we should utilize it from the beginning, since we have no issues with keeping two packages".
+- **Questions raised:**
+  - Aren: why is C not a good option? Claude gave the four weak points above.
+  - Claude (R14): "faster" is not yet a fact for one short segment on this GPU (R6).
+- **Revisit when:** CTranslate2 does not run on the GPU in the C2 install check, or C3 shows no latency gain over PyTorch for MT.
+
+## D-017. Speaker models: C5 shortlist
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** C1 research, `RESEARCH.md` §4. Hypothesis H-S1 (D-003).
+- **Options:**
+  - **A.** An embedding for each segment and our own online clustering, with the shortlist below.
+  - **B.** NVIDIA Streaming Sortformer (end-to-end streaming diarization). Weak points: maximum 4 speakers; trained "primarily in English"; "may degrade on non-English speech"; NVIDIA Open Model License (terms not read).
+  - **C.** diart. Weak point: `diart` 0.9.2 does not install with `pyannote.audio` 4.0.7 (numpy conflict) [RUN].
+- **Claude's preference:** A. Weak point: all three models were trained on English or VoxCeleb data, and C1 found no Armenian results. Test that can show it is wrong: all three fail the C5 label-accuracy test.
+- **Decision:** A. C5 shortlist:
+  - `pyannote/wespeaker-voxceleb-resnet34-LM`,
+  - `speechbrain/spkrec-ecapa-voxceleb`,
+  - `nvidia/speakerverification_en_titanet_large`.
+- **Reason (Aren's words):** "Agree with D17 with reservation. Will they work with Armenian?" On pyannote (telemetry on by default, gated models, `lightning` 2.4.0): "The three points mentioned for pyannote are fine."
+- **Questions raised:** Aren: will they work with Armenian? Claude: "I do not know". Three sources show that language changes the scores: pairs of different speakers in the same language get higher similarity. Only the C5 measurement with several Armenian speakers answers it (D-019).
+- **Revisit when:** all three fail the C5 label-accuracy test. Then D-003 (fine-tuning) or option B opens again.
+
+## D-018. VAD
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** C1 research, `RESEARCH.md` §5.
+- **Options:** A. Silero VAD; B. WebRTC VAD (`webrtcvad-wheels`); C. pyannote segmentation.
+- **Claude's preference:** A. Facts: MIT licence, no telemetry, less than 1 ms for each 30+ ms chunk on one CPU thread, model about 2 MB. Weak point: no source gives settings for K1. Test that can show it is wrong: in C2 or C3, segments cut phrases or add latency, and WebRTC VAD does better.
+- **Decision:** Silero VAD on the CPU is the first candidate. WebRTC VAD is the second. Claude proposes the settings (minimum silence, maximum segment length) in C2 with numbers. Aren approves them (R10).
+- **Reason (Aren's words):** "Agree".
+- **Revisit when:** the C2 or C3 numbers show cut phrases or a latency problem from the VAD.
+
+## D-019. Eval data
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** C1 research, `RESEARCH.md` §7. `PLAN.md` §5.2 C3 had a proposal: about 30 public clips, about 10 own recordings, and 1–2 multi-speaker streams.
+- **Options:**
+  - **A.** FLEURS `hy_am` test (about 30 clips), about 10 recordings by Aren, Common Voice streams for C5.
+  - **A2.** 20 recordings by Aren for ASR and MT; Common Voice clips of different speakers for the C5 streams only.
+  - **A3.** 20 recordings by Aren only; C5 data decided in C5.
+  - **A4.** 20 recordings by Aren; recordings that Aren makes with other people for C5.
+- **Claude's preference:** A, then A2 after Aren's proposal. Weak point of A2: Common Voice needs a registration, and the `client_id` field is [UNVERIFIED].
+- **Decision:** A4.
+  - ASR and MT eval: 20 recordings by Aren. Aren writes the Armenian and the English reference text.
+  - C5 speaker eval: recordings that Aren makes with other people.
+  - No public eval set.
+- **Reason (Aren's words):** "I propose 20 recordings only by me since FLEURS and Common Voice are Train data". For C5, Aren selected "20 own + you record others" in the checkbox, with no own words.
+- **Questions raised:**
+  - Claude (correction): Common Voice and FLEURS are training data for the ASR candidates (ASR-1, ASR-5). The model cards do not give the splits. They are not training data for the speaker models (VoxCeleb or English corpora).
+  - Claude (R14): 20 recordings with one voice, one microphone, and one room do not show the WER for other voices or for call audio.
+- **Amendment (2026-10-24, Aren):** "I'll actually try to include more recordings that will include voices of multiple people and recordings done on different devices." Thus:
+  - at least 20 recordings, with several voices and several devices;
+  - conversation text, not read sentences: 4 short scripts from Claude (one with 3 people, three with 2 people), with Armenian and English references;
+  - some recordings go through a real call and come from the monitor source (call-path audio);
+  - the 3-person script also serves the C5 speaker eval.
+- **Revisit when:** the C7 live test shows much more errors than the eval recordings.
+
+## D-020. Capture library and virtual devices
+
+- **Status:** ACCEPTED (2026-10-24)
+- **Context:** C1 research, `RESEARCH.md` §6.
+- **Options:** A. `soundcard` first, `sounddevice` second; B. `sounddevice` first, `soundcard` second.
+- **Claude's preference:** A. `soundcard` uses the PulseAudio API (its README shows "Driver: PipeWire") and has a documented `include_loopback` option. Weak points: no source shows two devices with one clock for either library; the monitor source name of a null sink is [UNVERIFIED]. Test that can show it is wrong: the C4 two-device test shows drift or lost audio.
+- **Decision:** A. Sim tests use `pactl load-module module-null-sink` (built into pipewire-pulse). A script plays audio into the sink, and the program captures from its monitor source.
+- **Reason (Aren's words):** "Agree".
+- **Revisit when:** the C4 two-device test fails with `soundcard`.
