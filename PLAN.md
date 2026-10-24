@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.6 · **Date:** 2026-10-24
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020).
+**Version:** 0.7 · **Date:** 2026-10-24
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time.
 
 ---
 
@@ -453,7 +453,7 @@ None at the end of C0.
 | Chat | Time box | Actual | Notes |
 |---|---|---|---|
 | C0 | 1.5 h | 2.5 h | 14:00–16:30 (Aren). 1.0 h over the time box. |
-| C1 | 2.5 h | | |
+| C1 | 2.5 h | 1.8 h | 2026-10-24, 11:43–13:29 (1 h 46 min). 0.7 h under the time box; added to the buffer. |
 | C2 | 3 h | | |
 | C3 | 2.5 h | | |
 | C4 | 2 h | | |
@@ -462,8 +462,8 @@ None at the end of C0.
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
-| Buffer | 1 h | 1.0 h | Used by C0. No buffer is left. |
-| **Total** | **20.5 h** | 2.5 h | S1 adds 0.5 h over the 20 h of the brief. |
+| Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
+| **Total** | **20.5 h** | 4.3 h | C0 + C1. S1 adds 0.5 h over the 20 h of the brief. The C1 saving moves time from C1 to the buffer; the total time box does not change. |
 
 ---
 
@@ -477,3 +477,4 @@ None at the end of C0.
 | 0.4 | 2026-10-23 | Name `tir-asr` (D-008). Claude runs `ruff` and unit tests on a copy before Aren's official run (D-006, Q13). |
 | 0.5 | 2026-10-23 | C0 time logged. Side chat S1 for the export format; final export after C8 (D-011). |
 | 0.6 | 2026-10-24 | C1 decisions: C2 install check (D-014, D-015, D-016); C3 eval set, normalization rules, and shortlists (D-014, D-015, D-019); setup guide: wired headphones; known limits list in C8. |
+| 0.7 | 2026-10-24 | C1 time logged (1.8 h). The 0.7 h saved goes to the buffer (0.7 h left). |
