@@ -62,7 +62,7 @@ After Aren's approval of §2.4, Claude split T-CFG-01 and T-MODEL-ERR-01 into tw
 
 - **Aren (PLAN §10.2):** Q15 (a longer `vad_max_speech_s`), Q16 (CPU-only and limited-resource modes). Not for C2c.
 - **QA (`TESTS.md` §3):** Q-06 (ASR commas → MT quality), Q-07 (5.1 s first CTranslate2 call), Q-09 (GPU after a long silence), Q-10 (GIL and the capture thread).
-- **Time (R16):** C0 to C2 took 6.95 h. Aren writes the C2b time in the `PLAN.md` time log. The expected total is about 23 h, or 23.7 h with the buffer (`PLAN.md` §5.1 note). Aren decides what to cut; C6 is the first candidate.
+- **Time (R16):** C0 to C2b took 7.53 h (C2b: 0.58 h, 12:45–13:20). The expected total is about 22.5 h, or 23.2 h with the buffer (`PLAN.md` §5.1 note). Aren decides what to cut; C6 is the first candidate.
 - **For the README (C8):** NeMo prints "No exporters were provided. This means that no telemetry data will be collected."; CTranslate2 lists `int8` on this GPU, but C1 found that `int8_float16` fails on RTX 50-series GPUs; the Silero load prints a `torch.jit.load` deprecation warning.
 - **D-016 data point:** CTranslate2 was 16–33 ms faster than PyTorch on the next calls, with 734 MiB more VRAM and a 5.1 s first call (one run). C3 decides with repeated runs.
 

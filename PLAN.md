@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.8 · **Date:** 2026-10-25
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035).
+**Version:** 0.9 · **Date:** 2026-10-25
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time.
 
 ---
 
@@ -162,7 +162,7 @@ Phase order: option B, skeleton first (D-002).
 
 ASR: automatic speech recognition. MT: machine translation.
 
-**Note (C2, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2, the expected total is about 23 h, or 23.7 h with the buffer (calc), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
+**Note (C2, C2b, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2b, the expected total is about 22.5 h, or 23.2 h with the buffer (calc), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
 
 ### 5.2 Details for each chat
 
@@ -221,7 +221,7 @@ ASR: automatic speech recognition. MT: machine translation.
   |---|---|---|
   | `c2b-segment` | `segment/endpoint.py`, `segment/silero.py`, with the shared `types.py` and `config.py` (first user) | T-SEG-01 to T-SEG-09, T-CFG-01, T-IMPORT-01 (unit); T-MODEL-VAD-01 (model) |
 
-- **Done when:** the tests pass on Aren's laptop and in CI, and the branch is merged.
+- **Done when:** the tests pass on Aren's laptop and in CI, and the branch is merged. *(The tests pass on Aren's laptop, 2026-10-25. Aren merges the branch at the end of C2b.)*
 
 #### C2c. Skeleton code: `asr` + `mt` adapters
 
@@ -497,7 +497,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C0 | 1.5 h | 2.5 h | 14:00–16:30 (Aren). 1.0 h over the time box. |
 | C1 | 2.5 h | 1.8 h | 2026-10-24, 11:43–13:29 (1 h 46 min). 0.7 h under the time box; added to the buffer. |
 | C2 | 3 h | 2.65 h | 2026-10-25, 10:01–12:40 (2 h 39 min). Install check, contracts, test design. The C2 scope changed: the code moved to C2b–C2d (D-035), so the 0.35 h under the time box does not go to the buffer. |
-| C2b | 1 h | | |
+| C2b | 1 h | 0.58 h | 2026-10-25, 12:45–13:20 (35 min). `types`, `config`, and `segment`, with their tests (D-036). 0.42 h under the time box; Aren decides if it goes to the buffer. |
 | C2c | 1 h | | |
 | C2d | 1.5 h | | |
 | C3 | 2.5 h | | |
@@ -508,7 +508,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 6.95 h | C0 + C1 + C2. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23 h (R16 note in §5.1). |
+| **Total** | **24.0 h** | 7.53 h | C0 + C1 + C2 + C2b. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 22.5 h (R16 note in §5.1). |
 
 ---
 
@@ -524,3 +524,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.6 | 2026-10-24 | C1 decisions: C2 install check (D-014, D-015, D-016); C3 eval set, normalization rules, and shortlists (D-014, D-015, D-019); setup guide: wired headphones; known limits list in C8. |
 | 0.7 | 2026-10-24 | C1 time logged (1.8 h). The 0.7 h saved goes to the buffer (0.7 h left). |
 | 0.8 | 2026-10-25 | C2 decisions D-021 to D-035: install check done, contracts and tests approved; the code work moves to C2b, C2c, and C2d, with one branch and its own tests for each component (D-035, R3); open questions Q15 and Q16; R16 note on the total time; C2 time logged (2.65 h). |
+| 0.9 | 2026-10-25 | C2b time logged (0.58 h). Expected total now about 22.5 h, or 23.2 h with the buffer (§5.1 note). C2b note: tests pass on Aren's laptop; D-036. |
