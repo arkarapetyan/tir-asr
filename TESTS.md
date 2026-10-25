@@ -88,6 +88,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-OUT-01 | F5, D-024: line format. | A `Line` with `start` 72.4 s after the session start, label "Me", Armenian and English text, fixed times. | The exact block of §2.5, with `[00:01:12]`, the four steps, two decimals, and the total. | unit | APPROVED |
 | T-OUT-02 | §2.5: latency arithmetic. | Times with steps 0.534, 0.413, 0.177, 0.004 s. | The total comes from the raw values (1.13 s). Each printed step is the rounded raw step. | unit | APPROVED |
 | T-OUT-03 | D-031: empty ASR text. | A `Line` with an empty `hy`. | `HY: (no text)`, no `EN` line, a latency line with `vad`, `asr`, and the total only. | unit | APPROVED |
+| T-OUT-04 | D-024, §2.5: one write for each block. | `write_block(line, session_start, stream)` with a fake stream. | The stream gets exactly one `write` call with the full block, then one `flush` call. | unit | APPROVED |
 | T-PIPE-01 | F2, F3, F5: end-to-end with fakes. | A fake source with two speech regions, fake VAD, fake ASR ("բարև"), fake MT ("hi"), fake clock. | Two blocks in time order, label "Me", the fake texts, and the latency values of the fake clock. | unit | APPROVED |
 | T-PIPE-02 | R10, §2.6: an error in a thread. | The fake ASR raises `AsrError("asr: test")`. | The program stops. The error output is `tir-asr: asr: test`. The exit code is 1. | unit | APPROVED |
 | T-PIPE-03 | D-031: no MT call for an empty text. | The fake ASR returns "". | The fake MT gets no call. One `(no text)` block. | unit | APPROVED |
@@ -124,6 +125,13 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - The error `mt: <file> not found in the package nvidia-cublas-cu12` (§2.4) has no test, because the test needs a missing package ("dont add the missing package test").
 - T-MODEL-MT-01 checks "CTranslate2 runs on `cuda`" with `nvidia-smi`: the GPU memory must grow by more than 1000 MiB at the load, because the float16 weights are 1175 MiB. The tests use no private attribute of an adapter ("refrain from using private attribut").
 - The MT model tests run with `env -u LD_LIBRARY_PATH` (D-030).
+
+**Changes in C2d (Aren, 2026-10-25, D-040):**
+
+- T-OUT-04 is new. It tests the one write for each block of §2.5 (D-024). Aren: "approve the test".
+- Each block ends with an empty line, so that the blocks have a blank line between them (D-040). T-OUT-01, T-OUT-03, and T-OUT-04 expect this line.
+- T-OUT-01 has two test functions: the full block, and the block time. The seconds are cut, not rounded: 3671.9 s gives `[01:01:11]`.
+- T-OUT-03: the write comes 0.03 s after the ASR end. Thus the total (0.97 s) is more than `vad` + `asr` (0.94 s), and the test shows that the total counts the time to the write.
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
