@@ -1,8 +1,8 @@
 # RULES.md: Rules of Engagement
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.4 · **Date:** 2026-10-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.3). v0.4 applies D-011.
+**Version:** 0.5 · **Date:** 2026-10-25
+**Status:** APPROVED by Aren on 2026-10-23 (v0.3). v0.4 applies D-011. v0.5 applies D-039.
 
 ---
 
@@ -180,9 +180,10 @@ When an error occurs, the program stops or shows the error clearly. The message 
 ### R12. Commit small. Step back early (T10)
 
 - Change one thing at a time. Commit after each step that passes its tests.
-- **Claude:** Tell Aren when to commit and when to push. Give the commit message.
+- **No bulk commits (D-039):** one commit holds one logical change. Examples: the code of one component with its tests; one decision entry; the test results in `TESTS.md`. An `ARCHITECTURE.md` change goes into the same commit as the code that it describes (R13).
+- **Claude:** Tell Aren when to commit and when to push. For each commit, give the full command: `git add` with each file, `git commit -m` with the message, and `git push`.
 - **Aren:** Read the change (`git diff`), then commit and push.
-- Commit messages use the Conventional Commits format (for example, `feat(asr): add segment transcriber`).
+- Commit messages use the Conventional Commits format (for example, `feat(asr): add segment transcriber`). A commit message has no co-author line.
 - When Claude fails three times on the same problem, Claude stops. Then Claude proposes one of these:
   - go back to the last commit that works,
   - make a small example that shows the problem,
@@ -247,3 +248,4 @@ When an error occurs, the program stops or shows the error clearly. The message 
 | 0.2 | 2026-10-23 | Aren's review: Aren owns the repository and all git operations; new "sim" test level and automated model/sim tests on the laptop; parameters only after Aren's approval; rules C1–C3 renamed R14–R16, so that they do not mix with chat names C0–C8. |
 | 0.3 | 2026-10-23 | Claude reads and writes only in the project folder on Aren's laptop (D-005). Aren runs all tests on Claude's request; results go to `test-results/`. Claude first runs `ruff` and unit tests on a copy (D-006). |
 | 0.4 | 2026-10-23 | Chat export: one final export after the last chat, not one export at the end of each chat (D-011). |
+| 0.5 | 2026-10-25 | R12: no bulk commits; Claude gives the full `git add`, `git commit`, and `git push` command; no co-author line in a commit message (D-039). |

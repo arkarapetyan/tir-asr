@@ -678,3 +678,15 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude (R14) named the main risk one time (the weak points above).
   - [RUN] The `ruff` cache can hide an import-sort error. The sort of an import of `tir_asr.<module>` depends on whether the module exists, and the cache does not see that change. The C2c commands use `--no-cache`. CI has no `ruff` cache.
 - **Revisit when:** C2d starts (Aren decides again), or CI finds an error that a workspace run would have found.
+
+## D-039. Smaller commits and the full git commands
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** The `c2c-asr` commit had the adapter, its tests, and three documents in one commit. Aren asked for smaller commits and for the full commands.
+- **Decision:** Aren's rule, now in `RULES.md` v0.5, R12:
+  - No bulk commits: one commit holds one logical change.
+  - Claude gives the full command for each commit: `git add` with each file, `git commit -m` with the message, and `git push`.
+  - A commit message has no co-author line.
+- **Reason (Aren's words):** "add a rule that from now on we dont do this bulk commits and do smaller ones, and you give me the whole git add and push command with the message, and the message does not contain your co-authoring part".
+- **Questions raised:** Claude: R13 puts an `ARCHITECTURE.md` change into the same commit as its code. The new rule keeps this: the code and its architecture text are one logical change. Decision entries and test results can go into separate commits.
+- **Revisit when:** the number of commits costs too much of the time budget (R16).
