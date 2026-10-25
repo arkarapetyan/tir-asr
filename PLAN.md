@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.7 · **Date:** 2026-10-24
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time.
+**Version:** 0.8 · **Date:** 2026-10-25
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035).
 
 ---
 
@@ -80,7 +80,7 @@ Effects on the plan:
 
 | Milestone | What works | Features | Chat |
 |---|---|---|---|
-| M1 Skeleton | Microphone → speech segments → Armenian text → English text → terminal, label "Me". | F2, F3, part of F5 | C2 |
+| M1 Skeleton | Microphone → speech segments → Armenian text → English text → terminal, label "Me". | F2, F3, part of F5 | C2–C2d |
 | M2 Two sources | Microphone and system audio at the same time. Device selection. Lines show "Me" or the system side. | F1 | C4 |
 | M3 **MVP** | Speaker labels on the system side. All required features work. | F4, F5 | C5 |
 | M4 Reliable | The weakest links are better. A live test with two or more people passes. Latency is measured. | — | C7 |
@@ -146,7 +146,10 @@ Phase order: option B, skeleton first (D-002).
 |---|---|---|---|---|
 | C0 | Kickoff and repository setup (this chat) | Approved RULES and PLAN; repository with uv, ruff, pytest, CI; document templates | — | 1.5 h |
 | C1 | Research | `RESEARCH.md`; first candidates and shortlists in `DECISIONS.md` | — | 2.5 h |
-| C2 | Walking skeleton | Module contracts; microphone → VAD → ASR → MT → terminal | M1 | 3 h |
+| C2 | Walking skeleton: install check and design | Install check; module contracts; test design | — | 3 h |
+| C2b | Skeleton code: `types` + `segment` | `Endpointer` and Silero adapter, with their tests | — | 1 h |
+| C2c | Skeleton code: `asr` + `mt` adapters | NeMo and CTranslate2 adapters (warm-up, cuBLAS preload), with their tests | — | 1 h |
+| C2d | Skeleton code: `audio` + `output` + `pipeline` + `cli` | Microphone → terminal; end-to-end test; live run | M1 | 1.5 h |
 | C3 | Evaluation set and bake-off | Eval scripts and metrics; numbers for the ASR and MT shortlists | — | 2.5 h |
 | C4 | Two audio sources | Device list, flags, system audio capture, virtual devices for sim tests, setup guide | M2 | 2 h |
 | C5 | Speaker labels | Speaker embeddings, online clustering, stable labels | **M3 (MVP)** | 3 h |
@@ -155,9 +158,11 @@ Phase order: option B, skeleton first (D-002).
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
 | — | Buffer | — | — | 1 h |
-| | **Total** | | | **20.5 h** |
+| | **Total** | | | **24.0 h** |
 
 ASR: automatic speech recognition. MT: machine translation.
+
+**Note (C2, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2, the expected total is about 23 h, or 23.7 h with the buffer (calc), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
 
 ### 5.2 Details for each chat
 
@@ -192,23 +197,57 @@ ASR: automatic speech recognition. MT: machine translation.
      - the eval data, the audio capture library, and the virtual device method for sim tests.
 - **Done when:** `RESEARCH.md` has a table with sources for each component. The decisions are ACCEPTED in `DECISIONS.md`.
 
-#### C2. Walking skeleton
+#### C2. Walking skeleton: install check and design
 
-- **Goal:** The thinnest end-to-end path: microphone → VAD → ASR → MT → terminal, label "Me".
+- **Goal:** Install check of the first candidates. Module contracts and test design for the thinnest end-to-end path: microphone → VAD → ASR → MT → terminal, label "Me".
 - **Steps:**
-  1. **Install check first** (mitigation for D-002): install the first candidates on Aren's laptop with GPU support. A model test loads each model and runs one known clip.
-     - ASR: ASR-1 on NeMo (RNNT). If NeMo does not install, ASR-1 on ONNX Runtime with the CTC head (D-014).
-     - MT: NLLB-200-distilled-600M on CTranslate2 with `mt_compute_type = float16`, with the CUDA 12 libraries next to the CUDA 13 build of PyTorch (D-015, D-016). Also time the same sentences on PyTorch.
-     - Aren downloads the model weights before C2 into the normal Hugging Face cache (C1 commands), so that nothing downloads two times.
-  2. Write the module contracts and the data types in `ARCHITECTURE.md`.
-  3. Design the tests in `TESTS.md`. Aren reviews them.
-  4. Write the tests, then the thin modules, then connect them.
-  5. Add an end-to-end model test that feeds a WAV file through the same pipeline at real-time speed.
-  6. Aren runs the program live with his microphone.
-- **Decisions needed:**
-  - The WAV file source is for tests and eval only. It is not a user feature. Tip T8 warns about extra features, so we log this decision.
-  - How the program shows or logs the measured latency of each line (necessary for K1).
-- **Done when:** M1 works on Aren's laptop. We have the latency of each line.
+  1. **Install check first** (mitigation for D-002). *(done: T-INSTALL-01 to T-INSTALL-05 pass)*
+     - ASR: ASR-1 on NeMo (RNNT). If NeMo does not install, ASR-1 on ONNX Runtime with the CTC head (D-014). *(NeMo works)*
+     - MT: NLLB-200-distilled-600M on CTranslate2 with `mt_compute_type = float16`, with the CUDA 12 libraries next to the CUDA 13 build of PyTorch (D-015, D-016). Also time the same sentences on PyTorch. *(done)*
+     - Aren downloads the model weights before C2 into the normal Hugging Face cache (C1 commands). *(done)*
+  2. Write the module contracts and the data types in `ARCHITECTURE.md`. *(done: v0.3, approved)*
+  3. Design the tests in `TESTS.md`. Aren reviews them. *(done: §2.4, approved)*
+  4. Steps 4 to 6 of the first plan (code, end-to-end test, live run) moved to C2b, C2c, and C2d (D-035).
+- **Decisions:** D-021 to D-035. The two "decisions needed" of the first plan are D-025 (WAV source only for tests) and D-024 (latency on each line).
+- **Done when:** the install check passes, and Aren approves the contracts and the tests. *(done)*
+
+#### C2b. Skeleton code: `types` + `segment`
+
+- **Goal:** `types.py` (`ARCHITECTURE.md` §3), the core `Endpointer` and the Silero adapter (§2.2).
+- **Read list:** `docs/handovers/02-skeleton-design.md`, `RULES.md`, `ARCHITECTURE.md` (§2.2, §3, §5, §6), `TESTS.md` (§2.4).
+- **Branches (R3, Aren 2026-10-25):** one branch for each component, with its own tests. Aren merges a branch into `main` only when its tests pass on their own and CI is green. The next branch starts from the new `main`.
+
+  | Branch | Component (files) | Tests |
+  |---|---|---|
+  | `c2b-segment` | `segment/endpoint.py`, `segment/silero.py`, with the shared `types.py` and `config.py` (first user) | T-SEG-01 to T-SEG-09, T-CFG-01, T-IMPORT-01 (unit); T-MODEL-VAD-01 (model) |
+
+- **Done when:** the tests pass on Aren's laptop and in CI, and the branch is merged.
+
+#### C2c. Skeleton code: `asr` + `mt` adapters
+
+- **Goal:** the NeMo RNNT adapter and the CTranslate2 NLLB adapter (§2.3, §2.4): warm-up (D-022), cuBLAS preload (D-030), error messages (§7).
+- **Branches (R3, Aren 2026-10-25):** one branch for each component, with its own tests. Aren merges a branch into `main` only when its tests pass on their own and CI is green. The next branch starts from the new `main`.
+
+  | Branch | Component (files) | Tests |
+  |---|---|---|
+  | `c2c-asr` | `asr/nemo_rnnt.py` | T-MODEL-ASR-01, T-MODEL-ERR-01 (model); T-IMPORT-01 (unit) |
+  | `c2c-mt` | `mt/ct2_nllb.py` | T-MODEL-MT-01, T-MODEL-ERR-02 (model); T-IMPORT-01 (unit) |
+
+- **Done when:** the tests pass on Aren's laptop, and both branches are merged. T-MODEL-MT-01 runs with no `LD_LIBRARY_PATH`.
+
+#### C2d. Skeleton code: `audio` + `output` + `pipeline` + `cli`
+
+- **Goal:** the microphone adapter, the line format, the threads and the queue, the startup and the stop (§2.1, §2.5–§2.7, §4). Then M1.
+- **Branches (R3, Aren 2026-10-25):** one branch for each component, with its own tests. Aren merges a branch into `main` only when its tests pass on their own and CI is green. The next branch starts from the new `main`.
+
+  | Branch | Component (files) | Tests |
+  |---|---|---|
+  | `c2d-output` | `output.py` | T-OUT-01 to T-OUT-03, T-IMPORT-01 (unit) |
+  | `c2d-audio` | `audio/soundcard_mic.py` | T-AUDIO-01 (DESIGNED; Aren approves it in C2d) |
+  | `c2d-pipeline` | `pipeline.py` | T-PIPE-01 to T-PIPE-04, T-IMPORT-01 (unit) |
+  | `c2d-cli` | `cli.py` | T-CLI-01, T-CFG-02, T-IMPORT-01 (unit); T-E2E-01 (model); L-01 to L-03 (live) |
+
+- **Done when:** M1 works on Aren's laptop, and all four branches are merged. Each line shows its latency (K1).
 
 #### C3. Evaluation set and bake-off
 
@@ -444,7 +483,10 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 
 ### 10.2 Open
 
-None at the end of C0.
+| ID | Question | Source | Claude's notes (for the decision later) |
+|---|---|---|---|
+| Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. |
+| Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). |
 
 ---
 
@@ -454,7 +496,10 @@ None at the end of C0.
 |---|---|---|---|
 | C0 | 1.5 h | 2.5 h | 14:00–16:30 (Aren). 1.0 h over the time box. |
 | C1 | 2.5 h | 1.8 h | 2026-10-24, 11:43–13:29 (1 h 46 min). 0.7 h under the time box; added to the buffer. |
-| C2 | 3 h | | |
+| C2 | 3 h | 2.65 h | 2026-10-25, 10:01–12:40 (2 h 39 min). Install check, contracts, test design. The C2 scope changed: the code moved to C2b–C2d (D-035), so the 0.35 h under the time box does not go to the buffer. |
+| C2b | 1 h | | |
+| C2c | 1 h | | |
+| C2d | 1.5 h | | |
 | C3 | 2.5 h | | |
 | C4 | 2 h | | |
 | C5 | 3 h | | |
@@ -463,7 +508,7 @@ None at the end of C0.
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **20.5 h** | 4.3 h | C0 + C1. S1 adds 0.5 h over the 20 h of the brief. The C1 saving moves time from C1 to the buffer; the total time box does not change. |
+| **Total** | **24.0 h** | 6.95 h | C0 + C1 + C2. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23 h (R16 note in §5.1). |
 
 ---
 
@@ -478,3 +523,4 @@ None at the end of C0.
 | 0.5 | 2026-10-23 | C0 time logged. Side chat S1 for the export format; final export after C8 (D-011). |
 | 0.6 | 2026-10-24 | C1 decisions: C2 install check (D-014, D-015, D-016); C3 eval set, normalization rules, and shortlists (D-014, D-015, D-019); setup guide: wired headphones; known limits list in C8. |
 | 0.7 | 2026-10-24 | C1 time logged (1.8 h). The 0.7 h saved goes to the buffer (0.7 h left). |
+| 0.8 | 2026-10-25 | C2 decisions D-021 to D-035: install check done, contracts and tests approved; the code work moves to C2b, C2c, and C2d, with one branch and its own tests for each component (D-035, R3); open questions Q15 and Q16; R16 note on the total time; C2 time logged (2.65 h). |

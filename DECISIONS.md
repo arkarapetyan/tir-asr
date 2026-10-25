@@ -403,7 +403,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 
 ## D-022. Warm-up run at startup
 
-- **Status:** PROPOSED
+- **Status:** ACCEPTED (2026-10-25), option A
 - **Context:** The first call of a GPU model can take longer than the next calls. A slow first line can break K1.
 - **Facts (T-INSTALL-02, T-INSTALL-03, Aren's laptop, 2026-10-25) [RUN]:**
   - ASR (NeMo, GPU): call 1 0.458 s; the next calls 0.027–0.036 s, also for new lengths (2.78–12.17 s of audio).
@@ -413,9 +413,9 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - **A.** A warm-up run of each model at startup, with a synthetic input (no audio file in git, R11).
   - **B.** No warm-up run.
 - **Claude's preference:** A, with one warm-up call for each GPU model. Weak points: the start takes about 6 s longer; the install check used a real clip and a real text as call 1, but the program must use a synthetic warm-up input (no audio file in git, R11), which is not tested yet. Test that can show it is wrong: in the end-to-end model test, the first line after the warm-up is slower than the next lines.
-- **Decision:** open. Aren decides after the numbers.
-- **Reason (Aren's words):** "the longer start is fine, but we need to be careful with the other lengths part. Let's test it first to see if we need it or not".
-- **Revisit when:** the install-check numbers exist.
+- **Decision:** A. One warm-up call for each GPU model at startup: ASR with 2 s of zeros, MT with a fixed Armenian sentence (`ARCHITECTURE.md` §5).
+- **Reason (Aren's words):** "the longer start is fine, but we need to be careful with the other lengths part. Let's test it first to see if we need it or not". After the numbers: "Accept option A".
+- **Revisit when:** the end-to-end model test shows a slow first line after the warm-up.
 
 ## D-023. Latency definition (K1)
 
@@ -515,3 +515,98 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A.
 - **Reason (Aren's words):** "D028. Accept".
 - **Revisit when:** —
+
+## D-029. Threads and the segment queue
+
+- **Status:** ACCEPTED (2026-10-25), option A
+- **Context:** `ARCHITECTURE.md` §4. One capture thread for each source; one worker thread does ASR, then MT, then the output. The worker uses the GPU, so the models run one at a time. PLAN C2 asks what happens when a queue is full.
+- **Options:**
+  - **A.** A queue with no size limit. A slow worker shows as a larger `asr` step on each line (D-024).
+  - **B.** A queue with a size limit. When it is full, the program stops with an error.
+  - **C.** A queue with a size limit. When it is full, the oldest segment is removed. (Silent data loss, against R10.)
+- **Claude's preference:** A. [RUN] ASR + MT need about 0.1–0.17 s for each segment after the warm-up, and each segment has at least 0.25 s of speech plus 0.5 s of silence. Weak point: with an overload, the latency and the memory grow with no limit, and the program does not stop. Test that can show it is wrong: in the live run or in C7, the `asr` step grows from line to line.
+- **Decision:** A. One capture thread for each source, one worker thread, and a segment queue with no size limit.
+- **Reason (Aren's words):** "D29. A" (after the more context above).
+- **More context (2026-10-25, Aren asked for it):**
+  - The capture thread puts each closed segment in the queue. The worker takes the segments one at a time. The queue holds the segments that wait.
+  - The queue fills only when the worker is slower than the speech. [RUN] The worker needs 0.10–0.17 s for each segment (ASR 0.03 s + MT 0.07–0.13 s). A new segment comes at most once in 0.76 s (0.25 s of speech + 0.51 s of silence) (calc). Thus the worker is about 4–7 times faster than the fastest speech. With two sources (C4), it is about 2–3 times faster (calc).
+  - Possible causes of an overload: a hot GPU that runs slower, another program on the GPU, or the C5 speaker model on the same worker [UNVERIFIED].
+  - At the interview, A gives late lines but loses none; B stops the program; C loses lines with no message.
+  - Memory: a 10 s segment is 640 KB, so 100 segments in the queue use 64 MB (calc).
+- **Revisit when:** C4 (two sources on one worker) or C5 (a speaker model on the same worker).
+
+## D-030. CUDA 12 cuBLAS for CTranslate2
+
+- **Status:** ACCEPTED (2026-10-25), option A
+- **Context:** The CTranslate2 4.8.3 wheels need the CUDA 12 cuBLAS. The install check used `LD_LIBRARY_PATH` [RUN]. The package `nvidia-cublas-cu12` puts `libcublas.so.12` and `libcublasLt.so.12` in `nvidia/cublas/lib/` [RUN].
+- **Options:**
+  - **A.** The `mt` adapter loads `libcublasLt.so.12` and `libcublas.so.12` from the package `nvidia-cublas-cu12` (with `ctypes`, `RTLD_GLOBAL`) before `import ctranslate2`. The file paths come from `importlib.metadata`. A missing file stops the program with an error.
+  - **B.** The user sets `LD_LIBRARY_PATH` before the start (README, or a launcher script).
+- **Claude's preference:** A. `uv run tir-asr` then works with no extra step, also at the interview. Weak points: a preload is less common; it depends on the file names in the package; it is [UNVERIFIED] that CTranslate2 then uses the loaded library. Test that can show it is wrong: the MT model test with no `LD_LIBRARY_PATH` fails to run CTranslate2 on `cuda`.
+- **Decision:** A.
+- **Reason (Aren's words):** "agree on D30".
+- **Revisit when:** a new CTranslate2 version uses CUDA 13.
+
+## D-031. Empty ASR text
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** A VAD segment can contain no words (a cough, a noise). Then the ASR text is empty, and MT has no input.
+- **Options:**
+  - **A.** Print a short block with no MT: the time, the label, `HY: (no text)`, and the latency line with `vad` and `asr` only.
+  - **B.** Print no block. The shutdown line counts the empty texts.
+- **Claude's preference:** A in C2, because each segment with no words is then visible, which helps to tune the VAD. The shutdown line also counts them. Weak point: noise blocks on the screen at the interview. Test that can show it is wrong: in the live run, many `(no text)` blocks make the screen hard to read.
+- **Decision:** A now, for debugging. B for the delivery: C7 changes the code and its test, with no flag. (A flag for this would be a new configuration item that needs its own approval, R10.)
+- **Reason (Aren's words):** "lets agree keeping the no text for now for debugging purposes but silencing it on production".
+- **Revisit when:** C7 (live test).
+
+## D-032. End of a test WAV clip
+
+- **Status:** ACCEPTED (2026-10-25), option C (Aren)
+- **Context:** Q-08. Clip 1 ends 150 ms after the speech, which is less than `vad_min_silence_ms`. Thus the last segment of a clip does not close.
+- **Options:**
+  - **A.** The test WAV source (D-025) adds 1.0 s of zeros after each clip. The `Endpointer` then closes the last segment as in live speech.
+  - **B.** The `Endpointer` gets a `flush()` for the end of the input.
+  - **C (Aren).** No added silence and no `flush()`. The test clips contain enough silence.
+- **Claude's preference:** A, because the product then has no code that live input never uses (D-025). Weak points: digital zeros are not real room silence; 1.0 s is a test constant. Test that can show it is wrong: the end-to-end model test does not get one block for each clip.
+- **Questions raised:** Claude (R14): clip 1 ends only 152 ms after its speech [RUN, T-INSTALL-04], so clip 1 alone gives no last block. Clip 2 ends 914 ms after its speech. If the test plays clip 1 and then clip 2, the gap is 152 + 480 = 632 ms, and both segments close (calc).
+- **Decision:** C. The end-to-end test plays clip 1, then clip 2. A clip that ends with less than 512 ms of silence makes the test fail with a clear message, not a silent miss. The test WAV source gives only whole frames; it drops the last part of a clip that is shorter than one frame (32 ms).
+- **Reason (Aren's words):** "D32 no need to pad since the clips do include silence".
+- **Revisit when:** —
+
+## D-033. Parameter `mt_beam_size`
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** CTranslate2 and Transformers need a beam size. R10: Aren approves each parameter.
+- **Options:** 1 (greedy), 2 (the CTranslate2 default), 4.
+- **Claude's preference:** 2. [RUN] Beam sizes 1 and 2 gave the same texts and the same times on 4 inputs (T-INSTALL-03). Weak point: no measured gain over 1. Test that can show it is wrong: in C3, beam size 1 gives the same chrF at a lower latency, or 4 gives a higher chrF within K1.
+- **Decision:** new parameter `mt_beam_size = 2` (approved 2026-10-25, R10).
+- **Reason (Aren's words):** "agree on D33".
+- **Revisit when:** C3 numbers.
+
+## D-034. Start, pause, and resume keys
+
+- **Status:** ACCEPTED (2026-10-25): option A for the MVP
+- **Context:** Aren: "listening begins after hitting a key and stops after hitting pause key with the option of resuming". The brief has no such feature (F1–F5), and its "Out of scope" list does not name it. R10 and tip T8: a feature that is not in the brief needs a decision.
+- **Options:**
+  - **A.** No keys. The program listens after the startup. Ctrl+C stops it (the brief).
+  - **B.** A start key, and one key that pauses and resumes (Aren). During a pause, the capture thread drops the blocks, and the `Endpointer` drops its open segment. The screen shows "Paused" and "Listening".
+  - **C.** A start key only. Ctrl+C stops the program.
+- **Effect on performance (Aren's question):** no effect on the latency of a line is expected [UNVERIFIED]. A key thread waits on the terminal input and uses no CPU. After a long pause, the first segment can be slower if the GPU clocks down (Q-09). A long silence has the same effect.
+- **Claude's preference:** A for the MVP (R2, T8), then B after M3 if the time allows. Weak points of B: more code and more tests (terminal raw mode, and Ctrl+C must still work); a rule for the open segment at a pause; the C5 speaker labels must stay the same across a pause; the time box (R16). Test that can show the preference is wrong: at the C7 rehearsal, the program shows lines of talk that nobody wanted (before the call starts, or during side talk).
+- **Decision:** A for the MVP: no keys; Ctrl+C stops the program. We decide on option B after M3.
+- **Reason (Aren's words):** "Leave decision for the keys after M3. you are right. it is not MVP".
+- **Revisit when:** M3 is done (after C5).
+
+## D-035. Chats for the C2 code: module groups
+
+- **Status:** ACCEPTED (2026-10-25), option A
+- **Context:** R3 (tip T3): "Develop and test one module in its own chat". `PLAN.md` v0.7 had all six skeleton modules in one chat (C2). Aren asked if each component gets its own chat.
+- **Options:**
+  - **A.** Three chats for module groups: C2b `types` + `segment`; C2c `asr` + `mt` adapters; C2d `audio` + `output` + `pipeline` + `cli` (M1). One git branch for each chat; Aren merges it into `main` when its tests pass.
+  - **B.** One chat for all the skeleton code. Weak points: a long chat (T6, R4); it does not follow R3.
+  - **C.** One chat for each module (7 chats). Weak point: too much overhead for the time budget (R16).
+- **Claude's preference:** A. Each group has one clear contract part, and its tests can pass alone. Weak points: three handovers (about 10 min each); problems between the modules show only in C2d. Test that can show it is wrong: C2d finds a contract error between two modules, and the split costs more time than it saves.
+- **Decision:** A. C2 ends after the install check, the contracts, and the test design. Inside each chat, each component has its own branch and its own tests (R3): C2b `c2b-segment`; C2c `c2c-asr`, `c2c-mt`; C2d `c2d-output`, `c2d-audio`, `c2d-pipeline`, `c2d-cli` (`PLAN.md` §5.2). Aren merges a branch into `main` only when its tests pass on their own and CI is green.
+- **Reason (Aren's words):** "Agree on A". Then: "while I agreed on A for D35. We still will need separate branch and tests for each separate component (as R3 suggests)".
+- **Revisit when:** C2d.
+
