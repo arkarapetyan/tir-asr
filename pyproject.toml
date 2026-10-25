@@ -5,7 +5,9 @@ description = "Live Armenian speech transcription and English translation in the
 readme = "README.md"
 authors = [{ name = "Aren" }]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.5.4",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.21,<0.13"]
@@ -15,6 +17,9 @@ build-backend = "uv_build"
 # One uv version on the laptop, in CI, and in the workspace (D-009).
 # setup-uv in CI reads this value.
 required-version = "==0.12.21"
+# The group "laptop" has the packages that need the GPU or the audio server.
+# The laptop installs it by default. CI excludes it with --no-group laptop (D-021).
+default-groups = ["dev", "laptop"]
 
 [tool.ruff]
 line-length = 100
@@ -35,4 +40,15 @@ markers = [
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
+]
+laptop = [
+    "ctranslate2>=4.8.3",
+    "huggingface-hub>=2.3.0",
+    "nemo-toolkit[asr]>=3.0.0",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "sentencepiece>=0.2.2",
+    "silero-vad>=6.2.3",
+    "soundcard>=0.4.6",
+    "torch>=2.14.1",
+    "transformers>=5.20.2",
 ]
