@@ -76,15 +76,15 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
-| T-SEG-01 | §2.2 rule 1: start. | p = 0.1 for frames 0–4, 0.9 for frames 5–24, 0.1 after. | One segment. `start` = 0.160 s (start of frame 5). | unit | APPROVED |
-| T-SEG-02 | §2.2 rules 2–3, D-023, D-027: true end and close. | The input of T-SEG-01. | `speech_end` = 0.800 s (start of frame 25). The segment closes at frame 40 (the 16th silent frame): `closed` = 1.312 s. No segment before frame 40. | unit | APPROVED |
-| T-SEG-03 | §2.2 rule 2: speech after a short silence. | Speech, then 10 frames at 0.1, then speech again, then 20 frames at 0.1. | One segment, not two. `speech_end` = the start of the second silence. | unit | APPROVED |
-| T-SEG-04 | §2.2 rules 1–2: two thresholds. | Speech with frames at 0.4 inside; a silence with frames at 0.4 inside. | A frame at 0.4 in speech does not start a silence. A frame at 0.4 in a silence counts as silence: the close comes after 16 frames that are not ≥ 0.5. | unit | APPROVED |
-| T-SEG-05 | §2.2 rule 4, D-026: minimum length. | Speech of 7 frames (224 ms); speech of 8 frames (256 ms). | 7 frames: no segment, the short-segment count is 1. 8 frames: one segment. | unit | APPROVED |
-| T-SEG-06 | §2.2 rule 5, D-026: hard cut. | p = 0.9 for 11 s from frame 0. | The first segment closes at frame 312 (end 10.016 s): `cut` = True, `speech_end` = `closed` = 10.016 s, no end pad. A second segment starts at frame 313. | unit | APPROVED |
-| T-SEG-07 | §2.2 rule 5: maximum length with an open silence. | Speech to 9.9 s, then silence. The 10 s limit comes during the silence. | `cut` = False. `speech_end` = the start of the silence. | unit | APPROVED |
-| T-SEG-08 | §2.2 rule 6: audio and pads. | The input of T-SEG-01, audio = sample index (a ramp). | The segment audio is samples 2080 to 13279 (start − 480, end + 480). A start at frame 0 gives no start pad. | unit | APPROVED |
-| T-SEG-09 | §2.2 errors, R10. | A block of 500 samples; a probability of 1.2. | `SegmentError`: `segment: frame has 500 samples, expected 512`; `segment: probability 1.2 is not in [0, 1]`. | unit | APPROVED |
+| T-SEG-01 | §2.2 rule 1: start. | p = 0.1 for frames 0–4, 0.9 for frames 5–24, 0.1 after. | One segment. `start` = 0.160 s (start of frame 5). | unit | PASSES |
+| T-SEG-02 | §2.2 rules 2–3, D-023, D-027: true end and close. | The input of T-SEG-01. | `speech_end` = 0.800 s (start of frame 25). The segment closes at frame 40 (the 16th silent frame): `closed` = 1.312 s. No segment before frame 40. | unit | PASSES |
+| T-SEG-03 | §2.2 rule 2: speech after a short silence. | Speech, then 10 frames at 0.1, then speech again, then 20 frames at 0.1. | One segment, not two. `speech_end` = the start of the second silence. | unit | PASSES |
+| T-SEG-04 | §2.2 rules 1–2: two thresholds. | Speech with frames at 0.4 inside; a silence with frames at 0.4 inside. | A frame at 0.4 in speech does not start a silence. A frame at 0.4 in a silence counts as silence: the close comes after 16 frames that are not ≥ 0.5. | unit | PASSES |
+| T-SEG-05 | §2.2 rule 4, D-026: minimum length. | Speech of 7 frames (224 ms); speech of 8 frames (256 ms). | 7 frames: no segment, the short-segment count is 1. 8 frames: one segment. | unit | PASSES |
+| T-SEG-06 | §2.2 rule 5, D-026: hard cut. | p = 0.9 for 11 s from frame 0. | The first segment closes at frame 312 (end 10.016 s): `cut` = True, `speech_end` = `closed` = 10.016 s, no end pad. A second segment starts at frame 313. | unit | PASSES |
+| T-SEG-07 | §2.2 rule 5: maximum length with an open silence. | Speech to 9.9 s, then silence. The 10 s limit comes during the silence. | `cut` = False. `speech_end` = the start of the silence. | unit | PASSES |
+| T-SEG-08 | §2.2 rule 6: audio and pads. | The input of T-SEG-01, audio = sample index (a ramp). | The segment audio is samples 2080 to 13279 (start − 480, end + 480). A start at frame 0 gives no start pad. | unit | PASSES |
+| T-SEG-09 | §2.2 errors, R10. | A block of 500 samples; a probability of 1.2. | `SegmentError`: `segment: frame has 500 samples, expected 512`; `segment: probability 1.2 is not in [0, 1]`. | unit | PASSES |
 | T-OUT-01 | F5, D-024: line format. | A `Line` with `start` 72.4 s after the session start, label "Me", Armenian and English text, fixed times. | The exact block of §2.5, with `[00:01:12]`, the four steps, two decimals, and the total. | unit | APPROVED |
 | T-OUT-02 | §2.5: latency arithmetic. | Times with steps 0.534, 0.413, 0.177, 0.004 s. | The total comes from the raw values (1.13 s). Each printed step is the rounded raw step. | unit | APPROVED |
 | T-OUT-03 | D-031: empty ASR text. | A `Line` with an empty `hy`. | `HY: (no text)`, no `EN` line, a latency line with `vad`, `asr`, and the total only. | unit | APPROVED |
@@ -92,16 +92,16 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-PIPE-02 | R10, §2.6: an error in a thread. | The fake ASR raises `AsrError("asr: test")`. | The program stops. The error output is `tir-asr: asr: test`. The exit code is 1. | unit | APPROVED |
 | T-PIPE-03 | D-031: no MT call for an empty text. | The fake ASR returns "". | The fake MT gets no call. One `(no text)` block. | unit | APPROVED |
 | T-PIPE-04 | §2.7: shutdown line. | One normal segment, one short segment, one empty text, then stop. | The shutdown line gives 2 segments, 1 short segment, 1 empty text. Exit code 0. | unit | APPROVED |
-| T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | APPROVED |
+| T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | APPROVED |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
-| T-MODEL-VAD-01 | §2.2, D-026, D-027: Silero adapter and `Endpointer`. | Clip 1 and clip 2 (16 kHz), frame by frame. | Each probability is in [0, 1]. Clip 1 + clip 2 give 2 segments (T-INSTALL-04 shows the pauses). | model | APPROVED |
+| T-MODEL-VAD-01 | §2.2, D-026, D-027: Silero adapter and `Endpointer`. | Clip 1 and clip 2 (16 kHz), frame by frame. | Each probability is in [0, 1]. Clip 1 + clip 2 give 2 segments (T-INSTALL-04 shows the pauses). | model | PASSES |
 | T-MODEL-ASR-01 | §2.3, D-022: NeMo adapter with the synthetic warm-up. | Warm-up (2 s of zeros), then clip 1, clip 2, clip 1, clip 2. | No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | APPROVED |
 | T-MODEL-MT-01 | §2.4, D-022, D-030: CTranslate2 adapter with the cuBLAS preload. | The command sets no `LD_LIBRARY_PATH`. Warm-up, then text 1, text 2, text 1, text 2. | CTranslate2 runs on `cuda`. No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | APPROVED |
 | T-MODEL-ERR-01 | §7, R10: missing ASR model file. | A wrong `.nemo` name. | `asr: model file not in the Hugging Face cache: …` | model | APPROVED |
@@ -114,6 +114,24 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). After that, Claude split T-CFG-01 (now T-CFG-01 and T-CFG-02) and T-MODEL-ERR-01 (now T-MODEL-ERR-01 and T-MODEL-ERR-02), so that each component branch has its own tests (D-035, R3). The content is the same. T-AUDIO-01 is new, because the microphone adapter had no test.
 
 **Component branches (D-035, R3):** each branch has its own tests (`PLAN.md` §5.2 C2b, C2c, C2d). T-PIPE-02 and T-PIPE-04 check exit codes: if the exit code belongs to `cli.py`, C2d moves that part of the test to the `c2d-cli` branch, with Aren's approval.
+
+**C2b results (branch `c2b-segment`, Aren's laptop, 2026-10-25):**
+
+- **Unit:** 47 passed (26 from before and 21 new). `ruff` passes. File: `test-results/c2b-unit.txt`.
+- **Test functions for one ID:**
+  - T-SEG-04 has two (inside speech, inside a silence). The first one ends the speech with frames at 0.4, so that it fails if 0.4 starts a silence.
+  - T-SEG-08 has four: the ramp of T-SEG-01, a start at frame 0, a pad of 100 ms (longer than one frame) at the start of the stream, and a segment that starts right after a close. The last two protect the buffer of the start pad.
+  - T-SEG-09 has two (frame length, probability). The frame-length test also shows that the VAD is not called.
+- **T-IMPORT-01:** the test imports each module of the package except the four adapters, each in a new process. A second test checks a `REQUIRED` set of core modules, because the first test passes with no code. Each component branch adds its modules to `REQUIRED`.
+- **T-MODEL-VAD-01 (file `test-results/c2b-model-vad.txt`):** clip 1 has 173 frames (5.536 s) and clip 2 has 206 frames (6.592 s). The result is 2 segments, 0 short segments, and probabilities from 0.005 to 1.000. The model and the `Endpointer` need 0.19 ms for each frame on the CPU, with 1 PyTorch thread.
+
+  | Segment | `start` | `speech_end` | `closed` | Audio |
+  |---|---|---|---|---|
+  | 1 | 0.224 s | 5.408 s | 5.920 s | 5.244 s |
+  | 2 | 6.016 s | 11.232 s | 11.744 s | 5.276 s |
+
+  - Segment 1 closes in the silence at the start of clip 2. The silence between the two segments is 608 ms (19 frames), which is 3 frames more than the 16 frames of the rule. The pause of 448 ms inside clip 1 did not split it.
+  - The VAD silence after the speech of clip 2 is 896 ms, so segment 2 closes inside the clip.
 
 ## 3. QA questions
 

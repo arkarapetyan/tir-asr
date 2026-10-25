@@ -610,3 +610,33 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "Agree on A". Then: "while I agreed on A for D35. We still will need separate branch and tests for each separate component (as R3 suggests)".
 - **Revisit when:** C2d.
 
+
+## D-036. Interface of the `segment` module (C2b)
+
+- **Status:** ACCEPTED (2026-10-25), option A for each of the five parts
+- **Context:** `ARCHITECTURE.md` v0.3 left five details open. We found them when we wrote the tests of C2b. Each detail changes how the other modules (C2d) use `segment`.
+- **Parts, options, and Claude's preference** (A in each part):
+  1. **Parameters in the code.**
+     - **A.** A frozen dataclass `Params` in `config.py`. The §6 values are the defaults. `Endpointer(params, vad)` gets it. Tests make variants with `dataclasses.replace`.
+     - **B.** Module constants. Tests use `monkeypatch`; the startup log needs a separate list of the parameter names.
+     - Weak point of A: code can build a `Params` with other values. Only tests do this. T-CFG-01 compares `asdict(Params())` with the §6 table, so a new field without Aren's approval makes the test fail (R10). Test that can show A wrong: C2d finds that `cli.py` needs another shape for T-CFG-02.
+  2. **Count of the short segments (rule 4).** `push` returns nothing for a segment under `vad_min_speech_ms`, so the pipeline cannot count it.
+     - **A.** A public integer attribute `Endpointer.short_segments`.
+     - **B.** `push` returns an event type (a segment or a "dropped" mark). Every caller must handle the new type.
+     - Weak point of A: a mutable public attribute. The capture thread writes it, and the main thread reads it at shutdown (one integer, so the read is safe in CPython). Test that can show A wrong: T-PIPE-04 in C2d.
+  3. **Who calls the VAD.**
+     - **A.** `push(block)` calls `vad(block.samples)`. The `segment` module takes an `AudioBlock` and gives a `Segment` (§2 table).
+     - **B.** `push(block, probability)`. The capture thread calls the VAD.
+     - Weak point of A: the time of `push` includes the VAD time. [RUN] 0.19 ms for each frame on the CPU (T-MODEL-VAD-01). The Silero model keeps its state between calls, so C4 needs one adapter instance for each audio source. Test that can show A wrong: C4 or C5 needs the probabilities for another purpose.
+  4. **Lengths.**
+     - **A.** The silence, the minimum speech, and the maximum speech are counted in whole frames (audio time).
+     - **B.** They come from the differences of the arrival times.
+     - Weak point of A: a long silence in audio time and in arrival time can differ when blocks arrive late. `start`, `speech_end`, and `closed` still come from the arrival times, so the latency steps show the real delay. Test that can show A wrong: the C4 drift test finds a difference that changes a segment.
+  5. **Place of `SegmentError`.**
+     - **A.** In `segment/endpoint.py`. Each module has its own error class.
+     - **B.** A shared `errors.py` with a base class.
+     - Weak point of A: the pipeline cannot catch all module errors with one class. The pipeline stops on any exception (§2.6), so it needs no common class now. Test that can show A wrong: C2d needs a common class.
+- **Decision:** A in all five parts. `ARCHITECTURE.md` v0.4 has the changes (§2.2, §4, §5).
+- **Reason (Aren's words):** "Agree on your proposals" (parts 1 and 2). "Agree on the three details" (parts 3, 4, and 5).
+- **Questions raised:** Claude asked Aren to decide parts 1 and 2 (the contract gap was clear). Claude put parts 3 to 5 in the report with the code, because the tests needed a choice.
+- **Revisit when:** C2d (pipeline and CLI) and C4 (two sources).
