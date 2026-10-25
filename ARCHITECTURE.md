@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.5 · **Date:** 2026-10-25
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.6 · **Date:** 2026-10-25
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -81,10 +81,10 @@ Each error class has the module name in its message: `<module>: <cause>`.
 
 - **Adapter** `mt/ct2_nllb.py` (`Ct2NllbTranslator`, D-037): `facebook/nllb-200-distilled-600M`, converted to CTranslate2 in `models/nllb-200-distilled-600M-ct2-float16`, on `cuda`, `compute_type = mt_compute_type` (D-015). Tokenizer: Transformers `AutoTokenizer` from the Hugging Face cache, source `hye_Armn`, target `eng_Latn`.
 - **CUDA 12 cuBLAS (D-030):** before `import ctranslate2`, the adapter loads `libcublasLt.so.12` and then `libcublas.so.12` from the package `nvidia-cublas-cu12` (`ctypes`, `RTLD_GLOBAL`). The file paths come from `importlib.metadata`. The program needs no `LD_LIBRARY_PATH`.
-- **Load:** the constructor `Ct2NllbTranslator(params, model_dir)` loads the model and the tokenizer. It reads `mt_compute_type` and `mt_beam_size` from `Params`. The default of `model_dir` is a module constant. It is a model location, not a parameter (D-037).
+- **Load:** the constructor `Ct2NllbTranslator(params, model_dir)` loads the model and the tokenizer. It reads `mt_compute_type` and `mt_beam_size` from `Params`. The default of `model_dir` is a module constant. It is a model location, not a parameter (D-037). The default is relative to the current folder, so the program must start in the project folder. The adapter checks for `model_dir/model.bin` before the load.
 - **Warm-up (D-022, D-037):** the adapter has no warm-up method. The pipeline calls `translate(WARMUP_TEXT)` at startup (§2.6).
 - **Contract:** `translate(text)` takes a non-empty Armenian text and returns the English text.
-- **Errors:** `mt: CTranslate2 model not found: <path>` (the message gives the conversion command); `mt: libcublas.so.12 not found in the package nvidia-cublas-cu12`; `mt: empty input text`.
+- **Errors:** `mt: CTranslate2 model not found: <path>` (the message gives the conversion command of C2: `HF_HUB_OFFLINE=1 uv run --no-sync ct2-transformers-converter --model facebook/nllb-200-distilled-600M --output_dir models/nllb-200-distilled-600M-ct2-float16 --quantization float16`); `mt: <file> not found in the package nvidia-cublas-cu12` (`<file>` is `libcublasLt.so.12` or `libcublas.so.12`); `mt: empty input text`.
 - **Limits:** each segment is translated alone, with no context (known limit: «նա» = he or she). [RUN] 0.066–0.132 s for each call after the warm-up (T-INSTALL-03). CTranslate2 limits the output to 256 tokens (library default) [UNVERIFIED].
 
 ### 2.5 `output`
@@ -273,3 +273,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.3 | 2026-10-25 | Aren's review: D-029 to D-034 accepted; no parallel GPU work and no `asyncio` (§4); rounding note (§2.5). |
 | 0.4 | 2026-10-25 | C2b: `Params` dataclass (§5) and `Endpointer.short_segments` (§2.2), agreed by Aren in C2b. Not yet agreed: `Endpointer(params, vad)` calls the VAD itself (§2.2, §4); lengths counted in frames (§2.2); `SegmentError` location. |
 | 0.5 | 2026-10-25 | C2c, D-037: adapter class names `NemoRnntTranscriber` and `Ct2NllbTranslator`; the constructors load the models (§2.3, §2.4); no warm-up method in the adapters, the pipeline makes the warm-up calls (§2.6); `cli.py` is only the `argparse` interface (§2.7); `verbose=False` for NeMo (§2.3). Status line: the v0.4 changes apply D-036. |
+| 0.6 | 2026-10-25 | C2c, branch `c2c-mt` (§2.4): the default `model_dir` is relative to the project folder; the check for `model.bin`; the conversion command in the error message; the cuBLAS error names the missing file. |

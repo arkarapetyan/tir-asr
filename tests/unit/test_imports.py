@@ -28,6 +28,7 @@ REQUIRED = {
     "tir_asr.segment",
     "tir_asr.segment.endpoint",
     "tir_asr.asr",
+    "tir_asr.mt",
 }
 
 CHECK = """

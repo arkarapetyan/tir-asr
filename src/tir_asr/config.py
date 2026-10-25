@@ -10,6 +10,9 @@ from dataclasses import dataclass
 SAMPLE_RATE = 16_000  # Hz. The ASR model and Silero VAD need 16 kHz.
 VAD_FRAME = 512  # samples. The only frame size that Silero VAD accepts at 16 kHz.
 WARMUP_AUDIO_S = 2.0  # s of zeros. The synthetic input of the ASR warm-up call (D-022, R11).
+WARMUP_TEXT = "Բարև, ինչպե՞ս ես։"  # The synthetic input of the MT warm-up call (D-022).
+MT_SRC_LANG = "hye_Armn"  # NLLB language code: Armenian.
+MT_TGT_LANG = "eng_Latn"  # NLLB language code: English.
 
 
 @dataclass(frozen=True)
