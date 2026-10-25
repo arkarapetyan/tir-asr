@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.6 · **Date:** 2026-10-25
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.7 · **Date:** 2026-10-25
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -89,7 +89,10 @@ Each error class has the module name in its message: `<module>: <cause>`.
 
 ### 2.5 `output`
 
-- **Core** `output.py`: `format_block(line) -> str` and one write to the terminal for each block, with a flush (D-024).
+- **Core** `output.py` (D-024, D-040):
+  - `format_block(line, session_start) -> str` gives the text of one block.
+  - `write_block(line, session_start, stream)` writes the full block with one `write` call, then calls `flush`. One call for each block, so that the lines of two sources do not mix.
+  - Each block ends with an empty line, so that the blocks have a blank line between them.
 
   ```
   [00:01:12] Me
@@ -98,7 +101,7 @@ Each error class has the module name in its message: `<module>: <cause>`.
    [Latency: vad 0.53s, asr 0.41s, mt 0.18s, out 0.00s | Total 1.12s]
   ```
 
-- **Time:** `Segment.start` minus the session start, as `hh:mm:ss`. The session starts when the program prints "Listening".
+- **Time:** `Segment.start` minus the session start, as `hh:mm:ss`. The seconds are cut, not rounded (D-040). The session starts when the program prints "Listening".
 - **Latency steps (D-023, D-024):** two decimals; the steps add up to the total.
 
   | Step | From | To |
@@ -274,3 +277,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.4 | 2026-10-25 | C2b: `Params` dataclass (§5) and `Endpointer.short_segments` (§2.2), agreed by Aren in C2b. Not yet agreed: `Endpointer(params, vad)` calls the VAD itself (§2.2, §4); lengths counted in frames (§2.2); `SegmentError` location. |
 | 0.5 | 2026-10-25 | C2c, D-037: adapter class names `NemoRnntTranscriber` and `Ct2NllbTranslator`; the constructors load the models (§2.3, §2.4); no warm-up method in the adapters, the pipeline makes the warm-up calls (§2.6); `cli.py` is only the `argparse` interface (§2.7); `verbose=False` for NeMo (§2.3). Status line: the v0.4 changes apply D-036. |
 | 0.6 | 2026-10-25 | C2c, branch `c2c-mt` (§2.4): the default `model_dir` is relative to the project folder; the check for `model.bin`; the conversion command in the error message; the cuBLAS error names the missing file. |
+| 0.7 | 2026-10-25 | C2d, branch `c2d-output` (§2.5), D-040: `format_block(line, session_start)` and `write_block(line, session_start, stream)`; a blank line after each block; the seconds of the block time are cut. |
