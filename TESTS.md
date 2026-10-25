@@ -95,7 +95,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules and `tir_asr.asr`; later branches add theirs) |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, and `tir_asr.mt`; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
@@ -103,10 +103,11 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 |---|---|---|---|---|---|
 | T-MODEL-VAD-01 | §2.2, D-026, D-027: Silero adapter and `Endpointer`. | Clip 1 and clip 2 (16 kHz), frame by frame. | Each probability is in [0, 1]. Clip 1 + clip 2 give 2 segments (T-INSTALL-04 shows the pauses). | model | PASSES |
 | T-MODEL-ASR-01 | §2.3, D-022: NeMo adapter with the synthetic warm-up. | Warm-up (2 s of zeros), then clip 1, clip 2, clip 1, clip 2. | No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | PASSES |
-| T-MODEL-MT-01 | §2.4, D-022, D-030: CTranslate2 adapter with the cuBLAS preload. | The command sets no `LD_LIBRARY_PATH`. Warm-up, then text 1, text 2, text 1, text 2. | CTranslate2 runs on `cuda`. No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | APPROVED |
+| T-MODEL-MT-01 | §2.4, D-022, D-030: CTranslate2 adapter with the cuBLAS preload. | The command sets no `LD_LIBRARY_PATH`. Warm-up, then text 1, text 2, text 1, text 2. | CTranslate2 runs on `cuda`. No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | PASSES |
 | T-MODEL-ERR-01 | §7, R10: missing ASR model file. | A wrong `.nemo` name. | `asr: model file not in the Hugging Face cache: …` | model | PASSES |
-| T-MODEL-ERR-02 | §7, R10: missing MT model folder. | A missing CTranslate2 folder. | `mt: CTranslate2 model not found: …` with the conversion command. | model | APPROVED |
+| T-MODEL-ERR-02 | §7, R10: missing MT model folder. | A missing CTranslate2 folder. | `mt: CTranslate2 model not found: …` with the conversion command. | model | PASSES |
 | T-MODEL-ERR-03 | §2.3, §7, R10: no CUDA, no CPU fallback. | `torch.cuda.is_available` returns False (`monkeypatch`). | `AsrError`: `asr: CUDA is not available`. The model does not load. | model | PASSES (approved by Aren, 2026-10-25) |
+| T-MODEL-ERR-04 | §2.4, §7, R10: empty MT input. | `translate("")` after the load. | `MtError`: `mt: empty input text`. | model | PASSES (approved by Aren, 2026-10-25) |
 | T-AUDIO-01 | §2.1: microphone adapter. | Option 1: the adapter reads 50 blocks from the default microphone. Option 2: a sim test with a null sink (D-020), moved forward from C4. C2d selects one with Aren. | Each block has 512 float32 samples in [−1, 1]. The arrival times grow, about 32 ms apart. | sim (option 2) or live (option 1) | DESIGNED |
 | T-E2E-01 | K1, F2, F3, F5, D-025, D-032: full pipeline with the real models. | The test WAV source plays clip 1 and then clip 2 at real-time speed. | 2 blocks in time order, label "Me", no empty text, each total < 5.0 s. | model | APPROVED |
 
@@ -119,6 +120,10 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - T-MODEL-ERR-03 is new. It tests the error `asr: CUDA is not available` of §2.3 ("yes on both of the untested error points").
 - The error `asr: unexpected output type <type>` (§2.3) has no test, because the test needs a fake NeMo model.
 - T-MODEL-ASR-01 has one more check: `torch.cuda.memory_allocated() > 0` after the load (§2.3: on `cuda`). Aren: "its fine".
+- T-MODEL-ERR-04 is new. It tests the error `mt: empty input text` of §2.4.
+- The error `mt: <file> not found in the package nvidia-cublas-cu12` (§2.4) has no test, because the test needs a missing package ("dont add the missing package test").
+- T-MODEL-MT-01 checks "CTranslate2 runs on `cuda`" with `nvidia-smi`: the GPU memory must grow by more than 1000 MiB at the load, because the float16 weights are 1175 MiB. The tests use no private attribute of an adapter ("refrain from using private attribut").
+- The MT model tests run with `env -u LD_LIBRARY_PATH` (D-030).
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
@@ -131,6 +136,19 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
   - T-MODEL-ERR-01 message: `asr: model file not in the Hugging Face cache: nvidia/stt_hy_fastconformer_hybrid_large_pc/no-such-model.nemo`.
   - T-MODEL-ERR-03: the error comes before the model load (0.000 s).
 - **For C2d:** the NeMo load prints about 185 lines of warnings and configuration to the terminal. The startup log design must handle this.
+
+**C2c results (branch `c2c-mt`, Aren's laptop, 2026-10-25):**
+
+- **Red runs:** T-IMPORT-01 failed (no `tir_asr.mt`); T-MODEL-MT-01, T-MODEL-ERR-02, and T-MODEL-ERR-04 failed with `ModuleNotFoundError` (files `test-results/c2c-mt-unit-red.txt`, `c2c-mt-model-red.txt`, `c2c-mt-model-red2.txt`).
+- **Unit:** 49 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2c-mt-unit.txt`.
+- **Model (file `test-results/c2c-mt-model.txt`, run with `env -u LD_LIBRARY_PATH`):** 3 passed.
+  - `LD_LIBRARY_PATH` was empty. The cuBLAS preload works (D-030).
+  - Load 1.31 s. The GPU memory grew by 1800 MiB (`nvidia-smi`).
+  - Warm-up (`WARMUP_TEXT`): 0.126 s, "Hello, how are you?".
+  - The four real calls: 0.076, 0.070, 0.066, 0.070 s. First call / median of the next 3 = 1.09.
+  - The same text gives the same translation in both calls. Text 2 has "truck" where the reference has "trunk" (MT quality, C3).
+  - T-MODEL-ERR-02 message: `mt: CTranslate2 model not found: <tmp>/no-such-model. Convert it with: HF_HUB_OFFLINE=1 uv run --no-sync ct2-transformers-converter …`.
+- **Q-07 data point:** the first CTranslate2 call in this process took 0.126 s. In T-INSTALL-03, it took 5.104 s.
 
 **Component branches (D-035, R3):** each branch has its own tests (`PLAN.md` §5.2 C2b, C2c, C2d). T-PIPE-02 and T-PIPE-04 check exit codes: if the exit code belongs to `cli.py`, C2d moves that part of the test to the `c2d-cli` branch, with Aren's approval.
 
@@ -164,7 +182,7 @@ We add a question here when we find it during the work (tip T4).
 | Q-04 | Does the minimum silence put two remote speakers into one segment when they change turns fast? | C2, D-027 | Open. C5 speaker purity of the segments. |
 | Q-05 | Does `vad_min_speech_ms = 250` remove short answers such as "ոչ" or "հա"? | C2, D-026 | Open. C3 recordings with short answers. |
 | Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | Open. End-to-end model test (C2), C3 bake-off. |
-| Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. |
+| Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. [RUN] Data point (T-MODEL-MT-01, 2026-10-25): in a new process, with the cuBLAS preload and no `LD_LIBRARY_PATH`, the first call took 0.126 s. The cause of the 5.1 s in T-INSTALL-03 is not known. |
 | Q-08 | A clip can end with less silence than `vad_min_silence_ms` (clip 1: 150 ms). How does the last segment end? | C2, D-027 | D-032: no added silence; the test plays clip 1, then clip 2 (gap 632 ms). T-E2E-01. |
 | Q-09 | Is the first segment after a long silence or a pause slower, because the GPU clocks down [UNVERIFIED]? | C2, Aren's warm-up question | Open. L-03. |
 | Q-10 | Does a long Python step in the worker delay the capture thread (GIL)? | C2, Aren's thread question | Open. Live run (C2 code chat): measure the gaps between block arrivals. |
