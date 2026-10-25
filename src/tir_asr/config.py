@@ -9,6 +9,7 @@ from dataclasses import dataclass
 # Constants: fixed by a model, not tunable (ARCHITECTURE.md section 5).
 SAMPLE_RATE = 16_000  # Hz. The ASR model and Silero VAD need 16 kHz.
 VAD_FRAME = 512  # samples. The only frame size that Silero VAD accepts at 16 kHz.
+WARMUP_AUDIO_S = 2.0  # s of zeros. The synthetic input of the ASR warm-up call (D-022, R11).
 
 
 @dataclass(frozen=True)

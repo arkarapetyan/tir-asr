@@ -640,3 +640,41 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "Agree on your proposals" (parts 1 and 2). "Agree on the three details" (parts 3, 4, and 5).
 - **Questions raised:** Claude asked Aren to decide parts 1 and 2 (the contract gap was clear). Claude put parts 3 to 5 in the report with the code, because the tests needed a choice.
 - **Revisit when:** C2d (pipeline and CLI) and C4 (two sources).
+
+## D-037. Interface of the `asr` and `mt` adapters (C2c)
+
+- **Status:** ACCEPTED (2026-10-25), option A in parts 1 to 3
+- **Context:** `ARCHITECTURE.md` §2.3 and §2.4 did not give the class names, the constructor, or the place of the warm-up call. The C2c tests need them.
+- **Parts, options, and Claude's preference** (A in each part):
+  1. **Class names.**
+     - **A.** `NemoRnntTranscriber` and `Ct2NllbTranslator`, in the style of `SileroSpeechProbability`.
+     - **B.** `Transcriber` and `Translator`, as §2.3 and §2.4 said. These are also the names of the Protocols in `types.py`.
+     - Weak point of A: §2.3 and §2.4 need a correction. Fact that can show A wrong: none known.
+  2. **Constructor.**
+     - **A.** The constructor loads the model: `NemoRnntTranscriber(repo, filename)` and `Ct2NllbTranslator(params, model_dir)`. The defaults are module constants. The error tests give a wrong name. `Ct2NllbTranslator` reads `mt_compute_type` and `mt_beam_size` from `Params`.
+     - **B.** Module constants only. The tests use `monkeypatch`.
+     - Weak point of A: `repo`, `filename`, and `model_dir` look like parameters (R10). They are model locations, not tunable values. They are not in the §6 table and not in the startup log. Fact that can show A wrong: Aren wants them in §6.
+  3. **Warm-up.**
+     - **A.** The adapters have no warm-up method. The caller calls `transcribe` with 2 s of zeros and `translate` with `WARMUP_TEXT`, and measures the time. T-MODEL-ASR-01 and T-MODEL-MT-01 do the same.
+     - **B.** The constructor does the warm-up.
+     - Weak point of A: a caller can forget the warm-up. Fact that can show A wrong: T-E2E-01 shows a slow first line.
+  4. **Constants** (information, no choice): branch `c2c-asr` adds `WARMUP_AUDIO_S` to `config.py`; branch `c2c-mt` adds `WARMUP_TEXT`, `MT_SRC_LANG`, and `MT_TGT_LANG`. No new tunable parameter.
+- **Decision:** A in parts 1 to 3; part 4 as given. Aren added to part 3: the pipeline makes the warm-up call, and `cli.py` is only the `argparse` interface. `ARCHITECTURE.md` v0.5 has the changes (§2.3, §2.4, §2.6, §2.7).
+- **Reason (Aren's words):** "I agree on Part1 and Part2". "No need for warmup in the constructor. Warm-up is something that will be called on the application bootstrap (the pipeline)". "Agree on Part4". "put warm-up call on pipeline. cli is only interface for argparse".
+- **Questions raised:** Claude: §2.7 of v0.4 put the warm-up call in `cli.py`, and C2d could select `cli.py` or `pipeline.py`. Aren selected `pipeline.py`. The other startup steps of §2.7 (versions, CUDA check, model load, microphone) move out of `cli.py` too; C2d gives the details to Aren for review.
+- **Revisit when:** C2d (pipeline and CLI).
+
+## D-038. Test runs in C2c: on Aren's laptop only
+
+- **Status:** ACCEPTED (2026-10-25), option A, for C2c only
+- **Context:** D-006 (detail Q13): Claude runs `ruff` and the unit tests on a copy in the workspace before Claude asks Aren. Aren asked if C2c can skip this to save time. The C2c model tests run only on Aren's laptop in any case, because the workspace has no GPU.
+- **Options:**
+  - **A.** No workspace copy in C2c. Aren runs `ruff` and the unit tests on the laptop, with the commands that Claude gives.
+  - **B.** Keep the D-006 detail: a workspace copy and a workspace run before each request to Aren.
+- **Claude's preference:** A, for C2c. Weak points: a `ruff` error or a CI-only error reaches Aren or CI first, and costs one extra round trip; the CI-style check without the `laptop` group runs only in CI. Fact that can show A wrong: a CI failure that a workspace run would have found.
+- **Decision:** A, for C2c only. Claude still runs `ruff` on the changed files only, in a scratch folder (no `uv` environment and no unit tests).
+- **Reason (Aren's words):** "Should we only run the tests on my end to save time? I know the decision on D6 but if this saves time then we do it like that." Then: "confirm D38".
+- **Questions raised:**
+  - Claude (R14) named the main risk one time (the weak points above).
+  - [RUN] The `ruff` cache can hide an import-sort error. The sort of an import of `tir_asr.<module>` depends on whether the module exists, and the cache does not see that change. The C2c commands use `--no-cache`. CI has no `ruff` cache.
+- **Revisit when:** C2d starts (Aren decides again), or CI finds an error that a workspace run would have found.

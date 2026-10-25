@@ -95,23 +95,42 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules; later branches add theirs) |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules and `tir_asr.asr`; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
 | T-MODEL-VAD-01 | §2.2, D-026, D-027: Silero adapter and `Endpointer`. | Clip 1 and clip 2 (16 kHz), frame by frame. | Each probability is in [0, 1]. Clip 1 + clip 2 give 2 segments (T-INSTALL-04 shows the pauses). | model | PASSES |
-| T-MODEL-ASR-01 | §2.3, D-022: NeMo adapter with the synthetic warm-up. | Warm-up (2 s of zeros), then clip 1, clip 2, clip 1, clip 2. | No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | APPROVED |
+| T-MODEL-ASR-01 | §2.3, D-022: NeMo adapter with the synthetic warm-up. | Warm-up (2 s of zeros), then clip 1, clip 2, clip 1, clip 2. | No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | PASSES |
 | T-MODEL-MT-01 | §2.4, D-022, D-030: CTranslate2 adapter with the cuBLAS preload. | The command sets no `LD_LIBRARY_PATH`. Warm-up, then text 1, text 2, text 1, text 2. | CTranslate2 runs on `cuda`. No text is empty. The first real call takes no more than 3 times the median of the next 3 calls. | model | APPROVED |
-| T-MODEL-ERR-01 | §7, R10: missing ASR model file. | A wrong `.nemo` name. | `asr: model file not in the Hugging Face cache: …` | model | APPROVED |
+| T-MODEL-ERR-01 | §7, R10: missing ASR model file. | A wrong `.nemo` name. | `asr: model file not in the Hugging Face cache: …` | model | PASSES |
 | T-MODEL-ERR-02 | §7, R10: missing MT model folder. | A missing CTranslate2 folder. | `mt: CTranslate2 model not found: …` with the conversion command. | model | APPROVED |
+| T-MODEL-ERR-03 | §2.3, §7, R10: no CUDA, no CPU fallback. | `torch.cuda.is_available` returns False (`monkeypatch`). | `AsrError`: `asr: CUDA is not available`. The model does not load. | model | PASSES (approved by Aren, 2026-10-25) |
 | T-AUDIO-01 | §2.1: microphone adapter. | Option 1: the adapter reads 50 blocks from the default microphone. Option 2: a sim test with a null sink (D-020), moved forward from C4. C2d selects one with Aren. | Each block has 512 float32 samples in [−1, 1]. The arrival times grow, about 32 ms apart. | sim (option 2) or live (option 1) | DESIGNED |
 | T-E2E-01 | K1, F2, F3, F5, D-025, D-032: full pipeline with the real models. | The test WAV source plays clip 1 and then clip 2 at real-time speed. | 2 blocks in time order, label "Me", no empty text, each total < 5.0 s. | model | APPROVED |
 
 **Live (manual, §4):** L-01 to L-03.
 
-Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). After that, Claude split T-CFG-01 (now T-CFG-01 and T-CFG-02) and T-MODEL-ERR-01 (now T-MODEL-ERR-01 and T-MODEL-ERR-02), so that each component branch has its own tests (D-035, R3). The content is the same. T-AUDIO-01 is new, because the microphone adapter had no test.
+Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). After that, Claude split T-CFG-01 (now T-CFG-01 and T-CFG-02) and T-MODEL-ERR-01 (now T-MODEL-ERR-01 and T-MODEL-ERR-02), so that each component branch has its own tests (D-035, R3). The content is the same. T-AUDIO-01 is new, because the microphone adapter had no test. Aren agreed to the split of T-MODEL-ERR-01 in C2c ("Agree on split", 2026-10-25).
+
+**Changes in C2c (Aren, 2026-10-25):**
+
+- T-MODEL-ERR-03 is new. It tests the error `asr: CUDA is not available` of §2.3 ("yes on both of the untested error points").
+- The error `asr: unexpected output type <type>` (§2.3) has no test, because the test needs a fake NeMo model.
+- T-MODEL-ASR-01 has one more check: `torch.cuda.memory_allocated() > 0` after the load (§2.3: on `cuda`). Aren: "its fine".
+
+**C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
+
+- **Red runs:** T-IMPORT-01 failed (no `tir_asr.asr`); T-MODEL-ASR-01, T-MODEL-ERR-01, and T-MODEL-ERR-03 failed with `ModuleNotFoundError` (files `test-results/c2c-asr-unit-red.txt`, `c2c-asr-model-red.txt`, `c2c-asr-model-red-err03.txt`).
+- **Unit:** 48 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2c-asr-unit.txt`.
+- **Model (file `test-results/c2c-asr-model.txt`):** 3 passed.
+  - Load 1.47 s. Warm-up with 2 s of zeros: 0.412 s, empty text.
+  - The four real calls: 0.025, 0.028, 0.021, 0.025 s for 5.56–6.61 s of audio. First call / median of the next 3 = 1.00. Thus the synthetic warm-up is enough for the ASR (D-022).
+  - Peak torch VRAM: 897 MiB. The same clip gives the same text in both calls.
+  - T-MODEL-ERR-01 message: `asr: model file not in the Hugging Face cache: nvidia/stt_hy_fastconformer_hybrid_large_pc/no-such-model.nemo`.
+  - T-MODEL-ERR-03: the error comes before the model load (0.000 s).
+- **For C2d:** the NeMo load prints about 185 lines of warnings and configuration to the terminal. The startup log design must handle this.
 
 **Component branches (D-035, R3):** each branch has its own tests (`PLAN.md` §5.2 C2b, C2c, C2d). T-PIPE-02 and T-PIPE-04 check exit codes: if the exit code belongs to `cli.py`, C2d moves that part of the test to the `c2d-cli` branch, with Aren's approval.
 

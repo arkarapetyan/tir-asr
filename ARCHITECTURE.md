@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.4 · **Date:** 2026-10-25
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b, see §10) wait for Aren's review. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.5 · **Date:** 2026-10-25
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -70,18 +70,19 @@ Each error class has the module name in its message: `<module>: <cause>`.
 
 ### 2.3 `asr`
 
-- **Adapter** `asr/nemo_rnnt.py` (`Transcriber`): `nvidia/stt_hy_fastconformer_hybrid_large_pc`, NeMo 3.0.0, RNNT decoder (`change_decoding_strategy(decoder_type="rnnt")`), on `cuda` (D-014).
-- **Load:** the `.nemo` file from the Hugging Face cache, with `local_files_only=True`. Nothing downloads at runtime.
-- **Warm-up (D-022):** one call with 2 s of zeros at startup. The startup log gives its time.
-- **Contract:** `transcribe(audio)` takes float32, mono, 16 kHz audio and returns the Armenian text. The text can be empty.
+- **Adapter** `asr/nemo_rnnt.py` (`NemoRnntTranscriber`, D-037): `nvidia/stt_hy_fastconformer_hybrid_large_pc`, NeMo 3.0.0, RNNT decoder (`change_decoding_strategy(decoder_type="rnnt")`), on `cuda` (D-014).
+- **Load:** the constructor `NemoRnntTranscriber(repo, filename)` checks CUDA, then loads the `.nemo` file from the Hugging Face cache, with `local_files_only=True`. Nothing downloads at runtime. The defaults are the module constants `ASR_REPO` and `ASR_FILE`. They are model locations, not parameters (D-037).
+- **Warm-up (D-022, D-037):** the adapter has no warm-up method. The pipeline calls `transcribe` with `WARMUP_AUDIO_S` of zeros at startup (§2.6).
+- **Contract:** `transcribe(audio)` takes float32, mono, 16 kHz audio and returns the Armenian text. The text can be empty. NeMo shows no progress bar (`verbose=False`).
 - **Errors:** `asr: CUDA is not available` (no CPU fallback, R10); `asr: model file not in the Hugging Face cache: <name>`; `asr: unexpected output type <type>`.
 - **Limits:** one segment for each call (batch size 1). [RUN] 0.027–0.036 s for each call after the warm-up, 987 MiB VRAM (T-INSTALL-02). The model writes commas where a person writes "։" (Q-06).
 
 ### 2.4 `mt`
 
-- **Adapter** `mt/ct2_nllb.py` (`Translator`): `facebook/nllb-200-distilled-600M`, converted to CTranslate2 in `models/nllb-200-distilled-600M-ct2-float16`, on `cuda`, `compute_type = mt_compute_type` (D-015). Tokenizer: Transformers `AutoTokenizer` from the Hugging Face cache, source `hye_Armn`, target `eng_Latn`.
+- **Adapter** `mt/ct2_nllb.py` (`Ct2NllbTranslator`, D-037): `facebook/nllb-200-distilled-600M`, converted to CTranslate2 in `models/nllb-200-distilled-600M-ct2-float16`, on `cuda`, `compute_type = mt_compute_type` (D-015). Tokenizer: Transformers `AutoTokenizer` from the Hugging Face cache, source `hye_Armn`, target `eng_Latn`.
 - **CUDA 12 cuBLAS (D-030):** before `import ctranslate2`, the adapter loads `libcublasLt.so.12` and then `libcublas.so.12` from the package `nvidia-cublas-cu12` (`ctypes`, `RTLD_GLOBAL`). The file paths come from `importlib.metadata`. The program needs no `LD_LIBRARY_PATH`.
-- **Warm-up (D-022):** one call with a fixed Armenian sentence at startup. The startup log gives its time.
+- **Load:** the constructor `Ct2NllbTranslator(params, model_dir)` loads the model and the tokenizer. It reads `mt_compute_type` and `mt_beam_size` from `Params`. The default of `model_dir` is a module constant. It is a model location, not a parameter (D-037).
+- **Warm-up (D-022, D-037):** the adapter has no warm-up method. The pipeline calls `translate(WARMUP_TEXT)` at startup (§2.6).
 - **Contract:** `translate(text)` takes a non-empty Armenian text and returns the English text.
 - **Errors:** `mt: CTranslate2 model not found: <path>` (the message gives the conversion command); `mt: libcublas.so.12 not found in the package nvidia-cublas-cu12`; `mt: empty input text`.
 - **Limits:** each segment is translated alone, with no context (known limit: «նա» = he or she). [RUN] 0.066–0.132 s for each call after the warm-up (T-INSTALL-03). CTranslate2 limits the output to 256 tokens (library default) [UNVERIFIED].
@@ -115,16 +116,18 @@ Each error class has the module name in its message: `<module>: <cause>`.
 ### 2.6 `pipeline`
 
 - **Core** `pipeline.py`. Threads (§4). It gets the `AudioSource`, the `SpeechProbability`, the `Transcriber`, the `Translator`, the parameters, and a clock (`time.monotonic` in the program, a fake clock in unit tests).
+- **Warm-up (D-022, D-037):** at startup, the pipeline calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`. The startup log gives each time.
 - **Errors:** the first exception in any thread stops the program. The main thread prints `tir-asr: <module>: <cause>` and exits with code 1.
 
 ### 2.7 `cli`
 
 - **Command:** `tir-asr` (entry point). C2 has no flags except `--help`. C4 adds the device flags.
+- **Scope (Aren, 2026-10-25, D-037):** `cli.py` is only the `argparse` interface. The startup steps below move out of `cli.py`. C2d gives the new place of each step to Aren for review.
 - **Startup sequence:**
   1. Print the versions (tir-asr, torch, CUDA, NeMo, CTranslate2, Silero VAD), the GPU name, and all parameters (§6).
   2. Check CUDA. If CUDA is not available, stop with an error.
   3. Load the VAD, the ASR model, and the MT model. Print each load time and the VRAM.
-  4. Do the warm-up calls. Print each time.
+  4. The pipeline does the warm-up calls (§2.6). Print each time.
   5. Open the microphone. Print its name.
   6. Print "Listening. Press Ctrl+C to stop."
 - **Stop:** Ctrl+C stops the program with exit code 0. The open segment is not processed. The last line gives the number of segments, the number of segments under `vad_min_speech_ms`, and the number of empty ASR texts.
@@ -269,3 +272,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.2 | 2026-10-25 | C2 draft: overview, contracts of `audio`, `segment`, `asr`, `mt`, `output`, `pipeline`, `cli`; data types; threads; constants; parameters (D-015, D-026, D-027); error behaviour; open points. The change log is now §10. |
 | 0.3 | 2026-10-25 | Aren's review: D-029 to D-034 accepted; no parallel GPU work and no `asyncio` (§4); rounding note (§2.5). |
 | 0.4 | 2026-10-25 | C2b: `Params` dataclass (§5) and `Endpointer.short_segments` (§2.2), agreed by Aren in C2b. Not yet agreed: `Endpointer(params, vad)` calls the VAD itself (§2.2, §4); lengths counted in frames (§2.2); `SegmentError` location. |
+| 0.5 | 2026-10-25 | C2c, D-037: adapter class names `NemoRnntTranscriber` and `Ct2NllbTranslator`; the constructors load the models (§2.3, §2.4); no warm-up method in the adapters, the pipeline makes the warm-up calls (§2.6); `cli.py` is only the `argparse` interface (§2.7); `verbose=False` for NeMo (§2.3). Status line: the v0.4 changes apply D-036. |

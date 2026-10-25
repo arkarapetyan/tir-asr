@@ -27,6 +27,7 @@ REQUIRED = {
     "tir_asr.config",
     "tir_asr.segment",
     "tir_asr.segment.endpoint",
+    "tir_asr.asr",
 }
 
 CHECK = """
