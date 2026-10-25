@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.9 · **Date:** 2026-10-25
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time.
+**Version:** 0.10 · **Date:** 2026-10-25
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time.
 
 ---
 
@@ -230,10 +230,10 @@ ASR: automatic speech recognition. MT: machine translation.
 
   | Branch | Component (files) | Tests |
   |---|---|---|
-  | `c2c-asr` | `asr/nemo_rnnt.py` | T-MODEL-ASR-01, T-MODEL-ERR-01 (model); T-IMPORT-01 (unit) |
-  | `c2c-mt` | `mt/ct2_nllb.py` | T-MODEL-MT-01, T-MODEL-ERR-02 (model); T-IMPORT-01 (unit) |
+  | `c2c-asr` | `asr/nemo_rnnt.py` | T-MODEL-ASR-01, T-MODEL-ERR-01, T-MODEL-ERR-03 (model); T-IMPORT-01 (unit) |
+  | `c2c-mt` | `mt/ct2_nllb.py` | T-MODEL-MT-01, T-MODEL-ERR-02, T-MODEL-ERR-04 (model); T-IMPORT-01 (unit) |
 
-- **Done when:** the tests pass on Aren's laptop, and both branches are merged. T-MODEL-MT-01 runs with no `LD_LIBRARY_PATH`.
+- **Done when:** the tests pass on Aren's laptop, and both branches are merged. T-MODEL-MT-01 runs with no `LD_LIBRARY_PATH`. *(The tests pass on Aren's laptop, 2026-10-25; `c2c-asr` is merged (`b8871a0`). Decisions: D-037 to D-039. Aren merges `c2c-mt` at the end of C2c.)*
 
 #### C2d. Skeleton code: `audio` + `output` + `pipeline` + `cli`
 
@@ -498,7 +498,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C1 | 2.5 h | 1.8 h | 2026-10-24, 11:43–13:29 (1 h 46 min). 0.7 h under the time box; added to the buffer. |
 | C2 | 3 h | 2.65 h | 2026-10-25, 10:01–12:40 (2 h 39 min). Install check, contracts, test design. The C2 scope changed: the code moved to C2b–C2d (D-035), so the 0.35 h under the time box does not go to the buffer. |
 | C2b | 1 h | 0.58 h | 2026-10-25, 12:45–13:20 (35 min). `types`, `config`, and `segment`, with their tests (D-036). 0.42 h under the time box; Aren decides if it goes to the buffer. |
-| C2c | 1 h | | |
+| C2c | 1 h | 0.97 h | 2026-10-25, 13:32–14:30 (58 min, Aren). `asr` and `mt` adapters, with their tests (D-037 to D-039). 0.03 h under the time box. |
 | C2d | 1.5 h | | |
 | C3 | 2.5 h | | |
 | C4 | 2 h | | |
@@ -508,7 +508,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 7.53 h | C0 + C1 + C2 + C2b. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 22.5 h (R16 note in §5.1). |
+| **Total** | **24.0 h** | 8.50 h | C0 + C1 + C2 + C2b + C2c. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 22.5 h (R16 note in §5.1). |
 
 ---
 
@@ -525,3 +525,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.7 | 2026-10-24 | C1 time logged (1.8 h). The 0.7 h saved goes to the buffer (0.7 h left). |
 | 0.8 | 2026-10-25 | C2 decisions D-021 to D-035: install check done, contracts and tests approved; the code work moves to C2b, C2c, and C2d, with one branch and its own tests for each component (D-035, R3); open questions Q15 and Q16; R16 note on the total time; C2 time logged (2.65 h). |
 | 0.9 | 2026-10-25 | C2b time logged (0.58 h). Expected total now about 22.5 h, or 23.2 h with the buffer (§5.1 note). C2b note: tests pass on Aren's laptop; D-036. |
+| 0.10 | 2026-10-25 | C2c status: the tests pass on Aren's laptop; new tests T-MODEL-ERR-03 and T-MODEL-ERR-04 in the C2c table; D-037 to D-039. C2c time logged (0.97 h). |
