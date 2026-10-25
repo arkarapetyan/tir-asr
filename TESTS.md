@@ -85,10 +85,10 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-SEG-07 | §2.2 rule 5: maximum length with an open silence. | Speech to 9.9 s, then silence. The 10 s limit comes during the silence. | `cut` = False. `speech_end` = the start of the silence. | unit | PASSES |
 | T-SEG-08 | §2.2 rule 6: audio and pads. | The input of T-SEG-01, audio = sample index (a ramp). | The segment audio is samples 2080 to 13279 (start − 480, end + 480). A start at frame 0 gives no start pad. | unit | PASSES |
 | T-SEG-09 | §2.2 errors, R10. | A block of 500 samples; a probability of 1.2. | `SegmentError`: `segment: frame has 500 samples, expected 512`; `segment: probability 1.2 is not in [0, 1]`. | unit | PASSES |
-| T-OUT-01 | F5, D-024: line format. | A `Line` with `start` 72.4 s after the session start, label "Me", Armenian and English text, fixed times. | The exact block of §2.5, with `[00:01:12]`, the four steps, two decimals, and the total. | unit | APPROVED |
-| T-OUT-02 | §2.5: latency arithmetic. | Times with steps 0.534, 0.413, 0.177, 0.004 s. | The total comes from the raw values (1.13 s). Each printed step is the rounded raw step. | unit | APPROVED |
-| T-OUT-03 | D-031: empty ASR text. | A `Line` with an empty `hy`. | `HY: (no text)`, no `EN` line, a latency line with `vad`, `asr`, and the total only. | unit | APPROVED |
-| T-OUT-04 | D-024, §2.5: one write for each block. | `write_block(line, session_start, stream)` with a fake stream. | The stream gets exactly one `write` call with the full block, then one `flush` call. | unit | APPROVED |
+| T-OUT-01 | F5, D-024: line format. | A `Line` with `start` 72.4 s after the session start, label "Me", Armenian and English text, fixed times. | The exact block of §2.5, with `[00:01:12]`, the four steps, two decimals, and the total. | unit | PASSES |
+| T-OUT-02 | §2.5: latency arithmetic. | Times with steps 0.534, 0.413, 0.177, 0.004 s. | The total comes from the raw values (1.13 s). Each printed step is the rounded raw step. | unit | PASSES |
+| T-OUT-03 | D-031: empty ASR text. | A `Line` with an empty `hy`. | `HY: (no text)`, no `EN` line, a latency line with `vad`, `asr`, and the total only. | unit | PASSES |
+| T-OUT-04 | D-024, §2.5: one write for each block. | `write_block(line, session_start, stream)` with a fake stream. | The stream gets exactly one `write` call with the full block, then one `flush` call. | unit | PASSES |
 | T-PIPE-01 | F2, F3, F5: end-to-end with fakes. | A fake source with two speech regions, fake VAD, fake ASR ("բարև"), fake MT ("hi"), fake clock. | Two blocks in time order, label "Me", the fake texts, and the latency values of the fake clock. | unit | APPROVED |
 | T-PIPE-02 | R10, §2.6: an error in a thread. | The fake ASR raises `AsrError("asr: test")`. | The program stops. The error output is `tir-asr: asr: test`. The exit code is 1. | unit | APPROVED |
 | T-PIPE-03 | D-031: no MT call for an empty text. | The fake ASR returns "". | The fake MT gets no call. One `(no text)` block. | unit | APPROVED |
@@ -96,7 +96,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, and `tir_asr.mt`; later branches add theirs) |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, and `tir_asr.output`; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
@@ -157,6 +157,12 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
   - The same text gives the same translation in both calls. Text 2 has "truck" where the reference has "trunk" (MT quality, C3).
   - T-MODEL-ERR-02 message: `mt: CTranslate2 model not found: <tmp>/no-such-model. Convert it with: HF_HUB_OFFLINE=1 uv run --no-sync ct2-transformers-converter …`.
 - **Q-07 data point:** the first CTranslate2 call in this process took 0.126 s. In T-INSTALL-03, it took 5.104 s.
+
+**C2d results (branch `c2d-output`, Aren's laptop, 2026-10-25):**
+
+- **Red run:** 1 failed (T-IMPORT-01: no `tir_asr.output`), 1 collection error (`test_output.py`: `No module named 'tir_asr.output'`), 48 passed. File: `test-results/c2d-output-unit-red.txt`.
+- **Green run:** 55 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2d-output-unit.txt`.
+- [RUN] With the project layout and no `output.py`, `ruff` reports I001 on the import block of `test_output.py`. With `output.py`, the block passes. Thus a red run of a new module can show I001; the green run is the check.
 
 **Component branches (D-035, R3):** each branch has its own tests (`PLAN.md` §5.2 C2b, C2c, C2d). T-PIPE-02 and T-PIPE-04 check exit codes: if the exit code belongs to `cli.py`, C2d moves that part of the test to the `c2d-cli` branch, with Aren's approval.
 
