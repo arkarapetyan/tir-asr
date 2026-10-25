@@ -1,6 +1,6 @@
 # TESTS.md
 
-**Project:** tir-asr · **Date:** 2026-10-23
+**Project:** tir-asr · **Date:** 2026-10-25
 **Rules:** RULES.md R5 (test-driven development) and D-006 (test runs).
 
 Each test comes from a requirement in the brief (F, K, D in `PLAN.md` §1) or from a module contract in `ARCHITECTURE.md`.
@@ -51,6 +51,23 @@ The unit tests run the tool as a command (`python scripts/export_chats.py`) on t
 | T-EXPORT-10 | R10, §8.1: errors. | One case for each error cause 1–9 in §8.1. One more case: a manifest with 2 chats, and only the second chat has an error. | Exit code 1. The error output starts with `export_chats:` and names the cause. No output file exists. | unit | PASSES (workspace and Aren's laptop, 2026-10-23) |
 | T-EXPORT-11 | D3 on real data. | Run 1: Aren runs the tool on the C0 export of 2026-10-23. Run 2: the final export after C8. | Exit code 0. Each manifest file exists. GitHub shows each file. The messages are the same as in the app. | live (manual) | Run 1 PASSES (Aren's laptop, 2026-10-23): exit code 0, 22 messages. The file is byte-equal to the workspace run, which found 25 of 25 text blocks unchanged and in order. Aren read `chats/00-kickoff.md` on the laptop: "dont see any changes to it" (2026-10-23). Aren read it on GitHub: "its fine" (2026-10-23). Open: run 2 after C8. |
 
+### 2.3 Install check (C2)
+
+Decisions: D-014, D-015, D-016, D-021, D-022, D-026, D-027. These tests measure. They have no quality limit: C3 sets the quality with the eval set.
+Input from Aren: `data/eval/c2-check1.wav` (3 sentences) and `data/eval/c2-check2.wav` (2 sentences), 44.1 kHz stereo, with their `.hy.txt` and `.en.txt` reference texts.
+Claude converted the two clips in the workspace to 16 kHz mono (`soxr`, quality VHQ, mean of the two channels): `data/eval/c2-check{1,2}.16k.wav`. C3 and C4 decide the resample step of the program, with a test.
+Test file: `tests/model/test_install_check.py`.
+
+**Change after Aren's approval (2026-10-25, Aren ran the changed tests the same day):** T-INSTALL-02 and T-INSTALL-03 show each output next to its reference text. They give no CER and no chrF. Reason: the metric code and the Armenian normalization rules are C3 work with their own tests (PLAN C3, step 1), and a number with no normalization can mislead (R6). T-INSTALL-03 also measures the beam sizes 1 and 2, for the `mt_beam_size` proposal.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-INSTALL-01 | D-016, RK13: PyTorch and CTranslate2 use the RTX 5070. | The environment check (`test-results/c2-install.txt`). | `torch.cuda.is_available()` is True. The capability is (12, 0). A float16 matrix product runs on the GPU. CTranslate2 finds 1 CUDA device and lists `float16`. | model | PASSES (Aren's laptop, 2026-10-25): torch 2.14.1+cu130, capability (12, 0), `sm_120` in the arch list; CTranslate2 4.8.3 finds 1 device. |
+| T-INSTALL-02 | D-014, F2: ASR-1 on NeMo (RNNT) runs on the GPU. | The two clips and their Armenian text. | The model loads on `cuda`. No text is empty. The result file shows each text next to the reference, the load time, the peak VRAM, and the time of each call: clip 1, clip 1 again, clip 2, the first half of clip 1, clip 1 + clip 2, clip 1 again (D-022). | model | PASSES (Aren's laptop, 2026-10-25): load 1.85 s; call 1 0.458 s; the next calls 0.027–0.036 s for 2.78–12.17 s of audio; 987 MiB VRAM (nvidia-smi). |
+| T-INSTALL-03 | D-015, F3: NLLB-600M on CTranslate2 (`mt_compute_type = float16`) runs on the GPU. | The Armenian reference texts: text 1, text 1 again, text 2, text 1 + text 2. | No English text is empty. The result file shows each text next to the reference, the load time, the VRAM, and the time of each call, for the beam sizes 1 and 2. The same inputs on PyTorch (Transformers, float16, GPU) give the times for D-016. | model | PASSES (Aren's laptop, 2026-10-25): CTranslate2 call 1 5.104 s, the next calls 0.066–0.132 s, +1930 MiB VRAM; PyTorch call 1 0.136 s, the next calls 0.082–0.174 s, +1196 MiB VRAM; beam sizes 1 and 2 give the same texts. One run for each value. |
+| T-INSTALL-04 | D-018, D-026, D-027: Silero VAD runs on the CPU. | The two clips. | The result file gives each speech region and each pause, with its length in ms, and the segments for a minimum silence of 300, 500, and 800 ms. | model | PASSES (Aren's laptop, 2026-10-25): 0.10–0.30 ms of CPU for each 32 ms frame; pauses at sentence ends 64, 448, and 96 ms, at a comma 64 ms; 500 ms gives 1 segment for each clip; 300 ms splits clip 1 only at a sentence end. |
+| T-INSTALL-05 | D-021: CI installs no `laptop` package. | CI on the next push. | The CI log shows no `torch` install. All CI steps pass. | unit (CI) | APPROVED (waits for the CI run) |
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -59,6 +76,12 @@ We add a question here when we find it during the work (tip T4).
 |---|---|---|---|
 | Q-01 | Which branch does the app show when a chat has edited messages? | S1, C0 export | The branch to the newest message. Aren confirmed it for C0 (2026-10-23). T-EXPORT-03. |
 | Q-02 | Does the final export after C8 have the same format as the C0 export? | S1, D-012 | Open. T-EXPORT-11, run 2. |
+| Q-03 | Is the first model call slower for each new input length, also after one warm-up run? | C2, D-022 | [RUN] No, for these inputs: after call 1, new lengths (2.78–12.17 s of audio, 25–52 tokens) are as fast as old lengths. T-INSTALL-02, T-INSTALL-03. |
+| Q-04 | Does the minimum silence put two remote speakers into one segment when they change turns fast? | C2, D-027 | Open. C5 speaker purity of the segments. |
+| Q-05 | Does `vad_min_speech_ms = 250` remove short answers such as "ոչ" or "հա"? | C2, D-026 | Open. C3 recordings with short answers. |
+| Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | Open. End-to-end model test (C2), C3 bake-off. |
+| Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. |
+| Q-08 | A clip can end with less silence than `vad_min_silence_ms` (clip 1: 150 ms). How does the last segment end? | C2, D-027 | Open. `segment` contract (C2). |
 
 ## 4. Live checklist (manual)
 

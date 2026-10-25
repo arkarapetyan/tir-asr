@@ -381,3 +381,137 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A. Sim tests use `pactl load-module module-null-sink` (built into pipewire-pulse). A script plays audio into the sink, and the program captures from its monitor source.
 - **Reason (Aren's words):** "Agree".
 - **Revisit when:** the C4 two-device test fails with `soundcard`.
+
+## D-021. Packages for the GPU and the audio server: the dependency group `laptop`
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** CI runs `uv sync --locked`, which installs all default dependency groups. The C2 packages add 167 packages and 4.04 GB of wheels on the laptop platform (Linux x86-64, Python 3.12) [RUN]. `setup-uv` v10.3.2 has the cache on by default on GitHub runners, with no pruning [SOURCE: setup-uv `action.yml`, `docs/caching.md`]. The cache key changes when `uv.lock` or `pyproject.toml` changes [SOURCE]. The GitHub cache gives 10 GB for each repository and removes an entry after 7 days with no use [SOURCE: GitHub changelog 2025-11-20]. `import soundcard` fails with an `AssertionError` when no PulseAudio server runs [RUN].
+- **Options:**
+  - **1.** A dependency group in `default-groups`. CI runs `uv sync --locked --no-group <group>`. Weak points: unit tests must not import the group packages; groups are local only, so `pip install .` gives a program with no models [SOURCE: uv docs]; CI does not check that the group installs.
+  - **2.** Main dependencies, with the cache as it is now. Weak points: 4 GB from PyPI after each change of `uv.lock` or `pyproject.toml`; some GB from the cache on each other push; two cache keys use most of the 10 GB.
+  - **3.** An extra (`[project.optional-dependencies]`). Weak point: uv does not sync extras by default [SOURCE: uv docs], so each `uv sync` on the laptop and at the interview needs `--extra`.
+- **Claude's preference:** 1. [RUN] A CI-style sync with no group installs 7 packages (32 MB cache). Test that can show it is wrong: a C2 unit test that cannot run without a group package.
+- **Decision:** 1.
+  - The group name is `laptop`, because the group also has `soundcard`, which is not a model. `default-groups = ["dev", "laptop"]`, so a plain `uv sync` on the laptop installs all packages.
+  - CI runs `uv sync --locked --no-group laptop`. Each later CI step runs `uv run --no-sync`, because a plain `uv run` installs the default groups again [RUN].
+  - Only the adapter modules import the `laptop` packages. Unit tests use fakes that follow the module contracts. A unit test checks that the core modules do not import the `laptop` packages.
+- **Reason (Aren's words):** "I see that option 1 is the most appropriate".
+- **Questions raised:**
+  - Aren: does each push need downloads, or can they happen only at the first push? Claude: with option 2, yes. The cache only makes the PyPI download less frequent: a new key after each change of `uv.lock` or `pyproject.toml`, a removal after 7 days with no use, and a download of the cache itself on each push.
+  - Aren: "can we have normal tests without importing the model dependencies?" Claude: yes. The core logic (segments, latency arithmetic, line format, pipeline order) has no model import. Unit tests give it fakes in place of the models and the audio device. Model tests and sim tests on the laptop use the real packages.
+- **Revisit when:** a unit test needs a `laptop` package, or CI must check the model install.
+
+## D-022. Warm-up run at startup
+
+- **Status:** PROPOSED
+- **Context:** The first call of a GPU model can take longer than the next calls. A slow first line can break K1.
+- **Facts (T-INSTALL-02, T-INSTALL-03, Aren's laptop, 2026-10-25) [RUN]:**
+  - ASR (NeMo, GPU): call 1 0.458 s; the next calls 0.027–0.036 s, also for new lengths (2.78–12.17 s of audio).
+  - MT (CTranslate2, float16, GPU): call 1 5.104 s; the next calls 0.066–0.132 s, also for new lengths (25–52 tokens).
+  - With no warm-up, the first line needs about 0.5 + 0.46 + 5.1 = 6.1 s (calc), which is more than the 5 s of K1.
+- **Options:**
+  - **A.** A warm-up run of each model at startup, with a synthetic input (no audio file in git, R11).
+  - **B.** No warm-up run.
+- **Claude's preference:** A, with one warm-up call for each GPU model. Weak points: the start takes about 6 s longer; the install check used a real clip and a real text as call 1, but the program must use a synthetic warm-up input (no audio file in git, R11), which is not tested yet. Test that can show it is wrong: in the end-to-end model test, the first line after the warm-up is slower than the next lines.
+- **Decision:** open. Aren decides after the numbers.
+- **Reason (Aren's words):** "the longer start is fine, but we need to be careful with the other lengths part. Let's test it first to see if we need it or not".
+- **Revisit when:** the install-check numbers exist.
+
+## D-023. Latency definition (K1)
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** K1: maximum 5 s from the end of a spoken phrase to its English line. The program needs one measured definition (PLAN C2).
+- **Options:**
+  - **A.** From the true end of speech: the start of the first silent VAD frame after the speech.
+  - **B.** From the VAD end event, which comes after the minimum silence.
+- **Claude's preference:** A (C1). Weak points: the minimum silence counts against the 5 s; the VAD frame gives a resolution of 32 ms; the true end is the VAD estimate, not an end that a person marks by hand. Test that can show it is wrong: on some C3 recordings, the VAD end and a hand-marked end differ by more than one frame.
+- **Decision:** A. The latency of a line is the print time minus the start of the first silent VAD frame after the speech.
+- **Reason (Aren's words):** "We agreed on the true end of the speech". After the D-027 answer: "Ok let's agree on 500ms on minimum silence initially" (Claude read this answer as the confirmation of D-023 too).
+- **Questions raised:** Aren: the minimum silence can give a longer perceived latency (D-027). Claude: definition A does not add a delay. It shows the silence wait in the number; definition B hides it.
+- **Revisit when:** D-027 changes the end rule.
+
+## D-024. Line format with the latency of each step
+
+- **Status:** ACCEPTED (2026-10-25), option B
+- **Context:** F5 (time, speaker, Armenian text, English text) and PLAN C2: how the program shows the measured latency of each line.
+- **Options:**
+  - **A.** Aren's format: the format of the brief, with one more line for the latency of each step and the total.
+  - **B.** Format A with three changes from Claude: a defined time, a simpler latency line, and two decimals.
+- **Claude's preference:** B. The steps add up to the total and include the queue waits: `vad` (true end to segment closed), `asr`, `mt`, `out`; `spk` comes in C5 on the system side only. Weak point: long lines on the screen at the interview. Test that can show it is wrong: in the C2 live run, Aren cannot read the lines at the speed of speech.
+- **Decision:** B. Each segment gives one block, printed with one call, so that the lines of two sources do not mix:
+
+  ```
+  [00:01:12] Me
+   HY: Լավ եմ, շնորհակալություն։
+   EN: I'm fine, thank you.
+   [Latency: vad 0.53s, asr 0.41s, mt 0.18s, out 0.00s | Total 1.12s]
+  ```
+
+  - The time is the start of the segment, as time since the program start (`hh:mm:ss`).
+  - The steps add up to the total and include the queue waits. Two decimals.
+  - `spk` comes in C5, for the system side only.
+- **Reason (Aren's words):** "Each line must show the latency for each step (VAD, stt, mt, diarization...)". "Agree on option B for D-024". On the format: "follows the one provided in the original document with my addition of the latency output".
+- **Revisit when:** the C7 live test.
+
+## D-025. WAV file source only for tests and eval
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** PLAN C2: model tests and the end-to-end test feed a WAV file through the pipeline at real-time speed. Tip T8 warns about extra features.
+- **Decision:** The WAV file source exists only for tests and eval. The command-line program has no flag for it. The tests make the pipeline with the WAV source in code.
+- **Reason (Aren's words):** "Yes, WAV files are only for test purposes. Production only needs live input".
+- **Revisit when:** never for the MVP.
+
+## D-026. VAD parameters (all except the minimum silence)
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** D-018. Facts from the Silero VAD 6.2.3 source [SOURCE: `utils_vad.py`, `model.py`]:
+  - The model accepts only frames of 512 samples (32 ms) at 16 kHz.
+  - `VADIterator` defaults: threshold 0.5, minimum silence 100 ms, pad 30 ms. The end threshold is the threshold minus 0.15, fixed in the code.
+  - `VADIterator` has no minimum and no maximum segment length. Only the offline function `get_speech_timestamps` has them (defaults 250 ms and no limit).
+  - `silero_vad` calls `torch.set_num_threads(1)` at import, for the full process.
+- **Decision (parameters, R10, approved 2026-10-25):**
+
+  | Name | Value | Reason |
+  |---|---|---|
+  | `vad_threshold` | 0.5 | Silero: "'lazy' 0.5 is pretty good for most datasets". C3 tunes it. |
+  | `vad_end_threshold` | 0.35 | The Silero rule (threshold − 0.15): a short drop below 0.5 does not end the speech. |
+  | `vad_speech_pad_ms` | 30 | Silero default. The pad is shorter than the minimum silence, so it adds no latency. |
+  | `vad_min_speech_ms` | 250 | Silero default. It removes clicks and coughs before ASR. |
+  | `vad_max_speech_s` | 10 | With no limit, a long speech with no pause gives no line until its end. Hard cut at 10 s. |
+
+- **Claude's weak points (given before the approval):** 250 ms can remove a short "ոչ" or "հա"; 10 s has no source (6 s and 15 s were the alternatives); the hard cut can split a word.
+- **Reason (Aren's words):** "As for the other parameters for the vad, I agree".
+- **Revisit when:** C3 numbers show removed short words or split words.
+
+## D-027. End-of-segment rule (minimum silence)
+
+- **Status:** ACCEPTED (2026-10-25), option A
+- **Context:** The VAD must decide that a phrase ended. Silence is the only signal that a VAD has. Aren: a long minimum silence can give a longer perceived latency and worse speaker labels; a short one can lose short responses.
+- **Facts:**
+  - Pauses under 200 ms are "brief". In read speech of 5 languages, the "medium" pauses (200–1000 ms) have a peak at 500–600 ms. Long pauses (> 1 s) occur only in spontaneous speech [SOURCE: Campione & Véronis 2002].
+  - In 10 languages, the mean gap between turns of each language is within 250 ms of the cross-language mean [SOURCE: Stivers et al. 2009].
+  - Kaldi online endpoint defaults: 0.5 s of silence only when the decoder is in a final state with a good score; 1.0 s and 2.0 s for weaker cases; 20 s maximum length [SOURCE: `online-endpoint.h`].
+  - sherpa-onnx endpoint defaults: 1.2 s of silence after some decoded text; 2.4 s with no text; 20 s maximum length [SOURCE: `endpoint.h`].
+  - The minimum silence does not remove segments; `vad_min_speech_ms` does. But a shorter silence splits more, and a short word at the start of a phrase can become a segment under 250 ms (Aren's point).
+- **Options:**
+  - **A.** One fixed minimum silence.
+  - **B.** Two values by segment length: a short segment needs a longer silence; a long segment ends at a shorter silence.
+  - **C.** ASR-informed end: at a short silence, ASR reads the open segment; a sentence-end mark ends it, or else the program waits for a longer silence (similar to Kaldi rule 2).
+  - **D.** A speaker-change split inside a segment (C5).
+  - **E.** One fixed short value (250–300 ms).
+- **Claude's preference:** A in C2, with the value from the T-INSTALL-04 pause numbers (500 ms if they show nothing different). The end rule is in our own code with unit tests, so a change to B, C, or D is small. C3 measures A and B; C5 measures the speaker purity of the segments. Weak point: C3 can change the C2 value.
+- **Decision:** A. New parameter `vad_min_silence_ms = 500` (approved 2026-10-25, R10). It is a start value. T-INSTALL-04, C3, and C5 can change it, or change the rule to B, C, or D.
+- **Reason (Aren's words):** "Ok let's agree on 500ms on minimum silence initially but it will be open for further testing and enhancement".
+- **Revisit when:** T-INSTALL-04, C3, and C5 numbers.
+
+## D-028. Declare each package that our code imports
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** The model tests import `numpy` and `huggingface_hub`. Other packages pull them in already (`nemo-toolkit`, `transformers`). The core modules need `numpy` for the audio arrays, also in CI.
+- **Options:**
+  - **A.** Declare each package that our code imports: `numpy` as a main dependency (CI installs it), `huggingface-hub` in the `laptop` group.
+  - **B.** Use the packages that other packages pull in, with no declaration.
+- **Claude's preference:** A. With B, an update of NeMo or Transformers can remove a package that our code needs, with no change in our `pyproject.toml`. Weak point: a longer dependency list. [RUN] The lock keeps the same 177 packages and the same versions (`numpy` 2.5.4, `huggingface-hub` 2.3.0). Test that can show it is wrong: none known.
+- **Decision:** A.
+- **Reason (Aren's words):** "D028. Accept".
+- **Revisit when:** —
