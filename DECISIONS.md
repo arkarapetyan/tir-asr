@@ -690,3 +690,26 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "add a rule that from now on we dont do this bulk commits and do smaller ones, and you give me the whole git add and push command with the message, and the message does not contain your co-authoring part".
 - **Questions raised:** Claude: R13 puts an `ARCHITECTURE.md` change into the same commit as its code. The new rule keeps this: the code and its architecture text are one logical change. Decision entries and test results can go into separate commits.
 - **Revisit when:** the number of commits costs too much of the time budget (R16).
+
+## D-040. Interface of the `output` module (C2d)
+
+- **Status:** ACCEPTED (2026-10-25)
+- **Context:** `ARCHITECTURE.md` §2.5 did not give the function signatures, the cut or the rounding of the block time, the end of a block, or a test for the one write of each block (D-024). The tests of `c2d-output` need them.
+- **Parts, options, and Claude's preference** (A in each part):
+  1. **Signature.**
+     - **A.** `format_block(line, session_start) -> str`. The block time is `Line.start` minus the session start (§2.5), and `Line` has no field for the session start.
+     - **B.** A new `Line` field for the session start. Weak point: a change to `types.py` and one more value in each `Line`.
+     - Weak point of A: each caller must give the session start.
+  2. **Block time.**
+     - **A.** Cut the seconds: 3671.9 s gives `[01:01:11]`.
+     - **B.** Round the seconds: 3671.9 s gives `[01:01:12]`.
+     - Weak point of A: the shown time can be up to 0.99 s before the true start. With B, the shown time can be after the start of the speech.
+  3. **End of a block.**
+     - **A.** One `\n` at the end, and no blank line between the blocks (the D-024 sample).
+     - **B (Aren).** A blank line after each block. The blank line is part of the one write, so that the lines of two sources do not mix (C4).
+     - Weak point of B: one more line on the screen for each block.
+  4. **Total of an empty-text block** (information, no choice): the total goes from `speech_end` to the write, as in a normal block (D-023). Thus it includes the time after the ASR end, which no printed step shows.
+  5. **Write.** A new test T-OUT-04: `write_block(line, session_start, stream)` makes one `write` call with the full block, then one `flush` call (D-024). No approved test covered the one write.
+- **Decision:** A in parts 1 and 2; B in part 3 (Aren); part 4 as given; T-OUT-04 approved. `ARCHITECTURE.md` §2.5 gets the changes in the same commit as `output.py` (R13).
+- **Reason (Aren's words):** "agree" (parts 1, 2, and 4). "add lines between blocks" (part 3). "approve the test" (part 5).
+- **Revisit when:** C4 (two sources write to one terminal) or the C7 live test (the screen at the speed of speech).
