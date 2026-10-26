@@ -830,3 +830,32 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A.
 - **Reason (Aren's words):** "agree on D45".
 - **Revisit when:** C4 (device flags go through `"$@"`), or C8 (the README setup steps).
+
+## D-046. Eval data: labels and how the eval uses them (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B
+- **Context:** WER needs the ASR text and the reference text of the same audio. Aren recorded S1–S3 (`docs/eval/scripts.md`) with one file for each side: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2; Google Meet for S1, Telegram for S2 and S3). The folder had no label files.
+- **Facts [RUN, read-only check of the 6 files, 2026-10-26]:**
+  - 48 kHz, mono, float32 (WAV format 3). Each mic file has the same length as its call file: S1 70.66 s, S2 62.81 s, S3 59.05 s.
+  - `s1.mic.wav` has 500 samples at |x| ≥ 0.999 (clipping, Q-11). The other 5 files have a peak of 0.62–0.99.
+  - The call files have no echo of Aren's voice (5 places checked, correlation ≤ 0.07).
+  - S1: the two sides speak at the same time three times, for 0.35–1.1 s (Aren's interruptions, on purpose). Source: a level check, not the VAD.
+  - S1 call side: the pauses between Speaker 1 and Speaker 2 are 0.38–0.99 s. The pause s1-13 → s1-14 (0.38 s) is shorter than `vad_min_silence_ms`.
+  - S1–S3 have 34 lines and 397 Armenian words: 15 lines on the mic side, 19 lines on the call side. Aren counts each line as one recording, so D-019 ("at least 20 recordings") is met. S4 can come later.
+  - `data/eval/raw/s1.wav` is a mix that Aren made. The eval does not use it.
+- **Options:**
+  - **A.** The text of the full side, with no labels. Weak point: one number for each file only.
+  - **B.** Labels by Aren in Audacity. Weak points: 20–30 min of the time budget [UNVERIFIED estimate]; manual errors in the times.
+  - **C.** An automatic split into runs at silences of 1.5 s or more, with a count check. Weak points: a new eval constant; one number for two lines on the S1 call side; a long pause or a short turn gives a wrong count.
+- **Claude's preference:** C. Fact that can show it is wrong: the run count fails on 2 or more of the 6 files.
+- **Decision:** B, with these rules:
+  1. **Label files:** one file for each script, `data/eval/raw/<s>.labels.txt`, exported from Audacity: start (s), tab, end (s), tab, line ID with no "†". One label for each line. Two labels can overlap (interruptions). The eval stops with an error on an unknown ID, a missing ID, a repeated ID, or a line in a different format.
+  2. **Main numbers:** the program's VAD (`Params()`) cuts each full file into segments, as in the live program. The eval joins the texts of a file in time order and compares them with the reference lines of that side in script order. This gives WER, CER, and chrF for each file, each side, and the full set. A label error does not change these numbers.
+  3. **Line view:** each segment goes to the line label with the largest time overlap on its side. This gives the numbers for each line and the segments of each line (Q15). The main numbers do not use the line view, because one segment can hold two lines (s1-13 + s1-14).
+  4. **Interruptions:** S1 is not edited. Each side is in its own file, so an interruption does not mix two voices in the ASR input. The table shows S1 separately.
+- **Reason (Aren's words):** "Let me do the labelling in audacity no problem just tell me how". "Ok I agree on D46".
+- **Questions raised:**
+  - Aren: do the two files need a mix into one file? Claude: no. The program has two sources (F1); a mix loses the side of each word; the C4 sim tests and C5 need the separate files; the resample is an eval step with a test.
+  - Aren offered to edit the S1 interruptions out. Claude: keep them (point 4). Aren agreed.
+  - Claude (R14) named the main risk of B one time: the time in the budget.
+- **Revisit when:** the joined-text WER is lower than the true WER because the alignment matches words of different lines; or S4 gets recorded (then it gets its labels).
