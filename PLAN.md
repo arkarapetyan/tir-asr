@@ -302,7 +302,9 @@ ASR: automatic speech recognition. MT: machine translation.
 #### C6. Weakest link
 
 - **Goal (D-053):** implement P4 in the program: one Seamless model (`SeamlessM4Tv2ForSpeechToText`, float16, GPU) gives the HY line and the EN line from the audio of each segment. The P1 code stays. The C3 numbers chose this improvement: WER 10.6 → 6.8 %, chrF 51.7 → 59.0, no left-out sentences (Q-13).
-- **Open:** the order (before C4, or after M3, as planned) and a CPU mode (Q16, after the answer of the Mathrix team). Aren decides.
+- **Order (Aren, 2026-10-26):** after M3, as planned. C4 comes next.
+- **Design (Aren, 2026-10-26):** one pipeline that is suitable for both P1 and P4, with OOP abstraction and the Template Method pattern.
+- **Open:** a CPU mode (Q16), after the answer of the Mathrix team.
 
 #### C7. Live test and reliability
 
@@ -509,7 +511,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C2b | 1 h | 0.58 h | 2026-10-25, 12:45–13:20 (35 min). `types`, `config`, and `segment`, with their tests (D-036). 0.42 h under the time box; Aren decides if it goes to the buffer. |
 | C2c | 1 h | 0.97 h | 2026-10-25, 13:32–14:30 (58 min, Aren). `asr` and `mt` adapters, with their tests (D-037 to D-039). 0.03 h under the time box. |
 | C2d | 1.5 h | 2.92 h | 2026-10-25, 17:44–18:35 (51 min); 19:27–19:40 (about 13 min: recording setup for the eval set, C3 preparation); 2026-10-26, 10:04–10:15 (11 min); 10:46–12:26 (100 min, to the end of the chat). The breaks are not counted (Aren). 1.42 h over the time box: the sim test for T-AUDIO-01 and its two probes (D-041), and the Ctrl+C fix with probe C (D-044). |
-| C3 | 2.5 h | | |
+| C3 | 2.5 h | 2.5 h | 2026-10-26, 15:14–17:44 (2 h 30 min, from the chat times). On the time box, with the full shortlists (D-049). The P4 implementation moved to C6 (D-053). |
 | C4 | 2 h | | |
 | C5 | 3 h | | |
 | C6 | 2 h | | |
@@ -517,7 +519,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 11.42 h | C0 + C1 + C2 + C2b + C2c + C2d. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h (R16 note in §5.1). |
+| **Total** | **24.0 h** | 13.92 h | C0 to C3. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h (R16 note in §5.1). |
 
 ---
 
@@ -537,4 +539,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.10 | 2026-10-25 | C2c status: the tests pass on Aren's laptop; new tests T-MODEL-ERR-03 and T-MODEL-ERR-04 in the C2c table; D-037 to D-039. C2c time logged (0.97 h). |
 | 0.11 | 2026-10-26 | C2d status: `c2d-output` and `c2d-audio` merged (D-040, D-041); the C2d branch table; C2d time so far (1.52 h, with no breaks). |
 | 0.12 | 2026-10-26 | C2d closed: M1 reached; all four C2d branches; D-042 to D-045; the C2d time (2.92 h, with no breaks, to 12:26); the repository layout (`app.py`, `errors.py`, `tests/support/`, `scripts/`, `run.sh`); the R16 note (expected total about 23.9 h); Q15 data. |
-| 0.13 | 2026-10-26 | C3 closed: eval tools, S1–S3 eval set, bake-off, results table (`docs/eval/results.md`); D-046 to D-053; C6 is now the P4 implementation (D-053); Q15 and Q16 data. The C3 time comes from Aren. |
+| 0.13 | 2026-10-26 | C3 closed: eval tools, S1–S3 eval set, bake-off, results table (`docs/eval/results.md`); D-046 to D-053; C6 is now the P4 implementation (D-053); Q15 and Q16 data. C3 time logged (2.5 h). C6: P4 after M3, with one pipeline for P1 and P4 (Template Method); C4 is next. |
