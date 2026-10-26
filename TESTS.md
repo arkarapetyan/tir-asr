@@ -315,6 +315,8 @@ T-IMPORT-01 adds `tir_asr.eval.run` to `REQUIRED`.
 
 **Results (Aren's laptop, 2026-10-26):** no red run (D-050). Green run: `ruff check` and `ruff format --check` pass; 167 unit tests pass (`test-results/c3-run-green.txt`). The first bake-off runs (`nemo-rnnt` + `nllb-ct2`, and `nllb-ct2` on the reference text) ran with no error (`test-results/c3-bake-rnnt-nllb.txt`, `test-results/c3-bake-ref-nllb.txt`). The results table comes at the end of C3.
 
+**Bake-off runs (model level, D-049, D-051, D-052).** No separate model test for the candidate adapters: each bake-off run is their model-level check, and it stops at an error (R10). All runs passed on Aren's laptop on 2026-10-26: `nemo-rnnt`, `nemo-ctc`, `buzz-whisper`, and `seamless` (ASR); `nllb-ct2`, `opus-ct2`, and `seamless` (MT, also with the reference text); `seamless-s2tt` (end to end). ONNX-CTC was not run (D-052). Unit tests after the candidates: 167 pass (`test-results/c3-cand2-green.txt`). The numbers are in `docs/eval/results.md`. The CPU probe (`scripts/probe_cpu.py`) is in the same file.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -326,14 +328,14 @@ We add a question here when we find it during the work (tip T4).
 | Q-03 | Is the first model call slower for each new input length, also after one warm-up run? | C2, D-022 | [RUN] No, for these inputs: after call 1, new lengths (2.78–12.17 s of audio, 25–52 tokens) are as fast as old lengths. T-INSTALL-02, T-INSTALL-03. |
 | Q-04 | Does the minimum silence put two remote speakers into one segment when they change turns fast? | C2, D-027 | Open. C5 speaker purity of the segments. |
 | Q-05 | Does `vad_min_speech_ms = 250` remove short answers such as "ոչ" or "հա"? | C2, D-026 | Open. C3 recordings with short answers. |
-| Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | Open. End-to-end model test (C2), C3 bake-off. |
+| Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | [RUN] C3 bake-off: the opposite. Where the ASR writes «։» between two sentences, NLLB leaves out the second sentence (Q-13); a comma keeps it. `docs/eval/results.md`, finding 2. |
 | Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. [RUN] Data point (T-MODEL-MT-01, 2026-10-25): in a new process, with the cuBLAS preload and no `LD_LIBRARY_PATH`, the first call took 0.126 s. The cause of the 5.1 s in T-INSTALL-03 is not known. |
 | Q-08 | A clip can end with less silence than `vad_min_silence_ms` (clip 1: 150 ms). How does the last segment end? | C2, D-027 | D-032: no added silence; the test plays clip 1, then clip 2 (gap 632 ms). T-E2E-01. |
 | Q-09 | Is the first segment after a long silence or a pause slower, because the GPU clocks down [UNVERIFIED]? | C2, Aren's warm-up question | [RUN] No, for 76 s of silence: the first total after the silence was 0.61 s, the same as before (L-03, 2026-10-26). |
 | Q-10 | Does a long Python step in the worker delay the capture thread (GIL)? | C2, Aren's thread question | Open. Live run (C2 code chat): measure the gaps between block arrivals. |
-| Q-11 | The default microphone gave 22 samples outside [−1, 1] (min −1.0496) at a source volume of 24 % (probe B). Does the input clip, and does a clipped input change the ASR text? | C2d, probe B | Open. The volume is not over 100 % [RUN]. Possible cause [UNVERIFIED]: a full-scale input and the 48 → 16 kHz conversion. C3: count the full-scale samples in each eval recording. D-041 part 4. |
+| Q-11 | The default microphone gave 22 samples outside [−1, 1] (min −1.0496) at a source volume of 24 % (probe B). Does the input clip, and does a clipped input change the ASR text? | C2d, probe B | The volume is not over 100 % [RUN]. Possible cause [UNVERIFIED]: a full-scale input and the 48 → 16 kHz conversion. [RUN] C3: `s1.mic.wav` has 500 samples at full scale, the other 5 eval files none; the S1 mic WER (6.8 %, `nemo-rnnt`) is close to the other mic files. D-041 part 4. |
 | Q-12 | Do Bluetooth headphones change to the headset mode when an application opens their microphone, and does the call audio then lose quality? | C2d, Aren's recordings | Open [UNVERIFIED]. C4 setup guide: select the laptop microphone in the call application. |
-| Q-13 | Does NLLB leave out a sentence when one segment has two or more sentences? In the first live run, the EN line of the last block has no translation of «Լավ Սոնա, հետո կզանգեմ, հիմա պիտի գնամ։». | C2d, live run | Open. C3: segments with 2 and 3 sentences in the eval set. |
+| Q-13 | Does NLLB leave out a sentence when one segment has two or more sentences? In the first live run, the EN line of the last block has no translation of «Լավ Սոնա, հետո կզանգեմ, հիմա պիտի գնամ։». | C2d, live run | [RUN] C3: yes. With the ASR text: s1-05, s3-07; with the reference text: also s2-06, s2-07, s3-04. Seamless does not leave out these sentences. D-053 (P4). |
 
 ## 4. Live checklist (manual)
 

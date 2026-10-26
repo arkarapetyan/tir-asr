@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.16 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 change (C3) applies D-051. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.18 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -330,6 +330,11 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - The JSON holds the versions, the GPU, the parameters, the load time, the VRAM (`torch.cuda.mem_get_info()`, before and after each load), the warm-up time, the texts and times of each segment, the scores of each file, and the totals for "mic", "call", and "all".
   - Load order ASR, MT, VAD (D-043). One new `SileroSpeechProbability` for each file, because the VAD keeps its state.
   - Command: `env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run python scripts/bakeoff.py --asr nemo-rnnt --mt nllb-ct2` (D-030).
+- **Candidate adapters** (branch `c3-candidates`, D-014, D-015, D-049, D-051). Each is in `ADAPTERS` of T-IMPORT-01. The runner selects them by name. The program does not import them.
+  - `nemo-ctc` (`nemo_ctc.py`, `NemoCtcTranscriber`): the `.nemo` file of the program adapter, with `change_decoding_strategy(decoder_type="ctc")`.
+  - `opus-ct2` (`opus_ct2.py`, `OpusCt2Translator`): `Helsinki-NLP/opus-mt-hy-en`, converted to CTranslate2 in `models/opus-mt-hy-en-ct2-float16` (float16), on `cuda`, with `mt_compute_type` and `mt_beam_size`. Its `ctranslate2` import comes after the cuBLAS preload of `tir_asr.mt.ct2_nllb` (D-030).
+  - `buzz-whisper` (`buzz_whisper.py`, `BuzzWhisperTranscriber`): `BuzzASR/armenian` (Whisper-large-v3, full fine-tune) on Transformers, float16, `cuda`. `generate(num_beams=1, no_repeat_ngram_size=3, repetition_penalty=1.2)`, from the model card.
+  - `seamless` (`seamless.py`): `facebook/seamless-m4t-v2-large` on Transformers, float16, `cuda`, with the default generate values. `SeamlessSpeech` (`SeamlessM4Tv2ForSpeechToText`) gives the ASR (`tgt_lang="hye"`) and the end-to-end English (`"eng"`, runner name `seamless-s2tt`, with `--asr seamless` and no second load). `SeamlessText` (`SeamlessM4Tv2ForTextToText`) gives the MT (`src_lang="hye"`, `tgt_lang="eng"`).
 - The next C3 branches add their contracts here.
 
 ## 9. Open points for Aren (C2)
@@ -357,3 +362,5 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.14 | 2026-10-26 | C3, branch `c3-metrics` (§8.2), D-049: the contract of `metrics.py`. |
 | 0.15 | 2026-10-26 | C3, branch `c3-data` (§8.2), D-046, D-048, D-049: the contract of `data.py`. |
 | 0.16 | 2026-10-26 | C3, branch `c3-run` (§8.2), D-051: the contracts of `run.py` and `scripts/bakeoff.py`. |
+| 0.17 | 2026-10-26 | C3, branch `c3-candidates` (§8.2), D-051: the candidates `nemo-ctc` and `opus-ct2`. |
+| 0.18 | 2026-10-26 | C3, branch `c3-candidates` (§8.2), D-051: the candidates `buzz-whisper` and `seamless` (ASR, MT, end to end). |

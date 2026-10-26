@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.12 · **Date:** 2026-10-26
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time.
+**Version:** 0.13 · **Date:** 2026-10-26
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation.
 
 ---
 
@@ -159,7 +159,7 @@ Phase order: option B, skeleton first (D-002).
 | C3 | Evaluation set and bake-off | Eval scripts and metrics; numbers for the ASR and MT shortlists | — | 2.5 h |
 | C4 | Two audio sources | Device list, flags, system audio capture, virtual devices for sim tests, setup guide | M2 | 2 h |
 | C5 | Speaker labels | Speaker embeddings, online clustering, stable labels | **M3 (MVP)** | 3 h |
-| C6 | Weakest link | One improvement, chosen with numbers after M3 | — | 2 h |
+| C6 | Weakest link: P4 | Seamless end to end in the program (D-053) | — | 2 h |
 | C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
@@ -272,6 +272,7 @@ ASR: automatic speech recognition. MT: machine translation.
   - C5: the 3-person script and other recordings that Aren makes with other people.
 - **Shortlists:** ASR (D-014), MT (D-015).
 - **Done when:** The results table exists. D-ASR and D-MT are ACCEPTED.
+- **Result (2026-10-26):** done. The eval tools are `tir_asr.eval` (normalize, metrics, data, run) and `scripts/bakeoff.py` (D-046 to D-051). The eval set is S1–S3 (34 lines, two sides each), with Aren's labels. The results table is `docs/eval/results.md`. D-ASR and D-MT: D-053, P4 (Seamless end to end) on the GPU. ONNX-CTC was not run (D-052).
 
 #### C4. Two audio sources
 
@@ -300,7 +301,10 @@ ASR: automatic speech recognition. MT: machine translation.
 
 #### C6. Weakest link
 
-- **Goal:** One improvement. We choose it after M3 with numbers: ASR errors, MT quality, latency, or speaker confusion.
+- **Goal (D-053):** implement P4 in the program: one Seamless model (`SeamlessM4Tv2ForSpeechToText`, float16, GPU) gives the HY line and the EN line from the audio of each segment. The P1 code stays. The C3 numbers chose this improvement: WER 10.6 → 6.8 %, chrF 51.7 → 59.0, no left-out sentences (Q-13).
+- **Order (Aren, 2026-10-26):** after M3, as planned. C4 comes next.
+- **Design (Aren, 2026-10-26):** one pipeline that is suitable for both P1 and P4, with OOP abstraction and the Template Method pattern.
+- **Open:** a CPU mode (Q16), after the answer of the Mathrix team.
 
 #### C7. Live test and reliability
 
@@ -492,8 +496,8 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 
 | ID | Question | Source | Claude's notes (for the decision later) |
 |---|---|---|---|
-| Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. [RUN] C2d live run: three phrases with short pauses came in one segment, the 10 s hard cut split the word «լսել», and the MT left out a sentence (TESTS.md, Q-13). |
-| Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). |
+| Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. [RUN] C2d live run: three phrases with short pauses came in one segment, the 10 s hard cut split the word «լսել», and the MT left out a sentence (TESTS.md, Q-13). [RUN] C3: no segment of S1–S3 had a hard cut. |
+| Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). [RUN] C3 CPU probe (24 threads): P1 0.38–0.43 s for each line; P4 (Seamless) 9.9–36.4 s, so P4 does not meet K1 on the CPU (`docs/eval/results.md`). Aren asks the Mathrix team about the laptop (D-053). |
 
 ---
 
@@ -507,7 +511,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C2b | 1 h | 0.58 h | 2026-10-25, 12:45–13:20 (35 min). `types`, `config`, and `segment`, with their tests (D-036). 0.42 h under the time box; Aren decides if it goes to the buffer. |
 | C2c | 1 h | 0.97 h | 2026-10-25, 13:32–14:30 (58 min, Aren). `asr` and `mt` adapters, with their tests (D-037 to D-039). 0.03 h under the time box. |
 | C2d | 1.5 h | 2.92 h | 2026-10-25, 17:44–18:35 (51 min); 19:27–19:40 (about 13 min: recording setup for the eval set, C3 preparation); 2026-10-26, 10:04–10:15 (11 min); 10:46–12:26 (100 min, to the end of the chat). The breaks are not counted (Aren). 1.42 h over the time box: the sim test for T-AUDIO-01 and its two probes (D-041), and the Ctrl+C fix with probe C (D-044). |
-| C3 | 2.5 h | | |
+| C3 | 2.5 h | 2.5 h | 2026-10-26, 15:14–17:44 (2 h 30 min, from the chat times). On the time box, with the full shortlists (D-049). The P4 implementation moved to C6 (D-053). |
 | C4 | 2 h | | |
 | C5 | 3 h | | |
 | C6 | 2 h | | |
@@ -515,7 +519,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 11.42 h | C0 + C1 + C2 + C2b + C2c + C2d. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h (R16 note in §5.1). |
+| **Total** | **24.0 h** | 13.92 h | C0 to C3. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h (R16 note in §5.1). |
 
 ---
 
@@ -535,3 +539,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.10 | 2026-10-25 | C2c status: the tests pass on Aren's laptop; new tests T-MODEL-ERR-03 and T-MODEL-ERR-04 in the C2c table; D-037 to D-039. C2c time logged (0.97 h). |
 | 0.11 | 2026-10-26 | C2d status: `c2d-output` and `c2d-audio` merged (D-040, D-041); the C2d branch table; C2d time so far (1.52 h, with no breaks). |
 | 0.12 | 2026-10-26 | C2d closed: M1 reached; all four C2d branches; D-042 to D-045; the C2d time (2.92 h, with no breaks, to 12:26); the repository layout (`app.py`, `errors.py`, `tests/support/`, `scripts/`, `run.sh`); the R16 note (expected total about 23.9 h); Q15 data. |
+| 0.13 | 2026-10-26 | C3 closed: eval tools, S1–S3 eval set, bake-off, results table (`docs/eval/results.md`); D-046 to D-053; C6 is now the P4 implementation (D-053); Q15 and Q16 data. C3 time logged (2.5 h). C6: P4 after M3, with one pipeline for P1 and P4 (Template Method); C4 is next. |

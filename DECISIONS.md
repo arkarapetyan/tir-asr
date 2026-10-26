@@ -956,3 +956,47 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   4. Branches: `c3-run` (core, runner, and the program adapters `nemo-rnnt` and `nllb-ct2`), then one branch `c3-candidates` with one commit for each candidate (its adapter, its runner line, and its §8.2 line). First proposal: one branch for each candidate.
 - **Reason (Aren's words):** "agree D51 and tests". On point 4: "agree for one branch for all candidates".
 - **Revisit when:** a candidate adapter fails in a way that a model test would have found earlier.
+
+## D-052. ONNX-CTC after the `nemo-ctc` result (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B. Result: no ONNX run in C3.
+- **Context:** the D-014 shortlist has ASR-1 on ONNX Runtime with the CTC head (`OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx`). Facts:
+  - `model.onnx` is the encoder and the CTC head of the same model. The ONNX model and the NeMo checkpoint gave "identical transcriptions on a reference clip" [SOURCE: model card, `test-results/cards/`].
+  - It needs two new `laptop` packages: `onnx-asr` 0.12.0 (MIT) and `onnxruntime-gpu` [SOURCE: wheel METADATA].
+- **Options:**
+  - **A.** Install the two packages and run ONNX-CTC now.
+  - **B.** Decide after the `nemo-ctc` result. If the CTC WER is clearly higher than the RNNT WER, ONNX-CTC cannot win on quality, and its only gain is speed (the slowest ASR call was already 0.026 s).
+- **Claude's preference:** B. It is not a cut of the research: the `nemo-ctc` run measures the ONNX quality without an install. Fact that can show it is wrong: NeMo must leave the laptop install (K4).
+- **Decision:** B.
+- **Result [RUN, Aren's laptop, 2026-10-26, S1–S3]:** `nemo-ctc` WER 12.7 % and CER 3.6 %, against `nemo-rnnt` WER 10.6 % and CER 3.3 %. Thus no install and no ONNX run.
+  - Note: `nemo-ctc` + NLLB gives chrF 53.6, against 51.7 for `nemo-rnnt` + NLLB. The cause is the punctuation, not better ASR: where RNNT writes «։» between two sentences, NLLB leaves out the second sentence (Q-13). CTC wrote a comma in two of these places (s1-05, s3-07).
+- **Reason (Aren's words):** "agree on option B".
+- **Revisit when:** NeMo must leave the laptop install (K4), or C6 fixes Q-13 and CTC still gives a higher chrF.
+
+## D-053. ASR and MT: Seamless end to end (P4) (C3)
+
+- **Status:** ACCEPTED (2026-10-26): P4 on the GPU. The CPU question (Q16) stays open: Aren asks the Mathrix team about the laptop.
+- **Context:** the bake-off of D-049 (option B) on S1–S3, with the same segments for all runs. All numbers: `docs/eval/results.md`.
+- **Facts [RUN, Aren's laptop, RTX 5070 Laptop GPU]:**
+
+  | Pipeline | WER | chrF | Line time, mean / max (GPU) | GPU s per audio s | VRAM |
+  |---|---|---|---|---|---|
+  | P1: NeMo RNNT + NLLB (the program) | 10.6 % | 51.7 | 0.10 / 0.14 s | 0.020 | 2.6 GB |
+  | P2: NeMo RNNT + Seamless text to text | 10.6 % | 55.5 | 0.27 / 0.35 s | 0.056 | 3.6 GB |
+  | P4: Seamless end to end (HY and EN from the audio, one model) | 6.8 % | 59.0 | 0.63 / 0.83 s | 0.133 | 2.9 GB |
+  | P5: NeMo RNNT for HY + Seamless audio → EN [calc] | 10.6 % | 59.0 | 0.33 / 0.44 s | 0.069 | 3.8 GB |
+
+  - Energy for the same audio (run with load): P1 356 J, P2 591 J, P4 1183 J. Peak power 53–66 W; peak temperature 59 °C (P4).
+  - NLLB leaves out sentences (Q-13); Seamless does not.
+  - CPU probe (24 threads, 3 segments of 5.4–7.8 s): P4 9.9, 36.4, and 14.1 s for each line; P1 0.38–0.43 s.
+  - Single candidates: `nemo-ctc` WER 12.7 % (D-052); `buzz-whisper` WER 19.0 %; `opus-ct2` chrF 42.7 (reference input 43.6).
+- **Options:** P1 (no change), P2 (a new MT adapter with the same contract), P4, P5.
+- **Claude's preference:** P4 if the power numbers are acceptable, else P2. Weak points of P4: the most GPU work (6.6 times P1); a change to the architecture after M1 (the second step takes the audio, not the text, and the HY line and the EN line are two separate outputs that can differ); about one more code chat against a budget that is already over. Fact that can show P4 is wrong: at live speed, the GPU reaches a power or temperature limit, or the line time grows after some minutes (C7).
+- **Decision:** P4 on the GPU: `facebook/seamless-m4t-v2-large`, `SeamlessM4Tv2ForSpeechToText`, float16, `cuda`. For each segment, one call with `tgt_lang="hye"` gives the HY line, and one call with `tgt_lang="eng"` gives the EN line. The P1 code stays in the repository. The implementation comes in a later chat (C6, "the improvement stage"). A CPU mode (Q16) waits for the answer of the Mathrix team.
+- **Reason (Aren's words):** "I really want P4 but we have to also know that it will run <5s with CPU." After the CPU probe: "What I read is that no CPU is not a option for P4, so here's what we are gonna do. Let's implement P4 as well, and I'll contact them regarding the laptop capabilities part." On the time: "It's fine this will do the most of the improvement stage".
+- **Questions raised:**
+  - Aren: the laptop was under stress during the Seamless run. Claude: the bake-off runs the segments with no pause; at live speed, P4 keeps the GPU busy about 13 % of the time [calc]. The power log showed 3.3 times the energy of P1, with low peak power and temperature.
+  - Aren: is P4 under 5 s on the CPU? Claude: "I do not know"; the probe showed no.
+  - Claude (R14): if the Mathrix team requires a CPU-only run, the program needs P1 for the CPU, as a flag (R10), so two pipelines.
+- **Revisit when:** the Mathrix team requires a CPU-only run (Q16), or the C7 live test shows slow lines or a power or temperature limit with P4.
+- **Addition (2026-10-26, end of C3, Aren):** P4 waits for the improvement stage (C6, after M3); C4 comes next. In C6, the program gets one pipeline that is suitable for both P1 and P4, with OOP abstraction and the Template Method pattern. Aren's words: "let's leave P4 for now. It will go on the improvement stage." "When we get back to P4 we want a pipeline that is suitable for both P1 and P4. You shall OOP and abstraction techniques and Template pattern to achieve this invariance." C6 proposes the design with the R7 steps.
