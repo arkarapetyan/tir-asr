@@ -798,3 +798,22 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** points 1 to 6 as proposed, with A in point 3. Point 2a: the new proposal (ASR, then MT, then VAD).
 - **Reason (Aren's words):** "1. agree", "2. agree", "3. A", "4. agree", "5. agree", "6. agree". Point 2a: "agree on 2a".
 - **Revisit when:** C7 (the NeMo lines at the interview), or T-E2E-01 fails at a model load.
+
+## D-044. Ctrl+C: the main thread waits with a time limit (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** In the first live run (2026-10-26), L-02 failed: Ctrl+C did not stop the program, and no shutdown line came (`test-results/c2d-live.txt`). The main thread waited in `events.get()` with no time limit (D-042). Probe C (`scripts/probe_sigint.py`, `test-results/c2d-probe-sigint.txt`) [RUN]:
+  - The SIGINT handler stays `default_int_handler` after each startup step, and the main thread does not block SIGINT. Thus no library replaced or blocked the handler.
+  - The process has 75–79 native threads after the ASR load (1 at the start).
+  - Test 1, `get(timeout=0.5)` in a loop, got `KeyboardInterrupt`.
+  - Test 2 (`get()` with no time limit) has no result: its message had no `flush`, so Aren did not see it (Claude's error). The live run L-02 is the same wait, and it failed.
+  - In the workspace (one thread), both ways of waiting get `KeyboardInterrupt` [RUN].
+  - Inference: Python handles a signal only when the main thread wakes up. With no time limit, the main thread does not wake up when another thread receives the signal.
+- **Options:**
+  - **A.** The main thread waits with `events.get(timeout=STOP_POLL_S)` in a loop, `STOP_POLL_S = 0.5` s. The time limit only wakes the main thread, so that Python can handle a waiting Ctrl+C; it changes nothing else. Weak points: Ctrl+C can take up to 0.5 s; the main thread wakes 2 times each second; it is a time limit in the code (R10), so it must be visible.
+  - **B.** `signal.set_wakeup_fd` with a pipe, and `select()` on that pipe and on an event pipe. No time limit. Weak point: more code, harder to read.
+  - **C.** Block SIGINT in all other threads. Weak point: the libraries make most of the threads.
+- **Claude's preference:** A. Fact that can show it is wrong: T-E2E-02 still hangs after the fix.
+- **Decision:** A. `STOP_POLL_S = 0.5` s is a named constant in `pipeline.py` (`ARCHITECTURE.md` §4 and §5), not a tunable parameter. New test T-E2E-02: the installed command gets SIGINT after "Listening" and must end within 10 s with exit code 0 and the shutdown line.
+- **Reason (Aren's words):** "ok fix with A and I approve the test".
+- **Revisit when:** T-E2E-02 hangs, or C4 changes the threads.
