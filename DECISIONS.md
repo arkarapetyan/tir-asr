@@ -859,3 +859,35 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Aren offered to edit the S1 interruptions out. Claude: keep them (point 4). Aren agreed.
   - Claude (R14) named the main risk of B one time: the time in the budget.
 - **Revisit when:** the joined-text WER is lower than the true WER because the alignment matches words of different lines; or S4 gets recorded (then it gets its labels).
+
+## D-047. Armenian text normalization for WER and CER (C3)
+
+- **Status:** ACCEPTED (2026-10-26), rules 1 to 6 with option P1 and option N1
+- **Context:** PLAN C3, step 1. WER and CER compare the ASR text with the reference text. Punctuation, case, and spelling variants must not count as word errors, except where we decide so.
+- **Facts [RUN, Python `unicodedata`, Unicode 15.1; counts from the 44 lines of `docs/eval/scripts.md`]:**
+  - The references have these marks: «։» U+0589 (102), «,» (62), «՞» U+055E (17), «՝» U+055D (4), « and » (1 pair), «՜» U+055C (1). They have no digits.
+  - «՞» and «՜» are inside the word, on the stressed vowel («Լսո՞ւմ», «Վա՜յ»). A space in their place makes two words.
+  - «և» U+0587 (15 times) is one character. NFKC changes it to «եւ». It has no capital form: the reference writes «Եվ», and `"Եվ".lower()` gives «եվ».
+  - «՞» is the only mark that shows a question: a question also ends with «։» (s3-08). In S1–S3, 12 of the 34 lines have one «՞».
+- **Rules, in this order:**
+  1. Unicode NFKC (it also opens the ligatures U+FB13 to U+FB17).
+  2. Lowercase.
+  3. Delete «՜» U+055C, «՛» U+055B, «՟» U+055F, and «՚» U+055A, with no space. Keep «՞» U+055E.
+  4. «եւ» → «եվ». After rule 1, this also covers «և». Assumption [UNVERIFIED]: modern spelling uses «ւ» only in «ու».
+  5. One space for each other punctuation mark or symbol (Unicode categories P and S).
+  6. One space between words, and no space at the start or at the end.
+- **Options for «՞»:**
+  - **P1.** Keep «՞» in the word. Weak points: a correct word with no «՞» counts as one full word error; WER then measures the words and the questions together; a «՞» on a different word gives two errors.
+  - **P2.** Delete «՞» for WER and CER, and count the questions separately, for ASR («՞») and for MT («?»). Weak point: two numbers for the ASR decision.
+  - **P3.** Move «՞» to its own word. Weak points: WER counts a mark as a word; a «՞» on a different word gives two errors.
+- **Options for numbers:**
+  - **N1.** No rule. The eval shows the number of words with digits for each model. Weak point: "8-ին" for «ութին» counts as an error, but the recognition was correct.
+  - **N2.** A converter from digits to Armenian words, with the case endings. Weak points: more code and tests; the rules need a source; compound number words.
+  - **N3.** A second reference with digits. Weak point: WER with two references is more complex.
+- **Claude's preference:** P2. Fact that can show it is wrong: we cannot decide D-ASR from WER and the question count together. N1. Fact that can show it is wrong: a candidate writes 3 or more words with digits on S1–S3.
+- **Decision:** rules 1 to 6, P1, N1. Function `normalize_hy` in `src/tir_asr/eval/normalize.py`. Tests T-NORM-01 to T-NORM-09 (`TESTS.md` §2.5).
+- **Reason (Aren's words):** "6. I agree, but, U+055E is important as it shows that the sentence is a question so we must not get rid of it". "I am for option P1, let's keep the question mark, but we can get rid of the other symbols". On numbers: "Yes no rule for numbers".
+- **Questions raised:**
+  - Claude: the normalization changes only the two texts that WER and CER compare. The program output and the MT input keep «՞».
+  - Claude: known limit of P1: an ASCII «?» in place of «՞» becomes a space, so the word does not match the reference word.
+- **Revisit when:** a candidate writes 3 or more words with digits on S1–S3 (N2); the ASR outputs show «?» in place of «՞»; or a «՞» on a different word changes the ASR ranking.
