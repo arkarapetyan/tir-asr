@@ -1,4 +1,4 @@
-"""T-AUDIO-01 to T-AUDIO-04: the soundcard source adapter (C2d `c2d-audio`, C4 `c4-audio`).
+"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01: the audio sources (C2d `c2d-audio`; C4 `c4-audio`, `c4-cli`).
 
 Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041, D-054. The limits come
 from probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
@@ -8,6 +8,11 @@ test. T-AUDIO-01 plays a tone into the sink with `pw-play`, and the adapter reco
 of the sink. T-AUDIO-02 starts a new Python process with no PulseAudio server. T-AUDIO-04
 compares the device list and the two default ids with the values that `pactl` gives.
 
+T-SIM-01 (C4, D-054) loads two null sinks and runs the program functions with the real models
+and two sources at the same time: `pw-play` plays the two sides of eval script S1 into the two
+sinks, and the program captures their monitors. It is also a model test: run it with
+`env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1` (D-030). Its input files are local only (data/).
+
 Caution: the tests change the audio server for a few seconds. Do not run them during a call.
 If a test stops and the sink stays, run `pactl list short modules | grep null-sink`, then
 `pactl unload-module <number>`.
@@ -16,7 +21,10 @@ The tests run on Aren's laptop only (marker `sim`). They import `soundcard` and 
 inside the test functions, so that CI can collect this file without the `laptop` group (D-021).
 """
 
+import io
+import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -50,6 +58,20 @@ RMS_TOLERANCE = 0.10  # +- 10 % of the played RMS
 HOLE_SAMPLES = 16  # a run of this many exact zeros inside the tone is a hole
 ROUTING_CHECK_S = 0.5  # the routing check runs this time after the player starts
 PROCESS_TIMEOUT_S = 30  # test only: T-AUDIO-02 must not wait with no limit
+
+# T-SIM-01 (D-054)
+ROOT = Path(__file__).resolve().parents[2]
+SIM_SINKS = {"Me": "tir_t_me", "System": "tir_t_system"}
+S1_FILES = {
+    "Me": ROOT / "data" / "eval" / "raw" / "s1.mic.wav",
+    "System": ROOT / "data" / "eval" / "raw" / "s1.call.wav",
+}
+SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
+AFTER_PLAY_S = 2.0  # each source stops this time after the length of S1
+START_LIMIT_S = 30.0  # test only: the time for the first block of each source
+K1_S = 5.0
+HEAD = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] (.+)$")
+TOTAL = re.compile(r"\| Total (\d+\.\d\d)s\]$")
 
 
 def report(line: str) -> None:
@@ -290,3 +312,224 @@ def test_audio_04_device_list_and_default_ids(null_sink):
     assert mic == default_source
     assert system == f"{default_sink}.monitor"
     assert kinds.get(system) is True, f"{system} is not in the list as a monitor"
+
+
+@pytest.fixture
+def two_null_sinks():
+    """Load the two null sinks of T-SIM-01. Unload them after the test. The defaults must not
+    change."""
+    existing = [row[1] for row in pactl_rows("sinks")]
+    for sink in SIM_SINKS.values():
+        assert sink not in existing, f"a sink {sink!r} is already there; unload it first"
+    before = defaults()
+    modules = []
+    try:
+        for sink in SIM_SINKS.values():
+            modules.append(pactl("load-module", "module-null-sink", f"sink_name={sink}"))
+        yield SIM_SINKS
+    finally:
+        for module in reversed(modules):
+            pactl("unload-module", module)
+    assert defaults() == before, f"the defaults changed: {before} -> {defaults()}"
+
+
+def write_pcm16(source: Path, target: Path) -> float:
+    """Copy a mono float32 WAV file to a 16-bit WAV file at the same rate. Return its length."""
+    from scipy.io import wavfile
+
+    rate, audio = wavfile.read(source)
+    assert audio.ndim == 1 and audio.dtype == np.float32, f"{source}: not mono float32"
+    samples = np.round(np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
+    with wave.open(str(target), "wb") as file:
+        file.setnchannels(1)
+        file.setsampwidth(2)
+        file.setframerate(rate)
+        file.writeframes(samples.tobytes())
+    return len(samples) / rate
+
+
+class Recorded:
+    """Test wrapper of an AudioSource: it records the arrival times, sets `started` at the first
+    block, and stops the source after `count` blocks."""
+
+    def __init__(self, source, count: int):
+        self.source = source
+        self.label = source.label
+        self.count = count
+        self.arrivals: list[float] = []
+        self.started = threading.Event()
+
+    def blocks(self):
+        stream = self.source.blocks()
+        try:
+            for block in stream:
+                self.arrivals.append(block.arrival)
+                self.started.set()
+                yield block
+                if len(self.arrivals) >= self.count:
+                    break
+        finally:
+            stream.close()
+
+
+class Players(threading.Thread):
+    """At the first block of each source, play each file into its sink with `pw-play`.
+
+    After ROUTING_CHECK_S, the two new playback streams must be on the two test sinks. Else the
+    thread stops the players, so that the audio does not play on the speakers.
+    """
+
+    def __init__(self, files: dict[str, Path], sinks: dict[str, str], events, indexes: set):
+        super().__init__(daemon=True)
+        self.files, self.sinks, self.events, self.indexes = files, sinks, events, indexes
+        self.processes: list[subprocess.Popen] = []
+        self.new: dict[str, str] = {}
+        self.error: BaseException | None = None
+
+    def kill(self) -> None:
+        for process in self.processes:
+            if process.poll() is None:
+                process.kill()
+
+    def run(self) -> None:
+        try:
+            for event in self.events:
+                assert event.wait(timeout=START_LIMIT_S), "a source gave no block"
+            before = {row[0] for row in pactl_rows("sink-inputs")}
+            for label, path in self.files.items():
+                command = ["pw-play", "--target", self.sinks[label], str(path)]
+                self.processes.append(
+                    subprocess.Popen(
+                        command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+                    )
+                )
+            time.sleep(ROUTING_CHECK_S)
+            rows = pactl_rows("sink-inputs")
+            self.new = {row[0]: row[1] for row in rows if row[0] not in before}
+            if len(self.new) != len(self.files) or set(self.new.values()) != self.indexes:
+                self.kill()
+        except BaseException as error:  # the main thread reports it in an assert
+            self.kill()
+            self.error = error
+
+
+def parse_blocks(text: str) -> list[tuple[str, int, str, float]]:
+    """(label, seconds, Armenian text, total) for each block of the program output."""
+    blocks = []
+    head = None
+    hy = ""
+    for line in text.splitlines():
+        if match := HEAD.match(line):
+            head = match
+        elif line.startswith(" HY: "):
+            hy = line.removeprefix(" HY: ")
+        elif head is not None and (total := TOTAL.search(line)):
+            hours, minutes, seconds = (int(head.group(n)) for n in (1, 2, 3))
+            seconds = hours * 3600 + minutes * 60 + seconds
+            blocks.append((head.group(4), seconds, hy, float(total.group(1))))
+            head, hy = None, ""
+    return blocks
+
+
+@pytest.mark.model
+def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
+    from tir_asr.app import load_models, log_versions
+    from tir_asr.audio.soundcard_source import SoundcardSource
+    from tir_asr.config import Params
+    from tir_asr.eval.data import read_references
+    from tir_asr.eval.metrics import wer
+    from tir_asr.pipeline import run, warm_up
+
+    for path in [*S1_FILES.values(), SCRIPTS_MD]:
+        assert path.exists(), f"{path} is missing (local eval data, D-046)"
+    copies = {label: tmp_path / f"{label}.wav" for label in S1_FILES}
+    lengths = [write_pcm16(S1_FILES[label], copies[label]) for label in S1_FILES]
+    count = math.ceil((max(lengths) + AFTER_PLAY_S) / BLOCK_S)
+    report(f"S1 lengths {lengths} s; each source stops after {count} blocks")
+
+    params = Params()
+    log = io.StringIO()
+    log_versions(params, log)
+    sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
+    vads, transcriber, translator = load_models(params, log, list(SIM_SINKS))
+    for line in log.getvalue().splitlines():
+        report(line)
+    asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
+    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s")
+
+    recorded = [Recorded(source, count) for source in sources]
+    indexes = {row[0] for row in pactl_rows("sinks") if row[1] in SIM_SINKS.values()}
+    players = Players(copies, SIM_SINKS, [r.started for r in recorded], indexes)
+    players.start()
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        code = run(
+            list(zip(recorded, vads, strict=True)),
+            transcriber,
+            translator,
+            params,
+            time.monotonic,
+            out,
+            err,
+        )
+    finally:
+        players.join(timeout=START_LIMIT_S)
+        players.kill()
+
+    for line in out.getvalue().splitlines():
+        report(line)
+    report(f"routing: new playback streams (stream: sink) {players.new}, test sinks {indexes}")
+    for process in players.processes:
+        _, errors = process.communicate()
+        report(f"pw-play exit code {process.returncode}, stderr {errors.strip()!r}")
+    assert players.error is None, f"the players failed: {players.error!r}"
+    assert set(players.new.values()) == indexes, "the audio went to another sink"
+    assert all(process.returncode == 0 for process in players.processes)
+
+    # (1) Exit code and errors.
+    assert code == 0, err.getvalue()
+    assert err.getvalue() == ""
+
+    # (2) Labels and time order.
+    blocks = parse_blocks(out.getvalue())
+    labels = [block[0] for block in blocks]
+    report(f"blocks: {labels.count('Me')} Me, {labels.count('System')} System")
+    assert set(labels) == set(SIM_SINKS), f"labels {sorted(set(labels))}"
+    for label in SIM_SINKS:
+        times = [block[1] for block in blocks if block[0] == label]
+        assert times == sorted(times), f"{label}: the block times go back: {times}"
+
+    # (3) Each label has the text of its own side (D-054: the source of each label).
+    references = read_references(SCRIPTS_MD, "s1")
+    sides = {"Me": "mic", "System": "call"}
+    refs = {
+        side: " ".join(line.hy for line in references if line.side == side)
+        for side in sides.values()
+    }
+    rates = {}
+    for label in SIM_SINKS:
+        texts = [block[2] for block in blocks if block[0] == label and block[2] != "(no text)"]
+        hyp = " ".join(texts)
+        for side, ref in refs.items():
+            rates[(label, side)] = wer([ref], [hyp])
+        mic_wer, call_wer = rates[(label, "mic")], rates[(label, "call")]
+        report(f"{label}: WER {mic_wer:.3f} (mic references), {call_wer:.3f} (call references)")
+    assert rates[("Me", "mic")] < rates[("Me", "call")]
+    assert rates[("System", "call")] < rates[("System", "mic")]
+
+    # (4) K1.
+    totals = [block[3] for block in blocks]
+    report(f"totals: max {max(totals):.2f} s, mean {sum(totals) / len(totals):.2f} s")
+    assert all(total < K1_S for total in totals), f"a total is not under {K1_S} s: {totals}"
+
+    # (5) Arrival gaps of each source (Q-10), with the drift numbers (D-020).
+    for source in recorded:
+        arrivals = np.array(source.arrivals)
+        gaps = np.diff(arrivals)
+        mean_gap = (arrivals[-1] - arrivals[0]) / (len(arrivals) - 1)
+        report(
+            f"{source.label}: {len(arrivals)} blocks; gaps (ms) min {gaps.min() * 1000:.1f}, "
+            f"max {gaps.max() * 1000:.1f}; span / (n - 1) {mean_gap * 1000:.3f} ms; "
+            f"span / real time {mean_gap / BLOCK_S:.4f}"
+        )
+        assert gaps.max() <= MAX_GAP_S, f"{source.label}: a gap of {gaps.max() * 1000:.1f} ms"

@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.20 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 and v0.20 changes (C4) apply D-054, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.21 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -67,7 +67,8 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   - [RUN] The samples can be a little outside [−1, 1]: the default microphone gave −1.0496 (probe B, Q-11). The adapter does not clip them (D-041).
   - T-AUDIO-04 compares the device list and the two default ids with the `pactl` values. The default sources record only in T-E2E-02 and in the live tests (L-01).
   - A change of the default output during a run does not move the `"System"` source: it stays on the old monitor and gives silence, with no error (D-054). The user connects the headphones before the start.
-  - When PulseAudio reports lost audio, `soundcard` fills the gap with zeros and gives no warning [SOURCE: `soundcard` 0.4.6]. The program cannot see this loss. C4 tests for drift and loss.
+  - [RUN] Noises (coughs, short sounds) of 250 ms or more pass the VAD; the ASR then gives one letter, and the MT invents a sentence (L-05, Q-14).
+  - When PulseAudio reports lost audio, `soundcard` fills the gap with zeros and gives no warning [SOURCE: `soundcard` 0.4.6]. The program cannot see this loss. [RUN] T-SIM-01: two sources for 72.7 s, span ÷ real time 1.0000 for each, so no drift between them; the test cannot see lost audio that `soundcard` fills with zeros.
   - The arrival time does not include the time between the sound and the arrival of its block (device and server buffers). [RUN] `soundcard` gives a stream latency of 21–44 ms (probe B). Thus the measured latency is up to about 44 ms lower than the real latency.
 
 ### 2.2 `segment`
@@ -149,22 +150,28 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 ### 2.7 `cli` and `app`
 
 - **Launcher (D-045):** `./run.sh` in the project folder. It goes to the project folder (so it works from any folder), sets `HF_HUB_OFFLINE=1` (nothing downloads, K2), and starts `.venv/bin/tir-asr` with `exec` (so Ctrl+C goes straight to the program). The arguments go to the program. If `.venv/bin/tir-asr` is missing, it stops with a message to run `uv sync`.
-- **Command:** `tir-asr`, from `[project.scripts]` in `pyproject.toml` (`tir_asr.cli:main`). After a change to `pyproject.toml`, `uv sync` installs the command. C2 has no flags except `--help`. C4 adds the device flags.
-- **`cli.py` (core, D-037, D-043):** only the `argparse` interface. After the parse, it imports `app` and returns `app.main()`. Thus `--help` imports no model and no audio-device package (T-CLI-01).
-- **`app.py` (D-042, D-043):** it loads the adapters, prints the startup log, and calls the pipeline. It imports the adapters inside its functions, in the load order below. Each startup line starts with `startup: `.
+- **Command:** `tir-asr`, from `[project.scripts]` in `pyproject.toml` (`tir_asr.cli:main`). After a change to `pyproject.toml`, `uv sync` installs the command.
+- **Flags (F1, D-054):**
+  - `--mic ID`: the exact source id of the microphone (label `"Me"`). With no flag: the default microphone (`default_microphone_id()`, §2.1).
+  - `--system ID`: the exact source id of the system audio (label `"System"`), normally a monitor. With no flag: the monitor of the default output (`default_system_id()`, §2.1).
+  - `--list-devices`: `app.list_devices()` prints the text of `format_source_list` (§2.1) and returns 0. It loads no model. A `TirError` gives `tir-asr: <message>` and exit code 1.
+  - The same id for `--mic` and `--system` gives an `argparse` error: `tir-asr: error: --mic and --system select the same source <id>`, exit code 2 (T-CLI-02).
+  - A change of the default output during a run does not move the `"System"` source (§2.1).
+- **`cli.py` (core, D-037, D-043, D-054):** only the `argparse` interface. After the parse, it imports `app` and returns `app.list_devices()` (with `--list-devices`) or `app.main(mic=…, system=…)`. Thus `--help` imports no model and no audio-device package (T-CLI-01).
+- **`app.py` (D-042, D-043, D-054):** it selects the two sources, loads the adapters, prints the startup log, and calls the pipeline with one `(source, vad)` pair for each source. It imports the adapters inside its functions, in the load order below. Each startup line starts with `startup: `.
 - **Startup sequence:**
 
   | Step | Place | Startup line |
   |---|---|---|
-  | 1. Versions and parameters | `app.load_models` | `startup: tir-asr …; torch …; nemo-toolkit …; ctranslate2 …; silero-vad …; soundcard …; CUDA (torch) …` (from `importlib.metadata`), then one `startup: parameter <name> = <value>` line for each parameter (`config.parameter_lines`, T-CFG-02) |
-  | 2. ASR load, with the CUDA check (§2.3) | `app.load_models` | `startup: GPU <name>`, then `startup: ASR loaded in <s> s; GPU memory used <MiB> MiB` |
-  | 3. MT load (the cuBLAS preload, D-030) | `app.load_models` | `startup: MT loaded in <s> s; GPU memory used <MiB> MiB (+<MiB> MiB)` |
-  | 4. VAD load | `app.load_models` | `startup: VAD loaded in <s> s; torch CPU threads <n>` |
-  | 5. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s` |
-  | 6. Microphone (§2.1; the stream opens later) | `app.main` | `startup: microphone <name>` |
+  | 1. Versions and parameters | `app.log_versions` | `startup: tir-asr …; torch …; nemo-toolkit …; ctranslate2 …; silero-vad …; soundcard …` (from `importlib.metadata`; no import), then one `startup: parameter <name> = <value>` line for each parameter (`config.parameter_lines`, T-CFG-02) |
+  | 2. Sources (§2.1; the streams open later) | `app.select_sources` | `startup: source Me: <name> (<id>)`, then `startup: source System: <name> (<id>)`. A wrong id stops the program here, before the model load (D-054, point 6). |
+  | 3. ASR load, with the CUDA check (§2.3) | `app.load_models` | `startup: GPU <name>; CUDA (torch) <version>`, then `startup: ASR loaded in <s> s; GPU memory used <MiB> MiB` |
+  | 4. MT load (the cuBLAS preload, D-030) | `app.load_models` | `startup: MT loaded in <s> s; GPU memory used <MiB> MiB (+<MiB> MiB)` |
+  | 5. VAD load: one Silero instance for each source (D-054, point 7) | `app.load_models` | `startup: VAD loaded in <s> s (Me, System); torch CPU threads <n>` |
+  | 6. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s` |
   | 7. "Listening" and the session start | `pipeline.run` (§2.6) | `Listening. Press Ctrl+C to stop.` |
 
-- **Load order (D-043, point 2a):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
+- **Load order (D-043, point 2a):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD. `soundcard` loads before `torch` (step 2); [RUN] T-E2E-02 and T-SIM-01 pass with this order. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
 - **GPU memory:** `torch.cuda.mem_get_info()` gives the used memory of the full device, so the MT line also counts CTranslate2.
 - **NeMo lines (D-043, point 3):** NeMo prints about 185 lines at its load. M1 does not hide them (R10). C7 decides again.
 - **Errors and Ctrl+C during the startup (D-043, point 4):** a `TirError` gives `tir-asr: <message>` and exit code 1. Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>`, and exit code 1. Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
@@ -374,3 +381,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.18 | 2026-10-26 | C3, branch `c3-candidates` (§8.2), D-051: the candidates `buzz-whisper` and `seamless` (ASR, MT, end to end). |
 | 0.19 | 2026-10-26 | C4, branch `c4-audio` (§2.1, §3, §7), D-054: `SoundcardSource(label, device)` in `audio/soundcard_source.py` replaces `SoundcardMicrophone`; the device id is required; the adapter functions `list_sources`, `default_microphone_id`, and `default_system_id`; the core module `audio/devices.py` (`SourceInfo`, `format_source_list`); the source label `"System"`; new errors. |
 | 0.20 | 2026-10-26 | C4, branch `c4-pipeline` (§1, §2.6, §3, §4), D-054: `run(sources, …)` with one `(source, vad)` pair, one `Endpointer`, and one capture thread `capture <label>` for each source; one queue and one worker; "done" after the end mark of each source; the sums in the shutdown line; the attribute `label` of `AudioSource`; the text of "not processed" agrees with the code. |
+| 0.21 | 2026-10-26 | C4, branch `c4-cli` (§2.7), D-054: the flags `--mic`, `--system`, and `--list-devices`; `app.log_versions`, `app.select_sources`, and `app.list_devices`; the sources before the model load; one VAD for each source; the new startup sequence. |
