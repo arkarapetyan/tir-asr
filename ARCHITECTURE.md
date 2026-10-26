@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.11 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.12 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -140,6 +140,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 
 ### 2.7 `cli` and `app`
 
+- **Launcher (D-045):** `./run.sh` in the project folder. It goes to the project folder (so it works from any folder), sets `HF_HUB_OFFLINE=1` (nothing downloads, K2), and starts `.venv/bin/tir-asr` with `exec` (so Ctrl+C goes straight to the program). The arguments go to the program. If `.venv/bin/tir-asr` is missing, it stops with a message to run `uv sync`.
 - **Command:** `tir-asr`, from `[project.scripts]` in `pyproject.toml` (`tir_asr.cli:main`). After a change to `pyproject.toml`, `uv sync` installs the command. C2 has no flags except `--help`. C4 adds the device flags.
 - **`cli.py` (core, D-037, D-043):** only the `argparse` interface. After the parse, it imports `app` and returns `app.main()`. Thus `--help` imports no model and no audio-device package (T-CLI-01).
 - **`app.py` (D-042, D-043):** it loads the adapters, prints the startup log, and calls the pipeline. It imports the adapters inside its functions, in the load order below. Each startup line starts with `startup: `.
@@ -313,3 +314,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.9 | 2026-10-26 | C2d, branch `c2d-pipeline` (§2, §2.6, §4, §7), D-042: `run()` and `warm_up()`; the session start before the capture; the stop, the shutdown line, and the exit codes; `TirError` in `errors.py`; the error line for other exceptions. |
 | 0.10 | 2026-10-26 | C2d, branch `c2d-cli` (§2, §2.7, §7), D-043: `cli.py` and `app.py`; the startup sequence with its lines and places; the load order ASR, MT, VAD; the GPU memory; the NeMo lines; the errors and Ctrl+C during the startup; the `tir-asr` command. |
 | 0.11 | 2026-10-26 | C2d, branch `c2d-cli` (§2.6, §4, §5), D-044: the main thread waits with the time limit `STOP_POLL_S` (0.5 s) in a loop, so that Ctrl+C works; T-E2E-02. |
+| 0.12 | 2026-10-26 | C2d, branch `c2d-cli` (§2.7), D-045: the launcher `run.sh`. |
