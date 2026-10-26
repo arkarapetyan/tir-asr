@@ -96,7 +96,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, and `tir_asr.output`; later branches add theirs) |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, `tir_asr.output`, and `tir_asr.audio`; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
@@ -109,9 +109,9 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-MODEL-ERR-02 | §7, R10: missing MT model folder. | A missing CTranslate2 folder. | `mt: CTranslate2 model not found: …` with the conversion command. | model | PASSES |
 | T-MODEL-ERR-03 | §2.3, §7, R10: no CUDA, no CPU fallback. | `torch.cuda.is_available` returns False (`monkeypatch`). | `AsrError`: `asr: CUDA is not available`. The model does not load. | model | PASSES (approved by Aren, 2026-10-25) |
 | T-MODEL-ERR-04 | §2.4, §7, R10: empty MT input. | `translate("")` after the load. | `MtError`: `mt: empty input text`. | model | PASSES (approved by Aren, 2026-10-25) |
-| T-AUDIO-01 | §2.1, D-020, D-041: microphone adapter (sim). | A null sink. `SoundcardMicrophone(device="<sink>.monitor")` gives 200 blocks. After block 29, `pw-play` plays a 4 s, 440 Hz tone (peak 0.25) into the sink. | Each block: `samples` (512,) float32, `source` "Me". The arrival times increase. Span ÷ (n − 1) = 32 ms ± 0.5 ms. No gap > 64 ms. Blocks 0–29: max \|x\| < 1e-6. Tone: 440 ± 1 Hz, RMS 0.1768 ± 10 %, no run of 16 or more exact zeros. The playback stream is on the null sink. The default sink and source do not change. | sim | APPROVED |
-| T-AUDIO-02 | §2.1, §7, R10: no PulseAudio server. | A new Python process with `PULSE_SERVER` set to a socket that does not exist. It builds `SoundcardMicrophone()`. | `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | APPROVED |
-| T-AUDIO-03 | §2.1, R10, D-041: exact device id, no fuzzy match. | A null sink `<sink>`. `SoundcardMicrophone(device="<sink>")`: the id is only a part of the monitor name. | `AudioError`: `audio: no source with the exact id <sink>`. The test first shows that `soundcard.get_microphone("<sink>", include_loopback=True)` selects the monitor. | sim | APPROVED |
+| T-AUDIO-01 | §2.1, D-020, D-041: microphone adapter (sim). | A null sink. `SoundcardMicrophone(device="<sink>.monitor")` gives 200 blocks. After block 29, `pw-play` plays a 4 s, 440 Hz tone (peak 0.25) into the sink. | Each block: `samples` (512,) float32, `source` "Me". The arrival times increase. Span ÷ (n − 1) = 32 ms ± 0.5 ms. No gap > 64 ms. Blocks 0–29: max \|x\| < 1e-6. Tone: 440 ± 1 Hz, RMS 0.1768 ± 10 %, no run of 16 or more exact zeros. The playback stream is on the null sink. The default sink and source do not change. | sim | PASSES |
+| T-AUDIO-02 | §2.1, §7, R10: no PulseAudio server. | A new Python process with `PULSE_SERVER` set to a socket that does not exist. It builds `SoundcardMicrophone()`. | `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | PASSES |
+| T-AUDIO-03 | §2.1, R10, D-041: exact device id, no fuzzy match. | A null sink `<sink>`. `SoundcardMicrophone(device="<sink>")`: the id is only a part of the monitor name. | `AudioError`: `audio: no source with the exact id <sink>`. The test first shows that `soundcard.get_microphone("<sink>", include_loopback=True)` selects the monitor. | sim | PASSES |
 | T-E2E-01 | K1, F2, F3, F5, D-025, D-032: full pipeline with the real models. | The test WAV source plays clip 1 and then clip 2 at real-time speed. | 2 blocks in time order, label "Me", no empty text, each total < 5.0 s. | model | APPROVED |
 
 **Live (manual, §4):** L-01 to L-03.
@@ -167,6 +167,15 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - **Red run:** 1 failed (T-IMPORT-01: no `tir_asr.output`), 1 collection error (`test_output.py`: `No module named 'tir_asr.output'`), 48 passed. File: `test-results/c2d-output-unit-red.txt`.
 - **Green run:** 55 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2d-output-unit.txt`.
 - [RUN] With the project layout and no `output.py`, `ruff` reports I001 on the import block of `test_output.py`. With `output.py`, the block passes. Thus a red run of a new module can show I001; the green run is the check.
+
+**C2d results (branch `c2d-audio`, Aren's laptop, 2026-10-26):**
+
+- **Red runs:** unit: 1 failed (T-IMPORT-01: no `tir_asr.audio`), 54 passed; sim: 3 failed with `No module named 'tir_asr.audio'`. The fixture loaded and unloaded the null sink with no teardown error. Files: `test-results/c2d-audio-unit-red.txt`, `c2d-audio-sim-red.txt`.
+- **Green runs:** unit: 56 passed; `ruff check --no-cache` and `ruff format --no-cache --check` pass (`test-results/c2d-audio-unit.txt`). Sim: 3 passed in 6.75 s (`test-results/c2d-audio-sim.txt`).
+  - T-AUDIO-01: span ÷ (n − 1) 32.054 ms; gaps 20.7–43.4 ms (median 42.1 ms); silent phase max \|x\| 0; tone in blocks 32 to 157, first tone block 0.076 s after the player start; 440.02 Hz, RMS 0.1768 (played 0.1768), no holes; the playback stream was on the null sink.
+  - T-AUDIO-02: `audio: cannot connect to the PulseAudio server`.
+  - T-AUDIO-03: `soundcard.get_microphone("tir_t_audio")` gave `tir_t_audio.monitor`, so the name match is a real risk. The adapter gave `audio: no source with the exact id tir_t_audio`.
+- The sim tests do not cover the default-microphone line of the adapter (D-041 part 2); L-01 covers it.
 
 **C2d audio probes (`scripts/probe_audio.py`, Aren's laptop, 2026-10-25):**
 
