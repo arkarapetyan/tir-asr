@@ -16,11 +16,13 @@ import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import LocalEntryNotFoundError
 
+from tir_asr.errors import TirError
+
 ASR_REPO = "nvidia/stt_hy_fastconformer_hybrid_large_pc"
 ASR_FILE = "stt_hy_fastconformer_hybrid_large_pc.nemo"
 
 
-class AsrError(Exception):
+class AsrError(TirError):
     """An error of the ASR adapter. The message is `asr: <cause>`."""
 
 

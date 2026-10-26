@@ -89,14 +89,15 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-OUT-02 | §2.5: latency arithmetic. | Times with steps 0.534, 0.413, 0.177, 0.004 s. | The total comes from the raw values (1.13 s). Each printed step is the rounded raw step. | unit | PASSES |
 | T-OUT-03 | D-031: empty ASR text. | A `Line` with an empty `hy`. | `HY: (no text)`, no `EN` line, a latency line with `vad`, `asr`, and the total only. | unit | PASSES |
 | T-OUT-04 | D-024, §2.5: one write for each block. | `write_block(line, session_start, stream)` with a fake stream. | The stream gets exactly one `write` call with the full block, then one `flush` call. | unit | PASSES |
-| T-PIPE-01 | F2, F3, F5: end-to-end with fakes. | A fake source with two speech regions, fake VAD, fake ASR ("բարև"), fake MT ("hi"), fake clock. | Two blocks in time order, label "Me", the fake texts, and the latency values of the fake clock. | unit | APPROVED |
-| T-PIPE-02 | R10, §2.6: an error in a thread. | The fake ASR raises `AsrError("asr: test")`. | The program stops. The error output is `tir-asr: asr: test`. The exit code is 1. | unit | APPROVED |
-| T-PIPE-03 | D-031: no MT call for an empty text. | The fake ASR returns "". | The fake MT gets no call. One `(no text)` block. | unit | APPROVED |
-| T-PIPE-04 | §2.7: shutdown line. | One normal segment, one short segment, one empty text, then stop. | The shutdown line gives 2 segments, 1 short segment, 1 empty text. Exit code 0. | unit | APPROVED |
+| T-PIPE-01 | F2, F3, F5, §2.6, D-042: end-to-end with fakes. | 111 fake frames: p = 0.9 for frames 5–24 and 60–79, else 0.1. Fake ASR ("բարև"), fake MT ("hi"). Fake clock: session start 0.0; then ASR end, MT end, and write for each segment: 1.400, 1.500, 1.510 and 3.200, 3.300, 3.310. | `run` returns 0. The output is the "Listening" line, then two exact blocks (`[00:00:00]`: `vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s \| Total 0.71s`; `[00:00:01]`: `vad 0.51s, asr 0.13s, mt 0.10s, out 0.01s \| Total 0.75s`), then the shutdown line with 2 segments. The error output is empty. | unit | PASSES |
+| T-PIPE-02 | R10, §2.6, D-042: an error in a thread. | Three cases: (a) the fake ASR raises a `TirError` subclass with `asr: test`; (b) the fake MT raises `KeyError("x")`; (c) the fake VAD gives 1.2 (capture thread). | `run` returns 1. No block and no shutdown line. The error output is (a) `tir-asr: asr: test`; (b) a traceback, then `tir-asr: worker: KeyError: 'x'`; (c) `tir-asr: segment: probability 1.2 is not in [0, 1]`. | unit | PASSES |
+| T-PIPE-03 | D-031: no MT call for an empty text. | The input of T-PIPE-01 with only the first region. The fake ASR returns "". Clock: 0.0, then ASR end 1.400 and write 1.410. | The fake MT gets no call. One exact block: `HY: (no text)` and `vad 0.51s, asr 0.09s \| Total 0.61s`. The shutdown line has 1 segment and 1 empty text. | unit | PASSES |
+| T-PIPE-04 | §2.7, D-042: shutdown line. | 150 fake frames: a normal region (frames 5–24), a short region (frames 60–66, 224 ms), and a region with an empty text (frames 100–119). The fake ASR returns "բարև", then "". Then the source ends. | `run` returns 0. The last output line is exactly `Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0.` | unit | PASSES |
+| T-PIPE-05 | D-022, D-037, D-042: warm-up. | `warm_up(transcriber, translator, clock)` with a fake clock 10.0, 10.4, 10.5. | The fake ASR gets one call: 32000 zeros, float32. The fake MT gets one call: `WARMUP_TEXT`. The result is (0.4 s, 0.1 s). | unit | PASSES |
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, `tir_asr.output`, and `tir_asr.audio`; later branches add theirs) |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, `tir_asr.output`, `tir_asr.audio`, `tir_asr.errors`, and `tir_asr.pipeline`; later branches add theirs) |
 
 **Model (Aren's laptop):**
 
@@ -136,6 +137,9 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - T-OUT-03: the write comes 0.03 s after the ASR end. Thus the total (0.97 s) is more than `vad` + `asr` (0.94 s), and the test shows that the total counts the time to the write.
 - T-AUDIO-01: Aren selected the sim option ("no let's simulate", 2026-10-25). The limits come from the probe B numbers (D-041).
 - T-AUDIO-02 and T-AUDIO-03 are new. They test the errors of §2.1 that a sim test can make. Aren: "I approve the tests" (2026-10-26).
+- T-PIPE-01 to T-PIPE-04 now give the exact input values and the exact output (D-042). T-PIPE-02 has two new cases: an exception that is not a `TirError`, and an error in the capture thread. T-PIPE-05 is new (D-042 point 4).
+- The Ctrl+C path (D-042 point 3) has no unit test. L-02 covers it.
+- Aren approved the exact T-PIPE-01 to T-PIPE-05 texts: "accept the tests" (2026-10-26).
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
@@ -167,6 +171,12 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - **Red run:** 1 failed (T-IMPORT-01: no `tir_asr.output`), 1 collection error (`test_output.py`: `No module named 'tir_asr.output'`), 48 passed. File: `test-results/c2d-output-unit-red.txt`.
 - **Green run:** 55 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2d-output-unit.txt`.
 - [RUN] With the project layout and no `output.py`, `ruff` reports I001 on the import block of `test_output.py`. With `output.py`, the block passes. Thus a red run of a new module can show I001; the green run is the check.
+
+**C2d results (branch `c2d-pipeline`, Aren's laptop, 2026-10-26):**
+
+- **Red run:** 1 collection error (`test_pipeline.py`: `No module named 'tir_asr.errors'`), 1 failed (T-IMPORT-01: no `tir_asr.errors` and no `tir_asr.pipeline`), 55 passed. File: `test-results/c2d-pipeline-unit-red.txt`.
+- **Green run:** unit: 65 passed (T-PIPE-02 has three test functions); `ruff check --no-cache` and `ruff format --no-cache --check` pass (`test-results/c2d-pipeline-unit.txt`).
+- **Check of the adapters after the `TirError` base class:** sim: 3 passed (`test-results/c2d-pipeline-sim.txt`); model: T-MODEL-VAD-01, T-MODEL-ASR-01, T-MODEL-MT-01, and T-MODEL-ERR-01 to T-MODEL-ERR-04 pass, with `env -u LD_LIBRARY_PATH` (`test-results/c2d-pipeline-model.txt`). Thus the new import in the MT adapter does not change the cuBLAS preload.
 
 **C2d results (branch `c2d-audio`, Aren's laptop, 2026-10-26):**
 

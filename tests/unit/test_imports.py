@@ -31,6 +31,8 @@ REQUIRED = {
     "tir_asr.mt",
     "tir_asr.output",
     "tir_asr.audio",
+    "tir_asr.errors",
+    "tir_asr.pipeline",
 }
 
 CHECK = """

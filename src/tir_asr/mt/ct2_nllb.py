@@ -18,6 +18,7 @@ from importlib import metadata
 from pathlib import Path
 
 from tir_asr.config import MT_SRC_LANG, MT_TGT_LANG, Params
+from tir_asr.errors import TirError
 
 MT_REPO = "facebook/nllb-200-distilled-600M"
 MT_MODEL_DIR = Path("models") / "nllb-200-distilled-600M-ct2-float16"  # from the project folder
@@ -29,7 +30,7 @@ CUBLAS_PACKAGE = "nvidia-cublas-cu12"
 CUBLAS_FILES = ("libcublasLt.so.12", "libcublas.so.12")  # libcublas.so.12 needs libcublasLt
 
 
-class MtError(Exception):
+class MtError(TirError):
     """An error of the MT adapter. The message is `mt: <cause>`."""
 
 
