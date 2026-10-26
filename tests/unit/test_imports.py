@@ -30,6 +30,7 @@ REQUIRED = {
     "tir_asr.asr",
     "tir_asr.mt",
     "tir_asr.output",
+    "tir_asr.audio",
 }
 
 CHECK = """
