@@ -35,6 +35,8 @@ REQUIRED = {
     "tir_asr.errors",
     "tir_asr.pipeline",
     "tir_asr.cli",
+    "tir_asr.eval",
+    "tir_asr.eval.normalize",
 }
 
 CHECK = """
