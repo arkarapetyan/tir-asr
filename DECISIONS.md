@@ -999,3 +999,4 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Aren: is P4 under 5 s on the CPU? Claude: "I do not know"; the probe showed no.
   - Claude (R14): if the Mathrix team requires a CPU-only run, the program needs P1 for the CPU, as a flag (R10), so two pipelines.
 - **Revisit when:** the Mathrix team requires a CPU-only run (Q16), or the C7 live test shows slow lines or a power or temperature limit with P4.
+- **Addition (2026-10-26, end of C3, Aren):** P4 waits for the improvement stage (C6, after M3); C4 comes next. In C6, the program gets one pipeline that is suitable for both P1 and P4, with OOP abstraction and the Template Method pattern. Aren's words: "let's leave P4 for now. It will go on the improvement stage." "When we get back to P4 we want a pipeline that is suitable for both P1 and P4. You shall OOP and abstraction techniques and Template pattern to achieve this invariance." C6 proposes the design with the R7 steps.
