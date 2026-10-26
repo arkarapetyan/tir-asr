@@ -347,10 +347,15 @@ No test: `audio: no default microphone`, `audio: no default output`, `audio: no 
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
-| T-PIPE-01 to T-PIPE-05 | §2.6, D-054 (changed in C4). | `run([(source, vad)], …)`; the fake source has `label = "Me"`. | The same exact output as in §2.4. | unit | APPROVED |
-| T-PIPE-06 | F1, F5, §2.6, D-054: two sources. | Me: 50 frames, speech in frames 5–24. System: 100 frames, a short region in frames 30–36, speech in frames 60–79; it gives its first block only after Me ends. Clock: 0.0; 1.400, 1.500, 1.510; 3.200, 3.300, 3.310. | Exit code 0. "Listening"; `[00:00:00] Me` with `vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s \| Total 0.71s`; `[00:00:01] System` with `vad 0.51s, asr 0.13s, mt 0.10s, out 0.01s \| Total 0.75s`; `Stopped. Segments: 2, short segments: 1, empty texts: 0, not processed: 0.` | unit | APPROVED |
-| T-PIPE-07 | §2.6, D-054: "done" after the end of each source. | Me: 20 silent frames. System: waits for a release event, then 50 frames with speech in frames 5–24. `run()` runs in a thread. Clock: 0.0; 1.400, 1.500, 1.510. | 0.3 s after the end of Me, `run()` has not returned. After the release: exit code 0, one block `[00:00:00] System` (Total 0.71s), and `Segments: 1`. | unit | APPROVED |
-| T-PIPE-08 | §2.6, D-042, D-054: the thread name in the error line. | Me: 10 silent frames. The `blocks()` of System raises `KeyError("x")`. | Exit code 1. The error output is a traceback, then `tir-asr: capture System: KeyError: 'x'`. The output is only "Listening". | unit | APPROVED |
+| T-PIPE-01 to T-PIPE-05 | §2.6, D-054 (changed in C4). | `run([(source, vad)], …)`; the fake source has `label = "Me"`. | The same exact output as in §2.4. | unit | PASSES |
+| T-PIPE-06 | F1, F5, §2.6, D-054: two sources. | Me: 50 frames, speech in frames 5–24. System: 100 frames, a short region in frames 30–36, speech in frames 60–79; it gives its first block only after Me ends. Clock: 0.0; 1.400, 1.500, 1.510; 3.200, 3.300, 3.310. | Exit code 0. "Listening"; `[00:00:00] Me` with `vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s \| Total 0.71s`; `[00:00:01] System` with `vad 0.51s, asr 0.13s, mt 0.10s, out 0.01s \| Total 0.75s`; `Stopped. Segments: 2, short segments: 1, empty texts: 0, not processed: 0.` | unit | PASSES |
+| T-PIPE-07 | §2.6, D-054: "done" after the end of each source. | Me: 20 silent frames. System: waits for a release event, then 50 frames with speech in frames 5–24. `run()` runs in a thread. Clock: 0.0; 1.400, 1.500, 1.510. | 0.3 s after the end of Me, `run()` has not returned. After the release: exit code 0, one block `[00:00:00] System` (Total 0.71s), and `Segments: 1`. | unit | PASSES |
+| T-PIPE-08 | §2.6, D-042, D-054: the thread name in the error line. | Me: 10 silent frames. The `blocks()` of System raises `KeyError("x")`. | Exit code 1. The error output is a traceback, then `tir-asr: capture System: KeyError: 'x'`. The output is only "Listening". | unit | PASSES |
+
+**Results (branch `c4-pipeline`, Aren's laptop, 2026-10-26):** no red run (D-055).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 173 passed (`test-results/c4-pipeline-unit.txt`). `test_pipeline.py` has 10 test functions: T-PIPE-02 has three, and T-PIPE-06 to T-PIPE-08 have one each.
+- **Model** (`test-results/c4-pipeline-e2e.txt`, with `env -u LD_LIBRARY_PATH`): T-E2E-01 and T-E2E-02 pass with the new `run()` call, in 32.02 s. T-E2E-01: 2 blocks, label "Me" (one test source), totals 0.64 s and 0.62 s. T-E2E-02: exit code 0, 1.17 s after SIGINT, with the shutdown line. The C4 form of T-E2E-01 and T-E2E-02 (the labels in `load_models`, the `startup: source` lines) comes in `c4-cli`.
 
 **Branch `c4-cli`:**
 
