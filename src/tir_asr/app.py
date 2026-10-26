@@ -82,9 +82,9 @@ def main(out: TextIO | None = None, err: TextIO | None = None) -> int:
         asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
         log_line(out, f"warm-up ASR {asr_s:.2f} s, MT {mt_s:.2f} s")
 
-        from tir_asr.audio.soundcard_mic import SoundcardMicrophone
+        from tir_asr.audio.soundcard_source import SoundcardSource, default_microphone_id
 
-        microphone = SoundcardMicrophone()
+        microphone = SoundcardSource("Me", default_microphone_id())
         log_line(out, f"microphone {microphone.name}")
     except KeyboardInterrupt:
         out.write("Stopped during the startup.\n")

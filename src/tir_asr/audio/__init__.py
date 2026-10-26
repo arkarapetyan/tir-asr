@@ -1,4 +1,5 @@
-"""Audio capture: the microphone (C2) and the system audio (C4) (ARCHITECTURE.md section 2.1).
+"""Audio capture: the microphone and the system audio (ARCHITECTURE.md section 2.1).
 
-`soundcard_mic.py` is the adapter. This file does not import it.
+`soundcard_source.py` is the adapter. `devices.py` is core: it makes the text of the device
+list. This file does not import the adapter.
 """
