@@ -1,13 +1,15 @@
 """T-E2E-01, T-E2E-02: the full program with the real models (C2d, branch c2d-cli).
 
-Requirements: K1 (each total < 5 s), F2, F3, F5. Decisions: D-022, D-025, D-032, D-043. The test
-loads the models with the function of the program (`app.load_models`), does the warm-up, and
-runs the pipeline with the test WAV source: clip 1, then clip 2, at real-time speed. The gap
-between the clips is 152 + 480 = 632 ms of silence, so both segments close (D-032).
+Requirements: K1 (each total < 5 s), F2, F3, F5. Decisions: D-022, D-025, D-032, D-043, D-054.
+The test loads the models with the functions of the program (`app.log_versions`,
+`app.load_models`), does the warm-up, and runs the pipeline with the test WAV source as the one
+source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips is
+152 + 480 = 632 ms of silence, so both segments close (D-032).
 
 T-E2E-02 is the automatic form of L-02 (D-044). It starts the installed command `tir-asr` in a
-new process, with the real models and the real default microphone, waits for "Listening", and
-sends SIGINT, as Ctrl+C does. The time limits are in this test only, not in the program.
+new process, with the real models, the default microphone, and the monitor of the default
+output (no flags, D-054), waits for "Listening", and sends SIGINT, as Ctrl+C does. The time
+limits are in this test only, not in the program.
 
 Run the tests with `env -u LD_LIBRARY_PATH` (D-030). The test runs on Aren's laptop only. It imports
 the program modules inside the test function, so that CI can collect this file (D-021).
@@ -60,13 +62,14 @@ def load_wav_source():
 
 
 def test_e2e_01_full_pipeline_with_the_real_models():
-    from tir_asr.app import load_models
+    from tir_asr.app import load_models, log_versions
     from tir_asr.pipeline import run, warm_up
 
     wav_source = load_wav_source()
     params = Params()
     log = io.StringIO()
-    vad, transcriber, translator = load_models(params, log)
+    log_versions(params, log)
+    vads, transcriber, translator = load_models(params, log, ["Me"])
     for line in log.getvalue().splitlines():
         report(line)
     asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
@@ -74,7 +77,7 @@ def test_e2e_01_full_pipeline_with_the_real_models():
 
     out, err = io.StringIO(), io.StringIO()
     source = wav_source.WavSource(CLIPS)
-    code = run([(source, vad)], transcriber, translator, params, time.monotonic, out, err)
+    code = run([(source, vads[0])], transcriber, translator, params, time.monotonic, out, err)
 
     lines = out.getvalue().splitlines()
     for line in lines:
@@ -146,5 +149,10 @@ def test_e2e_02_ctrl_c_stops_the_program():
         report(line)
     report(f"exit code {code}, {stopped_s:.2f} s after SIGINT")
     assert code == 0
+    # D-054: the two sources come before "Listening", one line for each label.
+    before = program[: program.index(LISTENING)]
+    for label in ("Me", "System"):
+        found = [line for line in before if line.startswith(f"startup: source {label}: ")]
+        assert len(found) == 1, f"no single 'startup: source {label}' line: {before[-8:]}"
     # The last line of the program (not a NeMo line, not indented, not empty).
     assert program[-1].startswith("Stopped. Segments: "), program[-3:]
