@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.12 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.13 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -256,9 +256,9 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 
 No module retries, waits with a timeout, or changes to another device or model (R10).
 
-## 8. Tools outside the package
+## 8. Tools that the program does not use
 
-These tools are not part of the `tir_asr` package. The program does not use them.
+The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outside the `tir_asr` package. §8.2 is in the package (`tir_asr.eval`), so that the unit tests can import it.
 
 ### 8.1 `scripts/export_chats.py`: chat export to Markdown (D-012)
 
@@ -294,6 +294,20 @@ These tools are not part of the `tir_asr` package. The program does not use them
   - The tool does not show tool calls, tool results, thinking summaries, injected prompts, documents, or side branches (D-012, option B).
   - **[RUN]** The format facts come from one chat (C0). The final export after C8 can have a different format.
 
+### 8.2 `tir_asr.eval`: eval tools for the bake-off (C3, D-046, D-047)
+
+- **Purpose:** the bake-off of the ASR and MT candidates (PLAN C3). The rules of the core modules apply: no `laptop` import (T-IMPORT-01).
+- **Eval data (D-046):**
+  - Audio: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2), 48 kHz, mono, float32. `data/` is not in git.
+  - Labels: `data/eval/raw/<s>.labels.txt`, exported from Audacity: start (s), tab, end (s), tab, line ID.
+  - References: the Armenian and English columns of `docs/eval/scripts.md`.
+- **`normalize.py`** (branch `c3-normalize`, D-047): `normalize_hy(text: str) -> str`.
+  - Rules, in this order: (1) Unicode NFKC; (2) lowercase; (3) delete «՜» U+055C, «՛» U+055B, «՟» U+055F, and «՚» U+055A, with no space, and keep «՞» U+055E (P1); (4) «եւ» → «եվ», which also covers «և»; (5) one space for each other punctuation mark or symbol (Unicode categories P and S); (6) one space between words, and no space at the start or at the end.
+  - Digits do not change (N1).
+  - Only the Python standard library (`unicodedata`). No error: each `str` is a valid input.
+  - Limit: an ASCII «?» in place of «՞» becomes a space.
+- The next C3 branches add their contracts here.
+
 ## 9. Open points for Aren (C2)
 
 No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 (CUDA 12 cuBLAS), D-031 (empty ASR text), D-032 (end of a test WAV clip), D-033 (`mt_beam_size`), D-034 (no keys in the MVP; decide after M3).
@@ -315,3 +329,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.10 | 2026-10-26 | C2d, branch `c2d-cli` (§2, §2.7, §7), D-043: `cli.py` and `app.py`; the startup sequence with its lines and places; the load order ASR, MT, VAD; the GPU memory; the NeMo lines; the errors and Ctrl+C during the startup; the `tir-asr` command. |
 | 0.11 | 2026-10-26 | C2d, branch `c2d-cli` (§2.6, §4, §5), D-044: the main thread waits with the time limit `STOP_POLL_S` (0.5 s) in a loop, so that Ctrl+C works; T-E2E-02. |
 | 0.12 | 2026-10-26 | C2d, branch `c2d-cli` (§2.7), D-045: the launcher `run.sh`. |
+| 0.13 | 2026-10-26 | C3, branch `c3-normalize` (§8), D-046 and D-047: §8 is now "Tools that the program does not use"; new §8.2 with the eval data and `normalize_hy`. |

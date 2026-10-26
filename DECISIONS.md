@@ -830,3 +830,64 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A.
 - **Reason (Aren's words):** "agree on D45".
 - **Revisit when:** C4 (device flags go through `"$@"`), or C8 (the README setup steps).
+
+## D-046. Eval data: labels and how the eval uses them (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B
+- **Context:** WER needs the ASR text and the reference text of the same audio. Aren recorded S1–S3 (`docs/eval/scripts.md`) with one file for each side: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2; Google Meet for S1, Telegram for S2 and S3). The folder had no label files.
+- **Facts [RUN, read-only check of the 6 files, 2026-10-26]:**
+  - 48 kHz, mono, float32 (WAV format 3). Each mic file has the same length as its call file: S1 70.66 s, S2 62.81 s, S3 59.05 s.
+  - `s1.mic.wav` has 500 samples at |x| ≥ 0.999 (clipping, Q-11). The other 5 files have a peak of 0.62–0.99.
+  - The call files have no echo of Aren's voice (5 places checked, correlation ≤ 0.07).
+  - S1: the two sides speak at the same time three times, for 0.35–1.1 s (Aren's interruptions, on purpose). Source: a level check, not the VAD.
+  - S1 call side: the pauses between Speaker 1 and Speaker 2 are 0.38–0.99 s. The pause s1-13 → s1-14 (0.38 s) is shorter than `vad_min_silence_ms`.
+  - S1–S3 have 34 lines and 397 Armenian words: 15 lines on the mic side, 19 lines on the call side. Aren counts each line as one recording, so D-019 ("at least 20 recordings") is met. S4 can come later.
+  - `data/eval/raw/s1.wav` is a mix that Aren made. The eval does not use it.
+- **Options:**
+  - **A.** The text of the full side, with no labels. Weak point: one number for each file only.
+  - **B.** Labels by Aren in Audacity. Weak points: 20–30 min of the time budget [UNVERIFIED estimate]; manual errors in the times.
+  - **C.** An automatic split into runs at silences of 1.5 s or more, with a count check. Weak points: a new eval constant; one number for two lines on the S1 call side; a long pause or a short turn gives a wrong count.
+- **Claude's preference:** C. Fact that can show it is wrong: the run count fails on 2 or more of the 6 files.
+- **Decision:** B, with these rules:
+  1. **Label files:** one file for each script, `data/eval/raw/<s>.labels.txt`, exported from Audacity: start (s), tab, end (s), tab, line ID with no "†". One label for each line. Two labels can overlap (interruptions). The eval stops with an error on an unknown ID, a missing ID, a repeated ID, or a line in a different format.
+  2. **Main numbers:** the program's VAD (`Params()`) cuts each full file into segments, as in the live program. The eval joins the texts of a file in time order and compares them with the reference lines of that side in script order. This gives WER, CER, and chrF for each file, each side, and the full set. A label error does not change these numbers.
+  3. **Line view:** each segment goes to the line label with the largest time overlap on its side. This gives the numbers for each line and the segments of each line (Q15). The main numbers do not use the line view, because one segment can hold two lines (s1-13 + s1-14).
+  4. **Interruptions:** S1 is not edited. Each side is in its own file, so an interruption does not mix two voices in the ASR input. The table shows S1 separately.
+- **Reason (Aren's words):** "Let me do the labelling in audacity no problem just tell me how". "Ok I agree on D46".
+- **Questions raised:**
+  - Aren: do the two files need a mix into one file? Claude: no. The program has two sources (F1); a mix loses the side of each word; the C4 sim tests and C5 need the separate files; the resample is an eval step with a test.
+  - Aren offered to edit the S1 interruptions out. Claude: keep them (point 4). Aren agreed.
+  - Claude (R14) named the main risk of B one time: the time in the budget.
+- **Revisit when:** the joined-text WER is lower than the true WER because the alignment matches words of different lines; or S4 gets recorded (then it gets its labels).
+
+## D-047. Armenian text normalization for WER and CER (C3)
+
+- **Status:** ACCEPTED (2026-10-26), rules 1 to 6 with option P1 and option N1
+- **Context:** PLAN C3, step 1. WER and CER compare the ASR text with the reference text. Punctuation, case, and spelling variants must not count as word errors, except where we decide so.
+- **Facts [RUN, Python `unicodedata`, Unicode 15.1; counts from the 44 lines of `docs/eval/scripts.md`]:**
+  - The references have these marks: «։» U+0589 (102), «,» (62), «՞» U+055E (17), «՝» U+055D (4), « and » (1 pair), «՜» U+055C (1). They have no digits.
+  - «՞» and «՜» are inside the word, on the stressed vowel («Լսո՞ւմ», «Վա՜յ»). A space in their place makes two words.
+  - «և» U+0587 (15 times) is one character. NFKC changes it to «եւ». It has no capital form: the reference writes «Եվ», and `"Եվ".lower()` gives «եվ».
+  - «՞» is the only mark that shows a question: a question also ends with «։» (s3-08). In S1–S3, 12 of the 34 lines have one «՞».
+- **Rules, in this order:**
+  1. Unicode NFKC (it also opens the ligatures U+FB13 to U+FB17).
+  2. Lowercase.
+  3. Delete «՜» U+055C, «՛» U+055B, «՟» U+055F, and «՚» U+055A, with no space. Keep «՞» U+055E.
+  4. «եւ» → «եվ». After rule 1, this also covers «և». Assumption [UNVERIFIED]: modern spelling uses «ւ» only in «ու».
+  5. One space for each other punctuation mark or symbol (Unicode categories P and S).
+  6. One space between words, and no space at the start or at the end.
+- **Options for «՞»:**
+  - **P1.** Keep «՞» in the word. Weak points: a correct word with no «՞» counts as one full word error; WER then measures the words and the questions together; a «՞» on a different word gives two errors.
+  - **P2.** Delete «՞» for WER and CER, and count the questions separately, for ASR («՞») and for MT («?»). Weak point: two numbers for the ASR decision.
+  - **P3.** Move «՞» to its own word. Weak points: WER counts a mark as a word; a «՞» on a different word gives two errors.
+- **Options for numbers:**
+  - **N1.** No rule. The eval shows the number of words with digits for each model. Weak point: "8-ին" for «ութին» counts as an error, but the recognition was correct.
+  - **N2.** A converter from digits to Armenian words, with the case endings. Weak points: more code and tests; the rules need a source; compound number words.
+  - **N3.** A second reference with digits. Weak point: WER with two references is more complex.
+- **Claude's preference:** P2. Fact that can show it is wrong: we cannot decide D-ASR from WER and the question count together. N1. Fact that can show it is wrong: a candidate writes 3 or more words with digits on S1–S3.
+- **Decision:** rules 1 to 6, P1, N1. Function `normalize_hy` in `src/tir_asr/eval/normalize.py`. Tests T-NORM-01 to T-NORM-09 (`TESTS.md` §2.5).
+- **Reason (Aren's words):** "6. I agree, but, U+055E is important as it shows that the sentence is a question so we must not get rid of it". "I am for option P1, let's keep the question mark, but we can get rid of the other symbols". On numbers: "Yes no rule for numbers".
+- **Questions raised:**
+  - Claude: the normalization changes only the two texts that WER and CER compare. The program output and the MT input keep «՞».
+  - Claude: known limit of P1: an ASCII «?» in place of «՞» becomes a space, so the word does not match the reference word.
+- **Revisit when:** a candidate writes 3 or more words with digits on S1–S3 (N2); the ASR outputs show «?» in place of «՞»; or a «՞» on a different word changes the ASR ranking.

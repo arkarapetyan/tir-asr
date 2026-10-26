@@ -240,6 +240,30 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
   - Segment 1 closes in the silence at the start of clip 2. The silence between the two segments is 608 ms (19 frames), which is 3 frames more than the 16 frames of the rule. The pause of 448 ms inside clip 1 did not split it.
   - The VAD silence after the speech of clip 2 is 896 ms, so segment 2 closes inside the clip.
 
+### 2.5 Eval tools (C3)
+
+Decisions: D-046 (labels and their use), D-047 (Armenian normalization: option P1 for «՞», option N1 for numbers). Aren approved T-NORM-01 to T-NORM-09 on 2026-10-26.
+Module: `src/tir_asr/eval/normalize.py`, function `normalize_hy(text) -> str`. Test file: `tests/unit/test_normalize.py`. The program does not import `tir_asr.eval`.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-NORM-01 | D-047 rule 1: NFKC. | «ﬓա» (U+FB13 + «ա»), and U+FB14 to U+FB17 | «մնա», «մե», «մի», «վն», «մխ» | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-02 | D-047 rule 2: lowercase. | «Բարև ԵՐԵՎԱՆ OK» | «բարեվ երեվան ok» | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-03 | D-047 rule 4: one form for «և». | «և», «եւ», «Եվ», «ԵՎ», «ԵՒ»; «Երևան», «Երեւան», «Երեվան»; «ուր», «Լսում» | «եվ» five times; «երեվան» three times; «ուր», «լսում» (no change to «ու») | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-04 | D-047 rule 3 (P1): the marks inside a word go, except «՞». | «Լսո՞ւմ», «ԼՍՈ՞ՒՄ»; «Վա՜յ»; «ե՛ս»; one test word with U+055F and one with U+055A; «լսում ՞» | «լսո՞ւմ» two times; «վայ»; «ես»; the mark goes, with no space; «լսում ՞» («՞» alone stays as its own word) | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-05 | D-047 rule 5: each other mark becomes a space. | «Բարև, տղերք։ Լսո՞ւմ եք ինձ։»; «այսօր՝ մինչև»; «երկու-մեկ», «երկու֊մեկ»; «Նռնենի» in the quotes « and »; each of the marks `.` `,` `:` `;` `?` `!` `"` «…» «—» «։» «՝» « » between two letters | «բարեվ տղերք լսո՞ւմ եք ինձ»; «այսօր մինչեվ»; «երկու մեկ» two times; «նռնենի»; one space for each mark | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-06 | D-047 rule 6: one space between words. | tabs, new lines, several spaces, and spaces at the ends; «։ ,»; an empty text | «ա բ գ»; an empty text; an empty text | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-07 | D-047 N1: digits do not change. | «ժամը 8-ին» | «ժամը 8 ին» | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-08 | D-047 rules 3 and 5: a word stays one word. | each Armenian line of S1–S4 in `docs/eval/scripts.md` (44 lines) | The same number of words as the words with a letter in the input. Only lowercase Armenian letters (U+0561–U+0586), «՞», and single spaces. | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-NORM-09 | D-047: a stable result. | each line of T-NORM-08 | A second run changes nothing. | unit | PASSES (Aren's laptop, 2026-10-26) |
+
+Notes:
+
+- **Results (Aren's laptop, 2026-10-26):** red run 47 failed, each with `NotImplementedError`, and 15 passed (T-IMPORT-01) (`test-results/c3-norm-red.txt`). Green run: `ruff check` and `ruff format --check` pass; 118 unit tests pass (`test-results/c3-norm-green.txt`).
+- **Red state:** a stub `normalize_hy` raises `NotImplementedError`, so that each test runs and fails alone. T-IMPORT-01 adds `tir_asr.eval` and `tir_asr.eval.normalize` to `REQUIRED`.
+- **T-NORM-08** reads `docs/eval/scripts.md`. A change of the script table can change the result of this test.
+- **Known limit (P1):** an ASCII «?» in place of «՞» becomes a space. Then the word does not match the reference word, and WER counts an error.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
