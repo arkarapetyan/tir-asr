@@ -777,5 +777,5 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
      - Claude's preference: B. Weak point: one line changes in each of four merged modules; their tests do not change.
   7. **Signature.** `run(source, vad, transcriber, translator, params, clock, out, err) -> int`. `run()` builds the `Endpointer` (§2.6). One capture thread and one worker thread (§4). The main thread waits on one event queue for "error" or "done".
 - **Decision:** A in points 1 and 2; B in point 6; points 3, 4, 5, and 7 as proposed; T-PIPE-05 is new. The branch `c2d-pipeline` holds `errors.py`, `pipeline.py`, the four base-class lines, and T-PIPE-01 to T-PIPE-05. `app.py` and `parameter_lines` go to `c2d-cli`.
-- **Reason (Aren's words):** "1. A is the best option", "2. A", "6. B", "continue" (points 3, 4, 5, 7, and T-PIPE-05).
+- **Reason (Aren's words):** "1. A is the best option", "2. A", "6. B", "continue" (points 3, 4, 5, 7, and T-PIPE-05). On the main risk of point 3: "accept point 3 risk".
 - **Revisit when:** C4 (two capture threads on one worker), or L-02 shows lost lines at Ctrl+C.
