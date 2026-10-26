@@ -301,6 +301,20 @@ T-IMPORT-01 adds `tir_asr.eval.data` to `REQUIRED`.
 
 **Results (Aren's laptop, 2026-10-26):** no red run (D-050). Green run: `ruff check` and `ruff format --check` pass; 161 unit tests pass (`test-results/c3-data-green.txt`).
 
+**`run.py`** (branch `c3-run`, D-046, D-048, D-051). Aren approved T-RUN-01 to T-RUN-05 on 2026-10-26. Test file: `tests/unit/test_run.py`. D-050: tests and code in one step, with no red run.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-RUN-01 | Segments in audio time, with the end rule (D-048). | 3.0 s of audio; a fake VAD gives 1.0 for a frame with a peak over 0.1; loud frames 10–39, and loud from frame 80 to the end of the audio | 2 segments; the first has start 0.320 s and speech end 1.280 s; the second (start 2.560 s) closes because of the 1.0 s of zeros | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-RUN-02 | ASR and MT calls (D-031). | 3 fake segments; ASR «ա», «», «բ»; MT "A"; a fake clock that each model call moves by 0.1 s | ASR texts in order; English "A", "", "A"; 2 MT calls only; times 0.1, 0.0, 0.1 s | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-RUN-03 | Main numbers on the joined text (D-046 point 2). | refs «ա բ» (0–2 s) and «գ դ» (3–5 s); segment texts «ա բ գ» (0–3.5 s) and «դ» (4–5 s) | WER 0.0; line view: line 1 WER 0.5, line 2 WER 0.5 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-RUN-04 | Segment outside each label. | the labels of T-RUN-03; a third segment 6–7 s with «ե» | 1 segment outside; the main WER is 1/4 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-RUN-05 | Time numbers. | segment audio 2.0 s and 3.0 s; ASR 0.1 s and 0.3 s; MT 0.2 s and 0.4 s | audio 5.0 s; ASR RTF 0.08; ASR mean 0.2 s, maximum 0.3 s; MT mean 0.3 s, maximum 0.4 s | unit | PASSES (Aren's laptop, 2026-10-26) |
+
+T-IMPORT-01 adds `tir_asr.eval.run` to `REQUIRED`.
+
+**Results (Aren's laptop, 2026-10-26):** no red run (D-050). Green run: `ruff check` and `ruff format --check` pass; 167 unit tests pass (`test-results/c3-run-green.txt`). The first bake-off runs (`nemo-rnnt` + `nllb-ct2`, and `nllb-ct2` on the reference text) ran with no error (`test-results/c3-bake-rnnt-nllb.txt`, `test-results/c3-bake-ref-nllb.txt`). The results table comes at the end of C3.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
