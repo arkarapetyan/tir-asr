@@ -837,6 +837,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Context:** WER needs the ASR text and the reference text of the same audio. Aren recorded S1–S3 (`docs/eval/scripts.md`) with one file for each side: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2; Google Meet for S1, Telegram for S2 and S3). The folder had no label files.
 - **Facts [RUN, read-only check of the 6 files, 2026-10-26]:**
   - 48 kHz, mono, float32 (WAV format 3). Each mic file has the same length as its call file: S1 70.66 s, S2 62.81 s, S3 59.05 s.
+    - **Correction (2026-10-26, D-048):** at this check, the S2 files and the S3 files had the names of the other script. Aren corrected the names. The correct lengths are S2 59.05 s and S3 62.81 s.
   - `s1.mic.wav` has 500 samples at |x| ≥ 0.999 (clipping, Q-11). The other 5 files have a peak of 0.62–0.99.
   - The call files have no echo of Aren's voice (5 places checked, correlation ≤ 0.07).
   - S1: the two sides speak at the same time three times, for 0.35–1.1 s (Aren's interruptions, on purpose). Source: a level check, not the VAD.
@@ -891,3 +892,20 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude: the normalization changes only the two texts that WER and CER compare. The program output and the MT input keep «՞».
   - Claude: known limit of P1: an ASCII «?» in place of «՞» becomes a space, so the word does not match the reference word.
 - **Revisit when:** a candidate writes 3 or more words with digits on S1–S3 (N2); the ASR outputs show «?» in place of «՞»; or a «՞» on a different word changes the ASR ranking.
+
+## D-048. Eval references for the cut ends of S2 and S3 (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** Aren made the labels (D-046). Two recordings stop before the end of the last line:
+  - s2-10 ("Me", mic side) stops after «Շնորհակալ». «եմ, ցտեսություն» is not in the audio.
+  - s3-10 (Speaker 1, call side) stops inside the last word: the audio has «քե», not «քեզ».
+  - [RUN] The last label of s1-14, s2-10, and s3-10 ends at the end of its file, so these sides end during speech. The VAD closes a segment only after `vad_min_silence_ms` of silence (D-027). The eval audio step needs a rule for the end of a file (proposal with that component).
+  - Aren also corrected the S2 and S3 file names (correction in D-046), and he changed `docs/eval/scripts.md` so that the references agree with the recordings.
+- **Options:**
+  - **A.** Make the references the same as the audio (the rule "Changes" in `docs/eval/scripts.md`). s2-10: «Անպայման։ Շնորհակալ», "Definitely. Thank you". s3-10: «… Վաղն առավոտյան կզանգեմ քե»; the English does not change, because a translation of a part of a word has no correct form. A note under each table gives the original script text. Weak points: the table no longer shows the full text for a new recording; a part of a word in a reference is unusual (a model that writes «քեզ» gets one error).
+  - **B.** Remove s2-10 and s3-10 from all numbers. Weak points: the main numbers then depend on the labels (against D-046 point 2); 2 lines fewer.
+  - **C.** Record the two ends again. Weak points: time, the other speaker, and new labels.
+- **Claude's preference:** A. All models get the same audio, so the effect on the comparison is equal (about 3 of 397 words). Fact that can show A is wrong: a new recording of S2 or S3 (for example in C5) needs the full text.
+- **Decision:** A.
+- **Reason (Aren's words):** "Agree on A for the cut ends". On the file names: "yes the wrong names were wrong".
+- **Revisit when:** a new recording of S2 or S3 needs the full script text.
