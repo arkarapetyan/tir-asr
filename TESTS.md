@@ -93,7 +93,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-PIPE-02 | R10, §2.6, D-042: an error in a thread. | Three cases: (a) the fake ASR raises a `TirError` subclass with `asr: test`; (b) the fake MT raises `KeyError("x")`; (c) the fake VAD gives 1.2 (capture thread). | `run` returns 1. No block and no shutdown line. The error output is (a) `tir-asr: asr: test`; (b) a traceback, then `tir-asr: worker: KeyError: 'x'`; (c) `tir-asr: segment: probability 1.2 is not in [0, 1]`. | unit | APPROVED (cases b and c are new: D-042, Aren reviews) |
 | T-PIPE-03 | D-031: no MT call for an empty text. | The input of T-PIPE-01 with only the first region. The fake ASR returns "". Clock: 0.0, then ASR end 1.400 and write 1.410. | The fake MT gets no call. One exact block: `HY: (no text)` and `vad 0.51s, asr 0.09s \| Total 0.61s`. The shutdown line has 1 segment and 1 empty text. | unit | APPROVED |
 | T-PIPE-04 | §2.7, D-042: shutdown line. | 150 fake frames: a normal region (frames 5–24), a short region (frames 60–66, 224 ms), and a region with an empty text (frames 100–119). The fake ASR returns "բարև", then "". Then the source ends. | `run` returns 0. The last output line is exactly `Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0.` | unit | APPROVED (exact text: D-042, Aren reviews) |
-| T-PIPE-05 | D-022, D-037, D-042: warm-up. | `warm_up(transcriber, translator, clock)` with a fake clock 10.0, 10.4, 10.5. | The fake ASR gets one call: 32000 zeros, float32. The fake MT gets one call: `WARMUP_TEXT`. The result is (0.4 s, 0.1 s). | unit | DESIGNED |
+| T-PIPE-05 | D-022, D-037, D-042: warm-up. | `warm_up(transcriber, translator, clock)` with a fake clock 10.0, 10.4, 10.5. | The fake ASR gets one call: 32000 zeros, float32. The fake MT gets one call: `WARMUP_TEXT`. The result is (0.4 s, 0.1 s). | unit | APPROVED |
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
 | T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
 | T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
@@ -139,6 +139,7 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - T-AUDIO-02 and T-AUDIO-03 are new. They test the errors of §2.1 that a sim test can make. Aren: "I approve the tests" (2026-10-26).
 - T-PIPE-01 to T-PIPE-04 now give the exact input values and the exact output (D-042). T-PIPE-02 has two new cases: an exception that is not a `TirError`, and an error in the capture thread. T-PIPE-05 is new (D-042 point 4).
 - The Ctrl+C path (D-042 point 3) has no unit test. L-02 covers it.
+- Aren approved the exact T-PIPE-01 to T-PIPE-05 texts: "accept the tests" (2026-10-26).
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
