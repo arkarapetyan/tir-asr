@@ -39,6 +39,7 @@ REQUIRED = {
     "tir_asr.eval.normalize",
     "tir_asr.eval.metrics",
     "tir_asr.eval.data",
+    "tir_asr.eval.run",
 }
 
 CHECK = """

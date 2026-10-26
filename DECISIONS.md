@@ -940,3 +940,19 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "in order to save time, you'll write the tests and then immediately implement the files so I only run the green run".
 - **Questions raised:** Claude (R14) named the conflict with R5 and the risk one time.
 - **Revisit when:** C4 starts, or a test that cannot fail is found.
+
+## D-051. Structure of the bake-off (C3)
+
+- **Status:** ACCEPTED (2026-10-26); Aren changed point 4 on the same day
+- **Context:** D-049 (option B) needs one runner for 5 ASR variants and 3 MT models, with the same segments as the program.
+- **Options:**
+  - **A.** A core module with unit tests, a thin runner script, and one adapter module for each candidate.
+  - **B.** One script, with no core module and no unit tests. Weak points: against R5; no test for the joined-text rule of D-046.
+- **Claude's preference:** A. Weak point: with no separate model test, an adapter problem shows only in the bake-off run. Fact that can show it is wrong: an adapter fails in a way that a model test would have found earlier.
+- **Decision:** A:
+  1. `src/tir_asr/eval/run.py` (core, no `laptop` import, unit tests with fakes): the segments with the end rule, in audio time; the ASR and MT calls with their times (no MT call for an empty text, D-031); the main numbers on the joined text, the line view, and the time numbers.
+  2. `scripts/bakeoff.py` (model level): `--asr <name> --mt <name> [--mt-input asr|reference]`. S1–S3, both sides. It writes `test-results/bakeoff/<asr>+<mt>.json`. Load order ASR, MT, VAD (D-043).
+  3. Candidate adapters in `src/tir_asr/eval/`, in `ADAPTERS` of T-IMPORT-01. No separate model test: the bake-off run is their model-level check, and it stops loudly at an error (R10).
+  4. Branches: `c3-run` (core, runner, and the program adapters `nemo-rnnt` and `nllb-ct2`), then one branch `c3-candidates` with one commit for each candidate (its adapter, its runner line, and its §8.2 line). First proposal: one branch for each candidate.
+- **Reason (Aren's words):** "agree D51 and tests". On point 4: "agree for one branch for all candidates".
+- **Revisit when:** a candidate adapter fails in a way that a model test would have found earlier.
