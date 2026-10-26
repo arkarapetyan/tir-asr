@@ -782,7 +782,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 
 ## D-043. CLI, startup log, and the end-to-end test (C2d)
 
-- **Status:** ACCEPTED (2026-10-26), points 1 to 6. Point 2a is open.
+- **Status:** ACCEPTED (2026-10-26), points 1 to 6 and 2a
 - **Context:** D-042 put the loading of the adapters and the startup log into a new module `app.py`, and `cli.py` is only the `argparse` interface (D-037). The branch `c2d-cli` needs the details, and T-CFG-02, T-CLI-01, and T-E2E-01 need exact texts.
 - **Points and Claude's proposals:**
   1. **`cli.py`.** `main(argv=None) -> int` with `argparse` (`prog="tir-asr"`, no flags except `--help`). After the parse, it imports `app` and returns `app.main()`. `pyproject.toml` gets `[project.scripts] tir-asr = "tir_asr.cli:main"`. Weak point: after this change, `uv sync` must run one time, so that the command gets installed. It is [UNVERIFIED] that `uv.lock` does not change; if it must change, `uv sync --locked` in CI fails loudly.
@@ -795,6 +795,6 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   4. **Errors and Ctrl+C during the startup.** A `TirError` gives `tir-asr: <message>` and exit code 1 (§7). Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>` and exit code 1 (the rule of D-042 point 6). Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
   5. **T-E2E-01.** A test WAV source in `tests/support/wav_source.py` (D-025) plays clip 1, then clip 2, at real-time speed. Each block gets its true `time.monotonic()` arrival, and the source drops a last part of a clip that is shorter than one frame (D-032). The test loads the models with the function of the program (`app.load_models`), so `app.py` gets coverage. Expected: 2 blocks in time order, label "Me", no `(no text)`, and each total < 5.0 s.
   6. **Unit tests.** T-CFG-02: `parameter_lines(Params())` in `config.py`. T-CLI-01: (a) `main(["--help"])` in a new process, with no `laptop` import; (b) the installed command. T-IMPORT-01: `tir_asr.cli` in `REQUIRED`, `tir_asr.app` in `ADAPTERS`.
-- **Decision:** points 1 to 6 as proposed, with A in point 3. Point 2a: Aren decides.
-- **Reason (Aren's words):** "1. agree", "2. agree", "3. A", "4. agree", "5. agree", "6. agree".
+- **Decision:** points 1 to 6 as proposed, with A in point 3. Point 2a: the new proposal (ASR, then MT, then VAD).
+- **Reason (Aren's words):** "1. agree", "2. agree", "3. A", "4. agree", "5. agree", "6. agree". Point 2a: "agree on 2a".
 - **Revisit when:** C7 (the NeMo lines at the interview), or T-E2E-01 fails at a model load.
