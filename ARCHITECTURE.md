@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.7 · **Date:** 2026-10-25
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.8 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -40,17 +40,25 @@ Each error class has the module name in its message: `<module>: <cause>`.
 ### 2.1 `audio`
 
 - **C2 source:** the default microphone of PulseAudio (PipeWire). The startup log gives its name. Device selection flags come in C4 (F1).
-- **Adapter** `audio/soundcard_mic.py`: `soundcard` recorder with `samplerate=16000`, `channels=1`, `blocksize=512`. Each `record(numframes=512)` gives one `AudioBlock`.
-- **Contract:** each block has exactly 512 float32 samples (32 ms at 16 kHz, mono) and the `time.monotonic()` value at its arrival.
+- **Adapter** `audio/soundcard_mic.py` (`SoundcardMicrophone(device=None)`, D-041): `soundcard` 0.4.6 recorder with `samplerate=16000`, `channels=1`, `blocksize=512`. Each `record(numframes=512)` gives one `AudioBlock`.
+  - **Constructor:** it imports `soundcard` and selects the source, so that the errors come at startup. With no `device`, it uses the default microphone. A `device` must be an exact source id among all sources, monitors included (for example `<sink>.monitor`). The adapter checks the exact id first, because `soundcard.get_microphone` also accepts a part of the name or a regex match [SOURCE: `soundcard` 0.4.6], which can select a different device with no error (R10).
+  - **`blocks()`:** it opens the stream, then gives blocks until the caller closes the iterator. The stream keeps all audio from the moment it opens, with no limit [SOURCE], so it must not open before "Listening".
+  - The attribute `name` gives the device name for the startup log.
+- **Contract:** each block has exactly 512 float32 samples in an array of shape (512,) (32 ms at 16 kHz, mono), the label `"Me"`, and the `time.monotonic()` value at its arrival. `soundcard` gives (512, 1); the adapter makes it flat.
 - **Errors:**
-  - `audio: cannot connect to the PulseAudio server` (the `soundcard` import fails with an `AssertionError`) [RUN].
+  - `audio: cannot connect to the PulseAudio server` (the `soundcard` import fails with an `AssertionError`) [RUN]. T-AUDIO-02.
   - `audio: no default microphone`.
-  - `audio: recording failed` (`soundcard` raises `RuntimeError` when the stream fails) [SOURCE].
+  - `audio: no source with the exact id <id>`. T-AUDIO-03.
+  - `audio: recording failed: <cause>` (`soundcard` raises `RuntimeError` when the stream fails) [SOURCE].
   - `audio: block has <n> samples, expected 512`.
 - **Limits:**
-  - PulseAudio converts the device rate to 16 kHz mono. The quality of this conversion is [UNVERIFIED]. C4 tests the call path.
+  - PulseAudio converts the device format to 16 kHz mono. [RUN] A 440 Hz tone through a null sink (2 channels, 48 kHz) keeps its frequency and its level (probe B, T-AUDIO-01). C4 tests the call path.
+  - [RUN] The arrival gaps alternate between about 21 ms and 43 ms, with a mean of 32 ms (probe B). Thus an arrival time can be up to about 11 ms late against an even 32 ms grid.
+  - [RUN] A monitor with no audio gives blocks of zeros (probe B). Thus the `Endpointer` can close a segment during a silence on the system side (C4).
+  - [RUN] The samples can be a little outside [−1, 1]: the default microphone gave −1.0496 (probe B, Q-11). The adapter does not clip them (D-041).
+  - The sim tests do not cover the default-microphone line; L-01 covers it.
   - When PulseAudio reports lost audio, `soundcard` fills the gap with zeros and gives no warning [SOURCE: `soundcard` 0.4.6]. The program cannot see this loss. C4 tests for drift and loss.
-  - The arrival time does not include the time between the sound and the arrival of its block (device and server buffers) [UNVERIFIED size]. Thus the measured latency is a little lower than the real latency.
+  - The arrival time does not include the time between the sound and the arrival of its block (device and server buffers). [RUN] `soundcard` gives a stream latency of 21–44 ms (probe B). Thus the measured latency is up to about 44 ms lower than the real latency.
 
 ### 2.2 `segment`
 
@@ -137,7 +145,7 @@ Each error class has the module name in its message: `<module>: <cause>`.
 
 ## 3. Data types (core, `types.py`)
 
-All times are `time.monotonic()` values in seconds. All audio is float32, mono, 16 kHz, in [−1, 1].
+All times are `time.monotonic()` values in seconds. All audio is float32, mono, 16 kHz, normally in [−1, 1]. A loud input can give values a little outside (probe B: −1.0496, D-041).
 
 | Type | Field | Type | Meaning |
 |---|---|---|---|
@@ -217,7 +225,7 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | `cli` | `asr: CUDA is not available` | Stops before the microphone opens (exit code 1). |
 | `asr`, `mt` | model file or folder not found | Stops at startup (exit code 1). |
 | `mt` | `libcublas.so.12 not found …` | Stops at startup (exit code 1). |
-| `audio` | cannot connect to PulseAudio; no default microphone | Stops at startup (exit code 1). |
+| `audio` | cannot connect to PulseAudio; no default microphone; no source with the exact id | Stops at startup (exit code 1). |
 | `audio` | recording failed | Stops (exit code 1). |
 | any thread | any other exception | Stops with `tir-asr: <module>: <cause>` (exit code 1). |
 | `segment` | segment under `vad_min_speech_ms` | No output; counted in the shutdown line. |
@@ -278,3 +286,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.5 | 2026-10-25 | C2c, D-037: adapter class names `NemoRnntTranscriber` and `Ct2NllbTranslator`; the constructors load the models (§2.3, §2.4); no warm-up method in the adapters, the pipeline makes the warm-up calls (§2.6); `cli.py` is only the `argparse` interface (§2.7); `verbose=False` for NeMo (§2.3). Status line: the v0.4 changes apply D-036. |
 | 0.6 | 2026-10-25 | C2c, branch `c2c-mt` (§2.4): the default `model_dir` is relative to the project folder; the check for `model.bin`; the conversion command in the error message; the cuBLAS error names the missing file. |
 | 0.7 | 2026-10-25 | C2d, branch `c2d-output` (§2.5), D-040: `format_block(line, session_start)` and `write_block(line, session_start, stream)`; a blank line after each block; the seconds of the block time are cut. |
+| 0.8 | 2026-10-26 | C2d, branch `c2d-audio` (§2.1, §3, §7), D-041: `SoundcardMicrophone(device=None)` with an exact device id; the stream opens in `blocks()`; blocks of shape (512,); the error for a missing exact id; the probe B numbers in the limits; audio "normally in [−1, 1]". |

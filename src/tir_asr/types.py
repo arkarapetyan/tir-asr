@@ -1,7 +1,8 @@
 """Data types and interfaces of the core (ARCHITECTURE.md section 3).
 
 All times are `time.monotonic()` values in seconds. All audio is float32, mono, 16 kHz,
-in [-1, 1]. This module imports no model and no audio-device package (D-021).
+normally in [-1, 1]; a loud input can give values a little outside (D-041). This module imports
+no model and no audio-device package (D-021).
 """
 
 from collections.abc import Iterator
