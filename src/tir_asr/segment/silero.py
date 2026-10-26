@@ -1,6 +1,6 @@
 """Silero VAD adapter: the SpeechProbability on the CPU (ARCHITECTURE.md section 2.2).
 
-This module imports `torch` and `silero_vad`. Only the CLI and the model tests import it.
+This module imports `torch` and `silero_vad`. Only `app.py` and the model tests import it.
 The core modules do not (D-021, T-IMPORT-01).
 
 `silero_vad` sets the PyTorch CPU threads to 1 at import [RUN]. The startup log shows the

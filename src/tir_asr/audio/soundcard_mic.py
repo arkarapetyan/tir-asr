@@ -6,7 +6,7 @@ and blocks of 512 samples; PulseAudio converts the device format. Each block get
 
 This module imports `soundcard` inside the constructor, not at the top of the file: `soundcard`
 connects to the server at import and, with no server, fails with a bare `AssertionError`
-(D-041, part 5). Only the CLI and the sim tests use this module. The core modules do not
+(D-041, part 5). Only `app.py` and the sim tests use this module. The core modules do not
 (D-021, T-IMPORT-01).
 """
 

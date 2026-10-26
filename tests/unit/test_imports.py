@@ -19,6 +19,7 @@ ADAPTERS = {
     "tir_asr.asr.nemo_rnnt",
     "tir_asr.mt.ct2_nllb",
     "tir_asr.audio.soundcard_mic",
+    "tir_asr.app",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.
@@ -33,6 +34,7 @@ REQUIRED = {
     "tir_asr.audio",
     "tir_asr.errors",
     "tir_asr.pipeline",
+    "tir_asr.cli",
 }
 
 CHECK = """

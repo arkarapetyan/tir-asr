@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.9 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.10 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -34,7 +34,8 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `output` | core | `Line` | one text block | none | §2.5 |
 | `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
 | `errors` | core | — | `TirError`, the base class of the module errors | — | §2.6 |
-| `cli` | core | command line | startup log, exit code | `ConfigError` | §2.7 |
+| `cli` | core | command line | calls `app.main()`; its exit code | — (`argparse` stops on a wrong argument) | §2.7 |
+| `app` | loads the adapters (in `ADAPTERS` of T-IMPORT-01) | the adapters | startup log, exit code | the error line (§7) | §2.7 |
 
 Each error class has the module name in its message: `<module>: <cause>`. Each error class inherits from `TirError` in `errors.py` (D-042).
 
@@ -137,18 +138,28 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the written blocks. An output lock makes the shutdown line the last line.
 - **Errors (D-042):** the first exception in a thread stops the program. `run()` writes the error line to `err` and returns 1, with no shutdown line. A `TirError` gives `tir-asr: <module>: <cause>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>` (the thread is `capture` or `worker`).
 
-### 2.7 `cli`
+### 2.7 `cli` and `app`
 
-- **Command:** `tir-asr` (entry point). C2 has no flags except `--help`. C4 adds the device flags.
-- **Scope (Aren, 2026-10-25, D-037):** `cli.py` is only the `argparse` interface. The startup steps below move out of `cli.py`. C2d gives the new place of each step to Aren for review.
+- **Command:** `tir-asr`, from `[project.scripts]` in `pyproject.toml` (`tir_asr.cli:main`). After a change to `pyproject.toml`, `uv sync` installs the command. C2 has no flags except `--help`. C4 adds the device flags.
+- **`cli.py` (core, D-037, D-043):** only the `argparse` interface. After the parse, it imports `app` and returns `app.main()`. Thus `--help` imports no model and no audio-device package (T-CLI-01).
+- **`app.py` (D-042, D-043):** it loads the adapters, prints the startup log, and calls the pipeline. It imports the adapters inside its functions, in the load order below. Each startup line starts with `startup: `.
 - **Startup sequence:**
-  1. Print the versions (tir-asr, torch, CUDA, NeMo, CTranslate2, Silero VAD), the GPU name, and all parameters (§6).
-  2. Check CUDA. If CUDA is not available, stop with an error.
-  3. Load the VAD, the ASR model, and the MT model. Print each load time and the VRAM.
-  4. The pipeline does the warm-up calls (§2.6). Print each time.
-  5. Open the microphone. Print its name.
-  6. Print "Listening. Press Ctrl+C to stop."
-- **Stop:** Ctrl+C stops the program with exit code 0. The open segment is not processed. The last line gives the number of segments, the number of segments under `vad_min_speech_ms`, and the number of empty ASR texts.
+
+  | Step | Place | Startup line |
+  |---|---|---|
+  | 1. Versions and parameters | `app.load_models` | `startup: tir-asr …; torch …; nemo-toolkit …; ctranslate2 …; silero-vad …; soundcard …; CUDA (torch) …` (from `importlib.metadata`), then one `startup: parameter <name> = <value>` line for each parameter (`config.parameter_lines`, T-CFG-02) |
+  | 2. ASR load, with the CUDA check (§2.3) | `app.load_models` | `startup: GPU <name>`, then `startup: ASR loaded in <s> s; GPU memory used <MiB> MiB` |
+  | 3. MT load (the cuBLAS preload, D-030) | `app.load_models` | `startup: MT loaded in <s> s; GPU memory used <MiB> MiB (+<MiB> MiB)` |
+  | 4. VAD load | `app.load_models` | `startup: VAD loaded in <s> s; torch CPU threads <n>` |
+  | 5. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s` |
+  | 6. Microphone (§2.1; the stream opens later) | `app.main` | `startup: microphone <name>` |
+  | 7. "Listening" and the session start | `pipeline.run` (§2.6) | `Listening. Press Ctrl+C to stop.` |
+
+- **Load order (D-043, point 2a):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
+- **GPU memory:** `torch.cuda.mem_get_info()` gives the used memory of the full device, so the MT line also counts CTranslate2.
+- **NeMo lines (D-043, point 3):** NeMo prints about 185 lines at its load. M1 does not hide them (R10). C7 decides again.
+- **Errors and Ctrl+C during the startup (D-043, point 4):** a `TirError` gives `tir-asr: <message>` and exit code 1. Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>`, and exit code 1. Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
+- **Stop:** §2.6 (Ctrl+C, the shutdown line, the exit codes).
 
 ## 3. Data types (core, `types.py`)
 
@@ -229,7 +240,7 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 
 | Module | Message | Program |
 |---|---|---|
-| `cli` | `asr: CUDA is not available` | Stops before the microphone opens (exit code 1). |
+| `asr` (startup) | `asr: CUDA is not available` | Stops before the MT load and before the microphone opens (exit code 1). |
 | `asr`, `mt` | model file or folder not found | Stops at startup (exit code 1). |
 | `mt` | `libcublas.so.12 not found …` | Stops at startup (exit code 1). |
 | `audio` | cannot connect to PulseAudio; no default microphone; no source with the exact id | Stops at startup (exit code 1). |
@@ -237,6 +248,8 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | any thread | a `TirError` (each module error) | Stops with `tir-asr: <module>: <cause>` (exit code 1). |
 | any thread | any other exception | Stops with its traceback, then `tir-asr: <thread>: <type>: <message>` (exit code 1). |
 | `segment` | segment under `vad_min_speech_ms` | No output; counted in the shutdown line. |
+| `app` (startup) | any exception that is not a `TirError` | Stops with its traceback, then `tir-asr: startup: <type>: <message>` (exit code 1). |
+| `app` (startup) | Ctrl+C before "Listening" | `Stopped during the startup.` (exit code 0). |
 
 No module retries, waits with a timeout, or changes to another device or model (R10).
 
@@ -296,3 +309,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.7 | 2026-10-25 | C2d, branch `c2d-output` (§2.5), D-040: `format_block(line, session_start)` and `write_block(line, session_start, stream)`; a blank line after each block; the seconds of the block time are cut. |
 | 0.8 | 2026-10-26 | C2d, branch `c2d-audio` (§2.1, §3, §7), D-041: `SoundcardMicrophone(device=None)` with an exact device id; the stream opens in `blocks()`; blocks of shape (512,); the error for a missing exact id; the probe B numbers in the limits; audio "normally in [−1, 1]". |
 | 0.9 | 2026-10-26 | C2d, branch `c2d-pipeline` (§2, §2.6, §4, §7), D-042: `run()` and `warm_up()`; the session start before the capture; the stop, the shutdown line, and the exit codes; `TirError` in `errors.py`; the error line for other exceptions. |
+| 0.10 | 2026-10-26 | C2d, branch `c2d-cli` (§2, §2.7, §7), D-043: `cli.py` and `app.py`; the startup sequence with its lines and places; the load order ASR, MT, VAD; the GPU memory; the NeMo lines; the errors and Ctrl+C during the startup; the `tir-asr` command. |

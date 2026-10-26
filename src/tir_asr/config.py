@@ -4,7 +4,7 @@ Only Aren adds a parameter (RULES.md R10). Each parameter in `Params` is in the 
 ARCHITECTURE.md section 6 with its reason and its approval date. T-CFG-01 checks the values.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 # Constants: fixed by a model, not tunable (ARCHITECTURE.md section 5).
 SAMPLE_RATE = 16_000  # Hz. The ASR model and Silero VAD need 16 kHz.
@@ -27,3 +27,8 @@ class Params:
     vad_min_speech_ms: int = 250  # ms, D-026
     vad_max_speech_s: int = 10  # s, D-026
     mt_beam_size: int = 2  # D-033
+
+
+def parameter_lines(params: Params) -> list[str]:
+    """One startup log line for each parameter, in the field order (T-CFG-02, D-043)."""
+    return [f"parameter {field.name} = {getattr(params, field.name)}" for field in fields(params)]
