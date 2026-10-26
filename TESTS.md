@@ -114,6 +114,7 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-AUDIO-02 | §2.1, §7, R10: no PulseAudio server. | A new Python process with `PULSE_SERVER` set to a socket that does not exist. It builds `SoundcardMicrophone()`. | `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | PASSES |
 | T-AUDIO-03 | §2.1, R10, D-041: exact device id, no fuzzy match. | A null sink `<sink>`. `SoundcardMicrophone(device="<sink>")`: the id is only a part of the monitor name. | `AudioError`: `audio: no source with the exact id <sink>`. The test first shows that `soundcard.get_microphone("<sink>", include_loopback=True)` selects the monitor. | sim | PASSES |
 | T-E2E-01 | K1, F2, F3, F5, D-025, D-032, D-043: full pipeline with the real models. | `app.load_models()` (the function of the program), `warm_up()`, then `run()` with the test WAV source (`tests/support/wav_source.py`): clip 1, then clip 2, at real-time speed. | Exit code 0 and no error output. 2 blocks in time order, label "Me", no `(no text)`, each total < 5.0 s. Fewer blocks give the message "a clip ends with less than 512 ms of silence (D-032)". | model | APPROVED |
+| T-E2E-02 | L-02, §2.6, D-044: Ctrl+C stops the program. | The installed command `tir-asr` in a new process (real models, default microphone), output in a pipe. After "Listening" (at most 120 s), wait 2 s, then send SIGINT. | The process ends within 10 s, with exit code 0. The last line of the program starts with `Stopped. Segments: `. | model | APPROVED |
 
 **Live (manual, §4):** L-01 to L-03.
 
@@ -141,6 +142,7 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - The Ctrl+C path (D-042 point 3) has no unit test. L-02 covers it.
 - Aren approved the exact T-PIPE-01 to T-PIPE-05 texts: "accept the tests" (2026-10-26).
 - T-CFG-02, T-CLI-01, and T-E2E-01 now give the exact input and output (D-043). T-CLI-01 has two cases: the function in a new process, and the installed command. Aren: "agree" (2026-10-26).
+- T-E2E-02 is new. It is the automatic form of L-02, after L-02 failed in the first live run (D-044). Aren: "I approve the test" (2026-10-26).
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
