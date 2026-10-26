@@ -15,12 +15,13 @@ import time
 from collections.abc import Iterator
 
 from tir_asr.config import SAMPLE_RATE, VAD_FRAME
+from tir_asr.errors import TirError
 from tir_asr.types import AudioBlock
 
 SOURCE_LABEL = "Me"  # C2: the microphone is "Me" (F4). C4 adds the system source.
 
 
-class AudioError(Exception):
+class AudioError(TirError):
     """An error of the audio adapter. The message is `audio: <cause>`."""
 
 

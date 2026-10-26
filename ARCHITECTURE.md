@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.8 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.9 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -32,10 +32,11 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `mt` | adapter | Armenian text | English text (`str`) | `MtError` | §2.4 |
 | `speakers` | (C5) | | | | |
 | `output` | core | `Line` | one text block | none | §2.5 |
-| `pipeline` | core | the modules above | threads, queue, stop | the first error of a thread | §2.6 |
+| `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
+| `errors` | core | — | `TirError`, the base class of the module errors | — | §2.6 |
 | `cli` | core | command line | startup log, exit code | `ConfigError` | §2.7 |
 
-Each error class has the module name in its message: `<module>: <cause>`.
+Each error class has the module name in its message: `<module>: <cause>`. Each error class inherits from `TirError` in `errors.py` (D-042).
 
 ### 2.1 `audio`
 
@@ -126,9 +127,15 @@ Each error class has the module name in its message: `<module>: <cause>`.
 
 ### 2.6 `pipeline`
 
-- **Core** `pipeline.py`. Threads (§4). It gets the `AudioSource`, the `SpeechProbability`, the `Transcriber`, the `Translator`, the parameters, and a clock (`time.monotonic` in the program, a fake clock in unit tests).
-- **Warm-up (D-022, D-037):** at startup, the pipeline calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`. The startup log gives each time.
-- **Errors:** the first exception in any thread stops the program. The main thread prints `tir-asr: <module>: <cause>` and exits with code 1.
+- **Core** `pipeline.py` (D-042). `run(source, vad, transcriber, translator, params, clock, out, err) -> int` builds the `Endpointer`, starts the threads (§4), and returns the exit code. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
+- **Warm-up (D-022, D-037, D-042):** `warm_up(transcriber, translator, clock) -> (asr_s, mt_s)` calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`, and returns the two times. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
+- **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. The source opens its stream at its first block (D-041). Thus no block time is before the session start.
+- **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then the write time from the clock, and `write_block` (§2.5).
+- **Stop (D-042):**
+  - Ctrl+C: the shutdown line, then exit code 0. The open segment, the segments in the queue, and a segment in ASR or MT are not processed; the shutdown line gives their number. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. L-02 checks this path; it has no unit test.
+  - End of the source (tests and the WAV source only, D-025): the capture thread puts an end mark in the queue. The worker finishes the segments in the queue, and then the shutdown line comes, with exit code 0.
+  - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the written blocks. An output lock makes the shutdown line the last line.
+- **Errors (D-042):** the first exception in a thread stops the program. `run()` writes the error line to `err` and returns 1, with no shutdown line. A `TirError` gives `tir-asr: <module>: <cause>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>` (the thread is `capture` or `worker`).
 
 ### 2.7 `cli`
 
@@ -178,13 +185,13 @@ The WAV file source is test code only (D-025). It is in `tests/support/`, not in
 
 | Thread | Work | Blocks on |
 |---|---|---|
-| Main | Startup (§2.7), then it waits for Ctrl+C or for an error from a thread. | the error queue |
-| Capture (one for each source) | Reads the blocks, calls `Endpointer.push` (which calls `SpeechProbability`), puts each `Segment` in the segment queue. | `record()` |
-| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then writes the block. | the segment queue |
+| Main | Startup (§2.7), then it waits for Ctrl+C, for "done", or for an error from a thread. | the event queue |
+| Capture (one for each source) | Reads the blocks, calls `Endpointer.push` (which calls `SpeechProbability`), puts each `Segment` in the segment queue. At the end of the source (tests only), it puts an end mark. | `record()` |
+| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then writes the block. At the end mark, it puts "done" in the event queue. | the segment queue |
 
 - **Segment queue:** `queue.Queue` with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
 - **One worker thread** uses the GPU, so the GPU models run one at a time.
-- **Errors:** each thread puts its exception in the error queue. The main thread stops the program (§2.6).
+- **Errors:** each thread puts its exception in the event queue. The main thread stops the program (§2.6). The threads are daemon threads, so that they do not keep the program alive after the main thread returns.
 - **No parallel GPU work.** One worker runs ASR and then MT. [RUN] This takes 0.10–0.17 s for each segment, and a new segment comes at most once in 0.76 s (calc). Two GPU threads would share the GPU, so each call would be slower; the gain is only when segments wait in the queue. C4 and C5 measure the queue wait before a change (R6).
 - **No `asyncio`.** `soundcard`, NeMo, and CTranslate2 have blocking APIs. With `asyncio`, they would run in threads anyway. Threads and queues are simpler.
 - **GIL:** the worker and the capture thread share the Python interpreter lock. A long Python step in the worker can delay the capture thread; PulseAudio then keeps the audio in its buffer [UNVERIFIED buffer size]. Q-10 checks it in the live run.
@@ -227,7 +234,8 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | `mt` | `libcublas.so.12 not found …` | Stops at startup (exit code 1). |
 | `audio` | cannot connect to PulseAudio; no default microphone; no source with the exact id | Stops at startup (exit code 1). |
 | `audio` | recording failed | Stops (exit code 1). |
-| any thread | any other exception | Stops with `tir-asr: <module>: <cause>` (exit code 1). |
+| any thread | a `TirError` (each module error) | Stops with `tir-asr: <module>: <cause>` (exit code 1). |
+| any thread | any other exception | Stops with its traceback, then `tir-asr: <thread>: <type>: <message>` (exit code 1). |
 | `segment` | segment under `vad_min_speech_ms` | No output; counted in the shutdown line. |
 
 No module retries, waits with a timeout, or changes to another device or model (R10).
@@ -287,3 +295,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.6 | 2026-10-25 | C2c, branch `c2c-mt` (§2.4): the default `model_dir` is relative to the project folder; the check for `model.bin`; the conversion command in the error message; the cuBLAS error names the missing file. |
 | 0.7 | 2026-10-25 | C2d, branch `c2d-output` (§2.5), D-040: `format_block(line, session_start)` and `write_block(line, session_start, stream)`; a blank line after each block; the seconds of the block time are cut. |
 | 0.8 | 2026-10-26 | C2d, branch `c2d-audio` (§2.1, §3, §7), D-041: `SoundcardMicrophone(device=None)` with an exact device id; the stream opens in `blocks()`; blocks of shape (512,); the error for a missing exact id; the probe B numbers in the limits; audio "normally in [−1, 1]". |
+| 0.9 | 2026-10-26 | C2d, branch `c2d-pipeline` (§2, §2.6, §4, §7), D-042: `run()` and `warm_up()`; the session start before the capture; the stop, the shutdown line, and the exit codes; `TirError` in `errors.py`; the error line for other exceptions. |

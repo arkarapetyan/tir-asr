@@ -16,12 +16,13 @@ from collections import deque
 import numpy as np
 
 from tir_asr.config import SAMPLE_RATE, VAD_FRAME, Params
+from tir_asr.errors import TirError
 from tir_asr.types import AudioBlock, Segment, SpeechProbability
 
 FRAME_S = VAD_FRAME / SAMPLE_RATE  # 0.032 s
 
 
-class SegmentError(Exception):
+class SegmentError(TirError):
     """An error of the segment module. The message is `segment: <cause>`."""
 
 
