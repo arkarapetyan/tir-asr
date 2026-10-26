@@ -31,8 +31,8 @@ SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
 OUT = ROOT / "test-results" / "bakeoff"
 SCRIPT_IDS = ("s1", "s2", "s3")
 SIDES = ("mic", "call")
-ASR_NAMES = ("nemo-rnnt",)
-MT_NAMES = ("nllb-ct2",)
+ASR_NAMES = ("nemo-rnnt", "nemo-ctc")
+MT_NAMES = ("nllb-ct2", "opus-ct2")
 PACKAGES = ("tir-asr", "torch", "nemo-toolkit", "ctranslate2", "transformers", "silero-vad")
 MIB = 2**20
 
@@ -42,6 +42,10 @@ def load_asr(name: str):
         from tir_asr.asr.nemo_rnnt import NemoRnntTranscriber
 
         return NemoRnntTranscriber()
+    if name == "nemo-ctc":
+        from tir_asr.eval.nemo_ctc import NemoCtcTranscriber
+
+        return NemoCtcTranscriber()
     raise SystemExit(f"bakeoff: unknown ASR candidate {name}")
 
 
@@ -50,6 +54,10 @@ def load_mt(name: str, params: Params):
         from tir_asr.mt.ct2_nllb import MT_MODEL_DIR, Ct2NllbTranslator
 
         return Ct2NllbTranslator(params, ROOT / MT_MODEL_DIR)
+    if name == "opus-ct2":
+        from tir_asr.eval.opus_ct2 import MODEL_DIR, OpusCt2Translator
+
+        return OpusCt2Translator(params, ROOT / MODEL_DIR)
     raise SystemExit(f"bakeoff: unknown MT candidate {name}")
 
 
