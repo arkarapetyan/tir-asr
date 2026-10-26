@@ -49,7 +49,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 - **Adapter functions (D-054):**
   - `list_sources() -> list[SourceInfo]`: all sources of the server, monitors included, in the server order. `SourceInfo(id, name, monitor)` is in the core module `audio/devices.py`; `monitor` is the `soundcard` value `isloopback` (`device.class` is `monitor`) [SOURCE].
   - `default_microphone_id()`: the id of the default source of the server.
-  - `default_system_id()`: `<default output id>.monitor`. `soundcard` does not give the monitor of an output, so the id comes from the PulseAudio rule ([RUN] for a null sink, probe A). The function checks that this source exists and is a monitor.
+  - `default_system_id()`: `<default output id>.monitor`. `soundcard` does not give the monitor of an output, so the id comes from the PulseAudio rule ([RUN] for a null sink, probe A, and for the laptop output, T-AUDIO-04). The function checks that this source exists and is a monitor.
 - **Core** `audio/devices.py` (D-054): `format_source_list(sources, default_mic, default_system) -> str` gives the text of `--list-devices` (T-DEV-01): the heading `Microphones (--mic):`, the sources that are not monitors, the heading `System audio (--system):`, the monitors, then the line `* = the default, used when the flag is not given`. Each source line is `<mark> <id>  <name>`; the mark is `*` for the default of its group, else a space. A group with no source has the line `  (none)`.
 - **Contract:** each block has exactly 512 float32 samples in an array of shape (512,) (32 ms at 16 kHz, mono), the label of its source, and the `time.monotonic()` value at its arrival. `soundcard` gives (512, 1); the adapter makes it flat.
 - **Errors:**

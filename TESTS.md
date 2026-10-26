@@ -325,14 +325,23 @@ Contracts: `ARCHITECTURE.md` §2.1, §2.6, §2.7. Decisions: D-054, D-055. Aren 
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
-| T-DEV-01 | F1, §2.1, D-054: the text of `--list-devices`. | (a) `format_source_list(sources, "mic-a", "out-b.monitor")` with the records `mic-a` "Laptop microphone", `out-a.monitor` "Monitor of HDMI", `mic-b` "USB microphone", `out-b.monitor` "Monitor of Headphones" (monitors: the two `.monitor` ids). (b) The same, with no monitor. | (a) The exact text of §2.1: the heading `Microphones (--mic):`, `* mic-a  Laptop microphone`, `  mic-b  USB microphone`, the heading `System audio (--system):`, `  out-a.monitor  Monitor of HDMI`, `* out-b.monitor  Monitor of Headphones`, then `* = the default, used when the flag is not given`. (b) The line `  (none)` under the system heading. | unit | APPROVED |
-| T-AUDIO-01 | §2.1, D-041, D-054 (changed in C4). | As in §2.4, with `SoundcardSource("System", "<sink>.monitor")`. | As in §2.4, but each block has the source `"System"`. | sim | APPROVED |
-| T-AUDIO-02 | §2.1, §7 (changed in C4). | No server. One process calls `SoundcardSource("Me", "x")`, then `list_sources()`. | Each call gives `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | APPROVED |
-| T-AUDIO-03 | §2.1, D-041 (changed in C4). | `SoundcardSource("Me", "<sink>")`. | As in §2.4. | sim | APPROVED |
-| T-AUDIO-04 | F1, §2.1, D-054: the device list and the default ids. | A null sink. `list_sources()`, `default_microphone_id()`, `default_system_id()`. | No id occurs two times. `<sink>.monitor` is in the list with `monitor = True`. `default_microphone_id()` = `pactl get-default-source`. `default_system_id()` = `pactl get-default-sink` + `.monitor`, and the list has it with `monitor = True`. | sim | APPROVED |
-| T-IMPORT-01 | D-021. | `tir_asr.audio.devices` in `REQUIRED`; `tir_asr.audio.soundcard_source` in `ADAPTERS` (in place of `tir_asr.audio.soundcard_mic`). | It passes. | unit | APPROVED |
+| T-DEV-01 | F1, §2.1, D-054: the text of `--list-devices`. | (a) `format_source_list(sources, "mic-a", "out-b.monitor")` with the records `mic-a` "Laptop microphone", `out-a.monitor` "Monitor of HDMI", `mic-b` "USB microphone", `out-b.monitor` "Monitor of Headphones" (monitors: the two `.monitor` ids). (b) The same, with no monitor. | (a) The exact text of §2.1: the heading `Microphones (--mic):`, `* mic-a  Laptop microphone`, `  mic-b  USB microphone`, the heading `System audio (--system):`, `  out-a.monitor  Monitor of HDMI`, `* out-b.monitor  Monitor of Headphones`, then `* = the default, used when the flag is not given`. (b) The line `  (none)` under the system heading. | unit | PASSES |
+| T-AUDIO-01 | §2.1, D-041, D-054 (changed in C4). | As in §2.4, with `SoundcardSource("System", "<sink>.monitor")`. | As in §2.4, but each block has the source `"System"`. | sim | PASSES |
+| T-AUDIO-02 | §2.1, §7 (changed in C4). | No server. One process calls `SoundcardSource("Me", "x")`, then `list_sources()`. | Each call gives `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | PASSES |
+| T-AUDIO-03 | §2.1, D-041 (changed in C4). | `SoundcardSource("Me", "<sink>")`. | As in §2.4. | sim | PASSES |
+| T-AUDIO-04 | F1, §2.1, D-054: the device list and the default ids. | A null sink. `list_sources()`, `default_microphone_id()`, `default_system_id()`. | No id occurs two times. `<sink>.monitor` is in the list with `monitor = True`. `default_microphone_id()` = `pactl get-default-source`. `default_system_id()` = `pactl get-default-sink` + `.monitor`, and the list has it with `monitor = True`. | sim | PASSES |
+| T-IMPORT-01 | D-021. | `tir_asr.audio.devices` in `REQUIRED`; `tir_asr.audio.soundcard_source` in `ADAPTERS` (in place of `tir_asr.audio.soundcard_mic`). | It passes. | unit | PASSES |
 
 No test: `audio: no default microphone`, `audio: no default output`, `audio: no monitor source for the default output <id>`. A test must change the system defaults.
+
+**Results (branch `c4-audio`, Aren's laptop, 2026-10-26):** no red run (D-055).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 170 passed (`test-results/c4-audio-unit.txt`).
+- **Sim:** 4 passed in 6.82 s (`test-results/c4-audio-sim.txt`).
+  - T-AUDIO-01: gaps 20.8–43.3 ms (median 42.1 ms); span ÷ (n − 1) 32.054 ms; tone 440.02 Hz, RMS 0.1768, no holes; each block has the source `"System"`.
+  - T-AUDIO-02: the constructor and `list_sources()` each give `audio: cannot connect to the PulseAudio server`.
+  - T-AUDIO-04: the server has 3 sources: the laptop microphone `alsa_input.pci-0000_80_1f.3.analog-stereo`, the output monitor `alsa_output.pci-0000_80_1f.3.analog-stereo.monitor`, and the test monitor. [RUN] The rule `<output id>.monitor` is true for the real output of the laptop, not only for a null sink (D-054). `default_microphone_id()` and `default_system_id()` agree with `pactl`.
+- `scripts/probe_sigint.py` (C2d probe) uses `SoundcardSource("Me", default_microphone_id())` in place of `SoundcardMicrophone()` (Aren approved the change).
 
 **Branch `c4-pipeline`** (frame k arrives at (k + 1) × 0.032 s, as in §2.4):
 
