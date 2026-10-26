@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.10 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.11 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -133,7 +133,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 - **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. The source opens its stream at its first block (D-041). Thus no block time is before the session start.
 - **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then the write time from the clock, and `write_block` (§2.5).
 - **Stop (D-042):**
-  - Ctrl+C: the shutdown line, then exit code 0. The open segment, the segments in the queue, and a segment in ASR or MT are not processed; the shutdown line gives their number. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. L-02 checks this path; it has no unit test.
+  - Ctrl+C: the shutdown line, then exit code 0. Ctrl+C takes effect within `STOP_POLL_S` (0.5 s, D-044). The open segment, the segments in the queue, and a segment in ASR or MT are not processed; the shutdown line gives their number. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. T-E2E-02 (model test) and L-02 check this path; it has no unit test.
   - End of the source (tests and the WAV source only, D-025): the capture thread puts an end mark in the queue. The worker finishes the segments in the queue, and then the shutdown line comes, with exit code 0.
   - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the written blocks. An output lock makes the shutdown line the last line.
 - **Errors (D-042):** the first exception in a thread stops the program. `run()` writes the error line to `err` and returns 1, with no shutdown line. A `TirError` gives `tir-asr: <module>: <cause>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>` (the thread is `capture` or `worker`).
@@ -202,6 +202,7 @@ The WAV file source is test code only (D-025). It is in `tests/support/`, not in
 
 - **Segment queue:** `queue.Queue` with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
 - **One worker thread** uses the GPU, so the GPU models run one at a time.
+- **Main-thread wait (D-044):** the main thread waits on the event queue with a time limit of `STOP_POLL_S` (0.5 s), in a loop. The time limit changes nothing except that the main thread wakes up. [RUN] With no time limit, Ctrl+C did nothing: the process has 75–79 native threads, and Python handles a signal only when the main thread wakes up (L-02, probe C). T-E2E-02 checks Ctrl+C on the real program.
 - **Errors:** each thread puts its exception in the event queue. The main thread stops the program (§2.6). The threads are daemon threads, so that they do not keep the program alive after the main thread returns.
 - **No parallel GPU work.** One worker runs ASR and then MT. [RUN] This takes 0.10–0.17 s for each segment, and a new segment comes at most once in 0.76 s (calc). Two GPU threads would share the GPU, so each call would be slower; the gain is only when segments wait in the queue. C4 and C5 measure the queue wait before a change (R6).
 - **No `asyncio`.** `soundcard`, NeMo, and CTranslate2 have blocking APIs. With `asyncio`, they would run in threads anyway. Threads and queues are simpler.
@@ -220,6 +221,7 @@ Constants (fixed by a model or a test, not tunable):
 | `WARMUP_AUDIO_S` | 2.0 s of zeros | Synthetic ASR warm-up input (no audio file in git, R11). |
 | `WARMUP_TEXT` | «Բարև, ինչպե՞ս ես։» | Synthetic MT warm-up input. |
 | `MT_SRC_LANG`, `MT_TGT_LANG` | `hye_Armn`, `eng_Latn` | NLLB language codes. |
+| `STOP_POLL_S` (`pipeline.py`) | 0.5 s | The main thread waits for an event with this time limit, in a loop. It only wakes the main thread, so that Python can handle Ctrl+C (D-044). |
 
 ## 6. Parameters
 
@@ -310,3 +312,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.8 | 2026-10-26 | C2d, branch `c2d-audio` (§2.1, §3, §7), D-041: `SoundcardMicrophone(device=None)` with an exact device id; the stream opens in `blocks()`; blocks of shape (512,); the error for a missing exact id; the probe B numbers in the limits; audio "normally in [−1, 1]". |
 | 0.9 | 2026-10-26 | C2d, branch `c2d-pipeline` (§2, §2.6, §4, §7), D-042: `run()` and `warm_up()`; the session start before the capture; the stop, the shutdown line, and the exit codes; `TirError` in `errors.py`; the error line for other exceptions. |
 | 0.10 | 2026-10-26 | C2d, branch `c2d-cli` (§2, §2.7, §7), D-043: `cli.py` and `app.py`; the startup sequence with its lines and places; the load order ASR, MT, VAD; the GPU memory; the NeMo lines; the errors and Ctrl+C during the startup; the `tir-asr` command. |
+| 0.11 | 2026-10-26 | C2d, branch `c2d-cli` (§2.6, §4, §5), D-044: the main thread waits with the time limit `STOP_POLL_S` (0.5 s) in a loop, so that Ctrl+C works; T-E2E-02. |

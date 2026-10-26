@@ -26,6 +26,10 @@ from tir_asr.types import AudioSource, Line, SpeechProbability, Transcriber, Tra
 PROGRAM = "tir-asr"
 LISTENING = "Listening. Press Ctrl+C to stop."
 END = None  # the end mark in the segment queue: the source has no more blocks
+# D-044: the main thread waits for an event with this time limit, in a loop. The limit only wakes
+# the main thread, so that Python can handle a waiting Ctrl+C. With no limit, Ctrl+C did nothing
+# when another thread received the signal (L-02, probe C, T-E2E-02).
+STOP_POLL_S = 0.5
 
 Clock = Callable[[], float]
 
@@ -120,7 +124,12 @@ def run(
     try:
         thread("worker", work).start()
         thread("capture", capture).start()
-        kind, detail = events.get()
+        while True:
+            try:
+                kind, detail = events.get(timeout=STOP_POLL_S)
+                break
+            except queue.Empty:
+                continue  # D-044: a wake-up only
     except KeyboardInterrupt:
         kind, detail = "stop", None
 
