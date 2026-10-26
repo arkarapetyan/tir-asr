@@ -956,3 +956,19 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   4. Branches: `c3-run` (core, runner, and the program adapters `nemo-rnnt` and `nllb-ct2`), then one branch `c3-candidates` with one commit for each candidate (its adapter, its runner line, and its §8.2 line). First proposal: one branch for each candidate.
 - **Reason (Aren's words):** "agree D51 and tests". On point 4: "agree for one branch for all candidates".
 - **Revisit when:** a candidate adapter fails in a way that a model test would have found earlier.
+
+## D-052. ONNX-CTC after the `nemo-ctc` result (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B. Result: no ONNX run in C3.
+- **Context:** the D-014 shortlist has ASR-1 on ONNX Runtime with the CTC head (`OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx`). Facts:
+  - `model.onnx` is the encoder and the CTC head of the same model. The ONNX model and the NeMo checkpoint gave "identical transcriptions on a reference clip" [SOURCE: model card, `test-results/cards/`].
+  - It needs two new `laptop` packages: `onnx-asr` 0.12.0 (MIT) and `onnxruntime-gpu` [SOURCE: wheel METADATA].
+- **Options:**
+  - **A.** Install the two packages and run ONNX-CTC now.
+  - **B.** Decide after the `nemo-ctc` result. If the CTC WER is clearly higher than the RNNT WER, ONNX-CTC cannot win on quality, and its only gain is speed (the slowest ASR call was already 0.026 s).
+- **Claude's preference:** B. It is not a cut of the research: the `nemo-ctc` run measures the ONNX quality without an install. Fact that can show it is wrong: NeMo must leave the laptop install (K4).
+- **Decision:** B.
+- **Result [RUN, Aren's laptop, 2026-10-26, S1–S3]:** `nemo-ctc` WER 12.7 % and CER 3.6 %, against `nemo-rnnt` WER 10.6 % and CER 3.3 %. Thus no install and no ONNX run.
+  - Note: `nemo-ctc` + NLLB gives chrF 53.6, against 51.7 for `nemo-rnnt` + NLLB. The cause is the punctuation, not better ASR: where RNNT writes «։» between two sentences, NLLB leaves out the second sentence (Q-13). CTC wrote a comma in two of these places (s1-05, s3-07).
+- **Reason (Aren's words):** "agree on option B".
+- **Revisit when:** NeMo must leave the laptop install (K4), or C6 fixes Q-13 and CTC still gives a higher chrF.
