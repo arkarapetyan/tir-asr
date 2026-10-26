@@ -1,11 +1,12 @@
-"""T-AUDIO-01 to T-AUDIO-03: the soundcard microphone adapter (C2d, branch c2d-audio).
+"""T-AUDIO-01 to T-AUDIO-04: the soundcard source adapter (C2d `c2d-audio`, C4 `c4-audio`).
 
-Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041. The limits come from
-probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
+Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041, D-054. The limits come
+from probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
 
-T-AUDIO-01 and T-AUDIO-03 load a null sink with `pactl` and unload it after the test.
-T-AUDIO-01 plays a tone into the sink with `pw-play`, and the adapter records the monitor of the
-sink. T-AUDIO-02 starts a new Python process with no PulseAudio server.
+T-AUDIO-01, T-AUDIO-03, and T-AUDIO-04 load a null sink with `pactl` and unload it after the
+test. T-AUDIO-01 plays a tone into the sink with `pw-play`, and the adapter records the monitor
+of the sink. T-AUDIO-02 starts a new Python process with no PulseAudio server. T-AUDIO-04
+compares the device list and the two default ids with the values that `pactl` gives.
 
 Caution: the tests change the audio server for a few seconds. Do not run them during a call.
 If a test stops and the sink stays, run `pactl list short modules | grep null-sink`, then
@@ -129,18 +130,18 @@ def runs(mask: np.ndarray) -> list[tuple[int, int]]:
 
 
 def test_audio_01_monitor_blocks_have_the_contract_format_and_content(null_sink, tmp_path):
-    from tir_asr.audio.soundcard_mic import SoundcardMicrophone
+    from tir_asr.audio.soundcard_source import SoundcardSource
 
     tone = tmp_path / "tone.wav"
     write_tone(tone)
     sink_index = next(row[0] for row in pactl_rows("sinks") if row[1] == SINK)
 
-    microphone = SoundcardMicrophone(device=MONITOR)
-    report(f"audio device name: {microphone.name}")
+    source = SoundcardSource("System", MONITOR)
+    report(f"audio device name: {source.name}")
     blocks = []
     player = None
     check = None
-    stream = microphone.blocks()
+    stream = source.blocks()
     try:
         for block in stream:
             blocks.append(block)
@@ -174,7 +175,7 @@ def test_audio_01_monitor_blocks_have_the_contract_format_and_content(null_sink,
 
     # Format of each block.
     assert len(blocks) == BLOCKS
-    assert {block.source for block in blocks} == {"Me"}
+    assert {block.source for block in blocks} == {"System"}
     assert {(block.samples.shape, block.samples.dtype) for block in blocks} == {
         ((VAD_FRAME,), np.dtype(np.float32))
     }
@@ -215,15 +216,17 @@ def test_audio_01_monitor_blocks_have_the_contract_format_and_content(null_sink,
 
 
 NO_SERVER_SCRIPT = """
-from tir_asr.audio.soundcard_mic import AudioError, SoundcardMicrophone
+from tir_asr.audio.soundcard_source import AudioError, SoundcardSource, list_sources
 
-try:
-    SoundcardMicrophone()
-except AudioError as error:
-    print(f"AudioError: {error}")
-else:
-    print("no error")
+for name, call in [("constructor", lambda: SoundcardSource("Me", "x")), ("list", list_sources)]:
+    try:
+        call()
+    except AudioError as error:
+        print(f"{name}: AudioError: {error}")
+    else:
+        print(f"{name}: no error")
 """
+NO_SERVER = "AudioError: audio: cannot connect to the PulseAudio server"
 
 
 def test_audio_02_no_pulseaudio_server(tmp_path):
@@ -241,7 +244,9 @@ def test_audio_02_no_pulseaudio_server(tmp_path):
     )
 
     report(f"no server: stdout {result.stdout.strip()!r}, exit code {result.returncode}")
-    assert result.stdout.strip() == "AudioError: audio: cannot connect to the PulseAudio server", (
+    # [RUN] in the workspace: a second `import soundcard` in the same process fails again with
+    # an AssertionError, so each call gives the same error.
+    assert result.stdout.splitlines() == [f"constructor: {NO_SERVER}", f"list: {NO_SERVER}"], (
         result.stderr
     )
 
@@ -249,7 +254,7 @@ def test_audio_02_no_pulseaudio_server(tmp_path):
 def test_audio_03_device_id_must_match_exactly(null_sink):
     import soundcard
 
-    from tir_asr.audio.soundcard_mic import AudioError, SoundcardMicrophone
+    from tir_asr.audio.soundcard_source import AudioError, SoundcardSource
 
     # The risk is real: soundcard selects the monitor from a part of its name.
     fuzzy = soundcard.get_microphone(SINK, include_loopback=True)
@@ -257,7 +262,31 @@ def test_audio_03_device_id_must_match_exactly(null_sink):
     assert fuzzy.id == MONITOR
 
     with pytest.raises(AudioError) as raised:
-        SoundcardMicrophone(device=SINK)
+        SoundcardSource("Me", SINK)
 
     report(f"audio error message: {raised.value}")
     assert str(raised.value) == f"audio: no source with the exact id {SINK}"
+
+
+def test_audio_04_device_list_and_default_ids(null_sink):
+    from tir_asr.audio.soundcard_source import (
+        default_microphone_id,
+        default_system_id,
+        list_sources,
+    )
+
+    sources = list_sources()
+    for source in sources:
+        report(f"source: monitor={source.monitor} {source.id} ({source.name})")
+    default_sink, default_source = defaults()
+    mic, system = default_microphone_id(), default_system_id()
+    report(f"pactl defaults: sink {default_sink}, source {default_source}")
+    report(f"adapter defaults: mic {mic}, system {system}")
+
+    ids = [source.id for source in sources]
+    assert len(ids) == len(set(ids)), f"an id occurs two times: {ids}"
+    kinds = {source.id: source.monitor for source in sources}
+    assert kinds.get(MONITOR) is True, f"{MONITOR} is not in the list as a monitor"
+    assert mic == default_source
+    assert system == f"{default_sink}.monitor"
+    assert kinds.get(system) is True, f"{system} is not in the list as a monitor"
