@@ -22,6 +22,8 @@ ADAPTERS = {
     "tir_asr.app",
     "tir_asr.eval.nemo_ctc",
     "tir_asr.eval.opus_ct2",
+    "tir_asr.eval.buzz_whisper",
+    "tir_asr.eval.seamless",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.

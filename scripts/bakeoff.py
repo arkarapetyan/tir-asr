@@ -31,8 +31,9 @@ SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
 OUT = ROOT / "test-results" / "bakeoff"
 SCRIPT_IDS = ("s1", "s2", "s3")
 SIDES = ("mic", "call")
-ASR_NAMES = ("nemo-rnnt", "nemo-ctc")
-MT_NAMES = ("nllb-ct2", "opus-ct2")
+ASR_NAMES = ("nemo-rnnt", "nemo-ctc", "buzz-whisper", "seamless")
+MT_NAMES = ("nllb-ct2", "opus-ct2", "seamless", "seamless-s2tt")
+E2E = "seamless-s2tt"  # end to end: English from the audio of each segment (needs --asr seamless)
 PACKAGES = ("tir-asr", "torch", "nemo-toolkit", "ctranslate2", "transformers", "silero-vad")
 MIB = 2**20
 
@@ -46,6 +47,14 @@ def load_asr(name: str):
         from tir_asr.eval.nemo_ctc import NemoCtcTranscriber
 
         return NemoCtcTranscriber()
+    if name == "buzz-whisper":
+        from tir_asr.eval.buzz_whisper import BuzzWhisperTranscriber
+
+        return BuzzWhisperTranscriber()
+    if name == "seamless":
+        from tir_asr.eval.seamless import SeamlessSpeech
+
+        return SeamlessSpeech()
     raise SystemExit(f"bakeoff: unknown ASR candidate {name}")
 
 
@@ -58,7 +67,21 @@ def load_mt(name: str, params: Params):
         from tir_asr.eval.opus_ct2 import MODEL_DIR, OpusCt2Translator
 
         return OpusCt2Translator(params, ROOT / MODEL_DIR)
+    if name == "seamless":
+        from tir_asr.eval.seamless import SeamlessText
+
+        return SeamlessText()
     raise SystemExit(f"bakeoff: unknown MT candidate {name}")
+
+
+class English:
+    """End to end (E2E): a Transcriber that gives the English text of the audio of a segment."""
+
+    def __init__(self, speech) -> None:
+        self.speech = speech
+
+    def transcribe(self, audio: np.ndarray) -> str:
+        return self.speech.to_english(audio)
 
 
 def say(text: str) -> None:
@@ -73,6 +96,8 @@ def main() -> int:
     args = parser.parse_args()
     if (args.asr == "none") != (args.mt_input == "reference"):
         raise SystemExit("bakeoff: use --asr none together with --mt-input reference")
+    if args.mt == E2E and args.asr != "seamless":
+        raise SystemExit(f"bakeoff: --mt {E2E} needs --asr seamless")
 
     import torch
 
@@ -104,11 +129,15 @@ def main() -> int:
         run["asr_warmup_s"] = clock() - start
     base = used_mib()
     start = clock()
-    mt = load_mt(args.mt, params)
-    run["mt_load_s"] = clock() - start
-    run["mt_vram_mib"] = used_mib() - base
-    start = clock()
-    mt.translate(WARMUP_TEXT)
+    if args.mt == E2E:
+        mt = English(asr)  # the same model as the ASR: no second load
+        mt.transcribe(np.zeros(int(WARMUP_AUDIO_S * SAMPLE_RATE), dtype=np.float32))
+    else:
+        mt = load_mt(args.mt, params)
+        run["mt_load_s"] = clock() - start
+        run["mt_vram_mib"] = used_mib() - base
+        start = clock()
+        mt.translate(WARMUP_TEXT)
     run["mt_warmup_s"] = clock() - start
 
     # The VAD loads last, as in the program (D-043): silero_vad sets the CPU threads at import.
@@ -142,7 +171,10 @@ def main() -> int:
                 audio = load_wav_16k(RAW / f"{script}.{side}.wav")
                 segments = segment_file(audio, SileroSpeechProbability(), params)
                 hy = transcribe_all(segments, asr, clock)
-                en = translate_all([t.text for t in hy], mt, clock)
+                if args.mt == E2E:
+                    en = transcribe_all(segments, mt, clock)
+                else:
+                    en = translate_all([t.text for t in hy], mt, clock)
                 score = score_side(
                     lines,
                     labels,
