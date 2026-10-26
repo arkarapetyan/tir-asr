@@ -909,3 +909,21 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A.
 - **Reason (Aren's words):** "Agree on A for the cut ends". On the file names: "yes the wrong names were wrong".
 - **Revisit when:** a new recording of S2 or S3 needs the full script text.
+
+## D-049. C3 scope: the full shortlists, the eval components, and two dev dependencies (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B
+- **Context:** at 16:22, about 80 min remained in the C3 time box (2.5 h). The full shortlists (D-014, D-015) need 3 eval components and 5 more candidates, with installs, downloads, and adapters. The total time budget is already over (R16).
+- **Options:**
+  - **A.** Eval components; ASR-1 with RNNT and with CTC (same weights); MT NLLB-600M, and OPUS-MT only if time remains. ONNX-CTC, BuzzASR (ASR-5), and Seamless (ASR-2, MT-5) move to C6, only if the C3 numbers show that ASR or MT is the weakest link. The line view (D-046 point 3) moves to C6. Weak points: no end-to-end model and no other ASR weights measured; D-ASR chooses between two decoders of one model.
+  - **B.** The full shortlists. Weak point: about 1.5–2 h more [UNVERIFIED estimate], over the time box and the budget.
+  - **C.** Numbers for the current models only. Weak point: no comparison; D-ASR and D-MT only confirm the skeleton.
+- **Claude's preference:** A. Fact that can show it is wrong: on our data, the WER of ASR-1 is much higher than its published WER (Common Voice 17.0: 9.90 %), so a candidate that moved to C6 can win.
+- **Decision:** B, with these parts of the plan:
+  1. `c3-metrics`: own edit distance for WER and CER; chrF from `sacrebleu` with its default values.
+  2. `c3-data`: read a 48 kHz float32 WAV file and resample it to 16 kHz with `scipy.signal.resample_poly(x, 1, 3)`; add 1.0 s of zeros at the end of each file (the end rule of D-048); read the references from `docs/eval/scripts.md` and the labels.
+  3. `c3-bakeoff`: the runner (model level), with the line view of D-046 point 3.
+  4. Dev dependencies (D-028): `sacrebleu` (2.6.0, Apache-2.0) and `scipy` (BSD) [SOURCE: wheel METADATA].
+- **Reason (Aren's words):** "No let's not cut on research. Will make cuts later." Earlier in C3: "Let's make sure that we stay under the time box for C3."
+- **Questions raised:** Claude (R14) named the conflict with the time box one time: C3 goes over its time box by about 1.5–2 h [UNVERIFIED estimate], and the later cuts must cover this time (C6 is the first item to cut). Aren did not object. He also did not object to the 1.0 s end rule and the two dependencies.
+- **Revisit when:** the total time comes near the budget (R16).
