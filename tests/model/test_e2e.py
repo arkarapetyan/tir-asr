@@ -73,9 +73,8 @@ def test_e2e_01_full_pipeline_with_the_real_models():
     report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s")
 
     out, err = io.StringIO(), io.StringIO()
-    code = run(
-        wav_source.WavSource(CLIPS), vad, transcriber, translator, params, time.monotonic, out, err
-    )
+    source = wav_source.WavSource(CLIPS)
+    code = run([(source, vad)], transcriber, translator, params, time.monotonic, out, err)
 
     lines = out.getvalue().splitlines()
     for line in lines:

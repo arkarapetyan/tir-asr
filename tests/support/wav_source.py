@@ -33,13 +33,13 @@ def read_frames(path: Path) -> list[np.ndarray]:
 class WavSource:
     """An AudioSource that plays the clips one after the other, at real-time speed."""
 
-    def __init__(self, paths: list[Path], source: str = "Me") -> None:
+    def __init__(self, paths: list[Path], label: str = "Me") -> None:
         self.frames = [frame for path in paths for frame in read_frames(path)]
-        self.source = source
+        self.label = label  # the AudioSource attribute (D-054)
 
     def blocks(self):
         start = time.monotonic()
         for k, frame in enumerate(self.frames):
             due = start + (k + 1) * FRAME_S  # the time at which frame k is complete
             time.sleep(max(0.0, due - time.monotonic()))
-            yield AudioBlock(source=self.source, samples=frame, arrival=time.monotonic())
+            yield AudioBlock(source=self.label, samples=frame, arrival=time.monotonic())

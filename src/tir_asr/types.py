@@ -16,7 +16,7 @@ import numpy as np
 class AudioBlock:
     """One VAD frame of 512 samples (32 ms) and its arrival time."""
 
-    source: str  # source label: "Me" (C2)
+    source: str  # source label: "Me" or "System" (D-054)
     samples: np.ndarray  # shape (512,)
     arrival: float
 
@@ -37,7 +37,7 @@ class Segment:
 class Line:
     """One output block: the texts and the times of ARCHITECTURE.md section 2.5."""
 
-    label: str  # "Me" (C2); "Speaker N" (C5)
+    label: str  # the source label "Me" or "System" (C4); "Speaker N" (C5)
     start: float  # Segment.start
     hy: str  # Armenian text
     en: str  # English text
@@ -49,6 +49,8 @@ class Line:
 
 
 class AudioSource(Protocol):
+    label: str  # the source label of its blocks; the name of its capture thread (D-054)
+
     def blocks(self) -> Iterator[AudioBlock]: ...
 
 
