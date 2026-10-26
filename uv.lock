@@ -3918,6 +3918,7 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "sacrebleu" },
+    { name = "scipy" },
 ]
 laptop = [
     { name = "ctranslate2" },
@@ -3939,6 +3940,7 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.2" },
     { name = "sacrebleu", specifier = ">=2.6.0" },
+    { name = "scipy", specifier = ">=1.18.1" },
 ]
 laptop = [
     { name = "ctranslate2", specifier = ">=4.8.3" },

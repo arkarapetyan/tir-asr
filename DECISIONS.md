@@ -927,3 +927,16 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "No let's not cut on research. Will make cuts later." Earlier in C3: "Let's make sure that we stay under the time box for C3."
 - **Questions raised:** Claude (R14) named the conflict with the time box one time: C3 goes over its time box by about 1.5–2 h [UNVERIFIED estimate], and the later cuts must cover this time (C6 is the first item to cut). Aren did not object. He also did not object to the 1.0 s end rule and the two dependencies.
 - **Revisit when:** the total time comes near the budget (R16).
+
+## D-050. No red run for the rest of the C3 eval code
+
+- **Status:** ACCEPTED (2026-10-26), for C3 only
+- **Context:** R5 step 3: Claude writes the tests, Aren runs them, and they must fail before Claude writes the code. Each red run costs one round trip. Aren asked to save time in C3.
+- **Options:**
+  - **A (Aren).** Claude writes the approved tests and the code in one step. Aren does only the green run.
+  - **B.** Keep the red run with a stub (as in `c3-normalize` and `c3-metrics`).
+- **Claude's preference:** B. Weak point: one more round trip for each component. Risk of A: a test that cannot fail (for example a wrong expected value that the code also has) stays hidden. Mitigation: the tests come from the approved table, not from the code.
+- **Decision:** A, for the C3 eval components after `c3-metrics` (`c3-data`, `c3-bakeoff`, and the candidate adapters).
+- **Reason (Aren's words):** "in order to save time, you'll write the tests and then immediately implement the files so I only run the green run".
+- **Questions raised:** Claude (R14) named the conflict with R5 and the risk one time.
+- **Revisit when:** C4 starts, or a test that cannot fail is found.

@@ -281,6 +281,26 @@ T-IMPORT-01 adds `tir_asr.eval.metrics` to `REQUIRED`. Red state: a stub raises 
 
 **Results (Aren's laptop, 2026-10-26):** red run 21 failed, each with `NotImplementedError`, and 16 passed (`test-results/c3-met-red.txt`). Green run: `ruff check` and `ruff format --check` pass; 140 unit tests pass; `sacrebleu` 2.6.0 (`test-results/c3-met-green.txt`).
 
+**`data.py`** (branch `c3-data`, D-046, D-048, D-049). Aren approved T-DATA-01 to T-DATA-11 on 2026-10-26. Test file: `tests/unit/test_data.py`. D-050: Claude wrote the tests and the code in one step, with no red run.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-DATA-01 | Resample 48 → 16 kHz. | 1.0 s, 440 Hz, amplitude 0.5, float32, 48 kHz | 16000 samples, float32; spectrum peak at 440 ± 1 Hz; RMS 0.3536 ± 2 % (without the first and last 2000 samples) | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-02 | No aliasing. | 1.0 s, 11 kHz tone, 48 kHz | output RMS at least 40 dB below the input RMS | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-03 | 16 kHz is not changed. | float32, 16 kHz | the same samples | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-04 | Errors (R10). | stereo; 44100 Hz; int16 | `data: <file>: 2 channels, expected 1`; `data: <file>: sample rate 44100 Hz, expected 48000 or 16000`; `data: <file>: sample format int16, expected float32` | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-05 | End rule (D-048). | 100 samples | 16100 samples; the first 100 do not change; the last 16000 are 0.0 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-06 | References. | a small table with 2 scripts, one "†" ID, "Me", "Speaker 1", "Speaker 2" | only the lines of `s1`, in order; ID with no "†"; side "mic" or "call"; Armenian and English text | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-07 | References in the real file. | `docs/eval/scripts.md`: s1, s2, s3 | 14, 10, 10 lines; 5 "mic" lines in each | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-08 | References error. | script `s9` | `data: no lines for s9 in <file>` | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-09 | Labels. | 3 Audacity lines | 3 labels with the start, the end, and the ID | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-10 | Label errors (R10). | 2 fields; a time that is not a number; end before start; an unknown ID; a missing ID; a repeated ID | one `DataError` for each, with the line number or the ID | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-DATA-11 | Line view (D-046). | labels a 0–5 s, b 6–10 s; segments 0.2–4.8, 4.9–6.5, 11–12, 4.5–6.5 | a; b; none; a (equal overlaps: the label that starts first) | unit | PASSES (Aren's laptop, 2026-10-26) |
+
+T-IMPORT-01 adds `tir_asr.eval.data` to `REQUIRED`.
+
+**Results (Aren's laptop, 2026-10-26):** no red run (D-050). Green run: `ruff check` and `ruff format --check` pass; 161 unit tests pass (`test-results/c3-data-green.txt`).
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).

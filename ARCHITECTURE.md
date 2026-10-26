@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.14 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 change (C3) applies D-049. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.15 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -313,6 +313,14 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `digit_words(texts) -> int`: the number of normalized words with a digit (D-047, N1).
   - Errors: `MetricError(TirError)`: `metrics: <n> references and <m> hypotheses`; `metrics: the references have no words`.
   - Dependency: `sacrebleu` in the dev group (CI installs it).
+- **`data.py`** (branch `c3-data`, D-046, D-048, D-049):
+  - `load_wav_16k(path)`: a mono float32 WAV file at 48 kHz (resampled with `scipy.signal.resample_poly(x, 1, 3)`) or at 16 kHz (no change). Returns float32 audio at 16 kHz.
+  - `with_end_silence(audio)`: adds `END_SILENCE_S` = 1.0 s of zeros, so that the last segment of a file closes (D-048).
+  - `read_references(scripts_md, script) -> list[ScriptLine]`: `ScriptLine(id, speaker, side, hy, en)`, in table order; the ID has no "†"; the side is "mic" for "Me" and "call" for the other speakers.
+  - `read_labels(path, lines) -> list[Label]`: `Label(id, start, end)` from an Audacity label file; each line of the script has exactly one label.
+  - `assign_segments(segments, labels)`: for each segment, the ID of the label with the largest time overlap; on equal overlaps, the label that starts first; `None` with no overlap (the line view of D-046).
+  - Errors: `DataError(TirError)`, `data: <file>: <cause>`: channels, sample format, sample rate, columns, no lines for a script, label fields, a time that is not a number, end before start, unknown, missing, or repeated ID.
+  - Dependency: `scipy` in the dev group (CI installs it).
 - The next C3 branches add their contracts here.
 
 ## 9. Open points for Aren (C2)
@@ -338,3 +346,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.12 | 2026-10-26 | C2d, branch `c2d-cli` (§2.7), D-045: the launcher `run.sh`. |
 | 0.13 | 2026-10-26 | C3, branch `c3-normalize` (§8), D-046 and D-047: §8 is now "Tools that the program does not use"; new §8.2 with the eval data and `normalize_hy`. |
 | 0.14 | 2026-10-26 | C3, branch `c3-metrics` (§8.2), D-049: the contract of `metrics.py`. |
+| 0.15 | 2026-10-26 | C3, branch `c3-data` (§8.2), D-046, D-048, D-049: the contract of `data.py`. |
