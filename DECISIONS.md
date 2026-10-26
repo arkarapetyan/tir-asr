@@ -748,3 +748,34 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** B in part 1 (Aren); b in part 2; the limits of part 3; B in part 4; points 1 to 8 of part 5. T-AUDIO-02 and T-AUDIO-03 are approved. `ARCHITECTURE.md` §2.1 and §3 get the changes in the same commit as the adapter (R13).
 - **Reason (Aren's words):** "no let's simulate but we have to be careful and do it step-by-step and deliberate on it so we are sure it runs right" (part 1). "agree on your preferences" (parts 2 to 4). "I approve the tests and confirm your points" (part 5).
 - **Revisit when:** C4 (device flags and two sources) or C3 (Q-11).
+
+## D-042. Pipeline, startup, and stop (C2d)
+
+- **Status:** ACCEPTED (2026-10-26)
+- **Context:** `cli.py` is only the `argparse` interface, and the pipeline makes the warm-up calls (D-037). The six startup steps of `ARCHITECTURE.md` §2.7 need a new place. The pipeline is core: the unit tests give it fakes, so it cannot import the adapters (D-021). T-PIPE-02 and T-PIPE-04 check exit codes, and their owner was open.
+- **Points, options, and Claude's preference:**
+  1. **Who loads the adapters and prints the startup log.**
+     - **A.** A new module `app.py`: it loads the adapters, prints the startup log, and calls the pipeline. `cli.main()` parses the arguments, then imports `app` (after the parse, so that `--help` imports nothing, T-CLI-01). `app.py` is in `ADAPTERS` of T-IMPORT-01.
+     - **B.** `cli.py` loads the adapters. Weak point: against D-037.
+     - **C.** `pipeline.py` loads the adapters with imports inside a function. Weak point: a core module hides `laptop` imports, and no unit test covers that part.
+     - Claude's preference: A. Weak point: one more module than `PLAN.md` §4, with no unit test (T-E2E-01 and L-01 cover it).
+     - The startup steps: (1) versions, GPU name, and parameters in `app.py`; the versions come from `importlib.metadata`, and the parameter lines from a core function `parameter_lines(params)` (T-CFG-02). (2) The CUDA check stays in the ASR constructor (T-MODEL-ERR-03), with no second check. (3) `app.py` loads MT first (cuBLAS preload, D-030), then ASR and VAD, and prints each load time and the VRAM. (4) `pipeline.warm_up()`; `app.py` prints the times. (5) `app.py` builds `SoundcardMicrophone()` and prints its name; the stream opens later (D-041). (6) `pipeline.run()` prints "Listening".
+  2. **Owner of the exit codes.**
+     - **A.** `run()` returns 0 or 1 and writes the error line. `cli` calls `sys.exit` with that value. T-PIPE-02 and T-PIPE-04 stay whole in `c2d-pipeline`.
+     - **B.** `run()` raises the error; `cli` prints it and exits. The exit-code parts of the tests move to `c2d-cli`.
+     - Claude's preference: A. Weak point: the core knows the program name.
+  3. **Stop.**
+     - Ctrl+C: the main thread prints the shutdown line and returns 0. The open segment and the segments in the queue are not processed; the shutdown line gives their number ("not processed").
+     - End of the source (tests and the WAV source only, D-025): the capture thread puts an end mark in the queue. The worker finishes the segments in the queue, then the main thread prints the shutdown line and returns 0.
+     - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the blocks that the worker wrote.
+     - Main risk (R14, named to Aren one time): a Ctrl+C right after the last phrase can lose that line. The Ctrl+C path has no unit test; L-02 covers it.
+  4. **Warm-up.** `warm_up(transcriber, translator, clock)` is separate from `run()`, because T-PIPE-03 counts the MT calls. New test T-PIPE-05.
+  5. **Session start.** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the capture thread. The source opens its stream at its first block (D-041). Thus no block time is before the session start.
+  6. **Error line.**
+     - **A.** Check the module of the exception class. Weak point: the fake error of a unit test is not in a `tir_asr` module, so T-PIPE-02 cannot pass with its exact text.
+     - **B.** A core module `errors.py` with a base class `TirError`. `AsrError`, `MtError`, `AudioError`, and `SegmentError` inherit from it (the revisit condition of D-036 part 5). A `TirError` gives `tir-asr: <message>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>`.
+     - Claude's preference: B. Weak point: one line changes in each of four merged modules; their tests do not change.
+  7. **Signature.** `run(source, vad, transcriber, translator, params, clock, out, err) -> int`. `run()` builds the `Endpointer` (§2.6). One capture thread and one worker thread (§4). The main thread waits on one event queue for "error" or "done".
+- **Decision:** A in points 1 and 2; B in point 6; points 3, 4, 5, and 7 as proposed; T-PIPE-05 is new. The branch `c2d-pipeline` holds `errors.py`, `pipeline.py`, the four base-class lines, and T-PIPE-01 to T-PIPE-05. `app.py` and `parameter_lines` go to `c2d-cli`.
+- **Reason (Aren's words):** "1. A is the best option", "2. A", "6. B", "continue" (points 3, 4, 5, 7, and T-PIPE-05).
+- **Revisit when:** C4 (two capture threads on one worker), or L-02 shows lost lines at Ctrl+C.
