@@ -713,3 +713,38 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A in parts 1 and 2; B in part 3 (Aren); part 4 as given; T-OUT-04 approved. `ARCHITECTURE.md` §2.5 gets the changes in the same commit as `output.py` (R13).
 - **Reason (Aren's words):** "agree" (parts 1, 2, and 4). "add lines between blocks" (part 3). "approve the test" (part 5).
 - **Revisit when:** C4 (two sources write to one terminal) or the C7 live test (the screen at the speed of speech).
+
+## D-041. Microphone adapter test and audio contract (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), parts 1 to 5
+- **Context:** T-AUDIO-01 had two options (`TESTS.md` §2.4). The probes in `scripts/probe_audio.py` measured a null sink, its monitor, and the default microphone on Aren's laptop (`TESTS.md`, "C2d audio probes"). Facts from `soundcard` 0.4.6 (`pulseaudio.py`) [SOURCE]:
+  - `record(512)` returns an array of shape (512, 1), float32.
+  - `default_microphone()` reads the default source of the server.
+  - `get_microphone(id)` tries the exact id, then a part of the name, then a regex match. Thus a wrong id can select a different device with no error (against R10).
+  - `record()` waits with no time limit. It raises `RuntimeError` only when the stream is in the FAILED state.
+- **Parts, options, and Claude's preference:**
+  1. **Test level.**
+     - **A.** Live: the adapter reads 50 blocks from the default microphone.
+     - **B (Aren).** Sim: a tone plays into a null sink (D-020), and the adapter captures its monitor. This moves a part of the C4 work forward.
+     - Claude's preference: A, because it is the thinnest step for M1 (R2). Weak point of A: the test cannot see wrong content (a wrong scale or a wrong sample order) before C4.
+  2. **How the test reaches the monitor.**
+     - **a.** The test sets the monitor as the default source, then sets the old default back. Weak point: the session manager can store the default, so a crash during the test can leave the default changed [UNVERIFIED].
+     - **b.** The adapter constructor gets an optional exact device id. With no id, it uses the default microphone.
+     - Claude's preference: b. It does not change the system defaults, and C4 needs a device id for F1. Weak point: the sim test does not cover the default-microphone line; L-01 covers it. Fact that can show b is wrong: C4 needs a different selection method.
+  3. **T-AUDIO-01 limits** (from the probe B numbers): blocks of (512,) float32; arrival times that increase; span ÷ (n − 1) = 32 ms ± 0.5 ms (probe B: +0.055 ms); no gap over 64 ms (probe B: 43.3 ms); a silent phase of zeros; a tone of 440 ± 1 Hz with RMS 0.1768 ± 10 % and no holes. Weak point: the RMS limit needs the sink volume and the stream volume at 100 %.
+  4. **Samples outside [−1, 1].** The default microphone gave 22 samples outside [−1, 1] (min −1.0496). The source volume is 24 % (−36.85 dB), so the cause is not a volume over 100 % [RUN]. A possible cause is a full-scale input and the 48 → 16 kHz conversion [UNVERIFIED] (Q-11).
+     - **A.** The adapter clips the samples to [−1, 1] and counts them. The shutdown line shows the count.
+     - **B.** The adapter does not change the samples. The contract changes to: "normally in [−1, 1]; a loud input can give values a little outside".
+     - Claude's preference: B for the MVP. It needs no code, and Silero VAD and NeMo take float input [UNVERIFIED for values outside [−1, 1]]. Weak point: a later module that needs [−1, 1] can fail. Fact that can show B is wrong: loud segments give ASR errors in C3.
+  5. **Adapter interface** (Claude's proposal, the same style as the other adapters, D-037):
+     1. `SoundcardMicrophone(device=None)` in `audio/soundcard_mic.py`. `AudioError` is in the same file.
+     2. The constructor imports `soundcard` and selects the source, so that the errors come at startup. With a `device` id, it checks for an exact id among all sources, monitors included; a missing id gives `audio: no source with the exact id <id>`. The import is in the constructor, because `soundcard` connects to the server at import and, with no server, fails with a bare `AssertionError`. Weak point: the other adapters import at the top of the file.
+     3. `blocks()` opens the stream, not the constructor. The stream keeps all audio from the moment it opens, with no limit; a stream that opened at startup would give the audio of the warm-up time later, in a burst, before "Listening". Weak point: a stream error comes after "Listening", not at startup.
+     4. Each block has the label "Me" (C2). C4 changes the label for the system source.
+     5. A (512, 1) array becomes (512,). Any other shape gives `audio: block has <n> samples, expected 512`.
+     6. A `RuntimeError` from `soundcard` becomes `audio: recording failed: <cause>`.
+     7. The attribute `name` gives the device name for the startup log (§2.7, step 5).
+     8. T-IMPORT-01: `tir_asr.audio` (the package file) goes into `REQUIRED`.
+- **Decision:** B in part 1 (Aren); b in part 2; the limits of part 3; B in part 4; points 1 to 8 of part 5. T-AUDIO-02 and T-AUDIO-03 are approved. `ARCHITECTURE.md` §2.1 and §3 get the changes in the same commit as the adapter (R13).
+- **Reason (Aren's words):** "no let's simulate but we have to be careful and do it step-by-step and deliberate on it so we are sure it runs right" (part 1). "agree on your preferences" (parts 2 to 4). "I approve the tests and confirm your points" (part 5).
+- **Revisit when:** C4 (device flags and two sources) or C3 (Q-11).
