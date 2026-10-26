@@ -264,6 +264,23 @@ Notes:
 - **T-NORM-08** reads `docs/eval/scripts.md`. A change of the script table can change the result of this test.
 - **Known limit (P1):** an ASCII «?» in place of «՞» becomes a space. Then the word does not match the reference word, and WER counts an error.
 
+**`metrics.py`** (branch `c3-metrics`, D-047, D-049). Aren approved T-MET-01 to T-MET-08 on 2026-10-26. Test file: `tests/unit/test_metrics.py`. WER and CER use `normalize_hy`. chrF uses `sacrebleu` with its default values (character order 6, word order 0, beta 2) and no normalization. Each score is for the full list: the total edits divided by the total reference length.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-MET-01 | Edit distance: substitution, deletion, and insertion cost 1 each. | words `a b c`/`a b c`; `a b c`/`a x c`; `a b c`/`a c`; `a b`/`a b c`; empty/`a b`; `a b`/empty; empty/empty; characters `kitten`/`sitting` | 0; 1; 1; 1; 2; 2; 0; 3 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-02 | WER uses the D-047 normalization. | ref «Բարև, տղերք։», hyp «բարև տղերք» | 0.0 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-03 | WER is for the full list. | refs «ա բ», «գ դ ե զ»; hyps «ա», «գ դ ե զ» | 1/6 (not 0.25, the mean of the lines) | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-04 | WER keeps «՞» (D-047 P1). | ref «Լսո՞ւմ եք», hyp «լսում եք» | 0.5 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-05 | CER counts the spaces. | ref «աբ գդ», hyp «աբ գե» | 1/5 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-06 | chrF on the English text. | the same text; «abc» and «xyz»; «Hello there» and «hello there» | 100.0; 0.0; less than 100 (no lowercase) | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-07 | Digit words (D-047 N1). | «ժամը 8-ին», «15 000 դրամ» | 3 | unit | PASSES (Aren's laptop, 2026-10-26) |
+| T-MET-08 | Errors (R10). | `wer`, `cer`, `chrf` with 2 refs and 1 hyp; `wer`, `cer` with the ref «։ ,» | `MetricError` `metrics: 2 references and 1 hypotheses`; `MetricError` `metrics: the references have no words` | unit | PASSES (Aren's laptop, 2026-10-26) |
+
+T-IMPORT-01 adds `tir_asr.eval.metrics` to `REQUIRED`. Red state: a stub raises `NotImplementedError` in each function.
+
+**Results (Aren's laptop, 2026-10-26):** red run 21 failed, each with `NotImplementedError`, and 16 passed (`test-results/c3-met-red.txt`). Green run: `ruff check` and `ruff format --check` pass; 140 unit tests pass; `sacrebleu` 2.6.0 (`test-results/c3-met-green.txt`).
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).

@@ -837,6 +837,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Context:** WER needs the ASR text and the reference text of the same audio. Aren recorded S1–S3 (`docs/eval/scripts.md`) with one file for each side: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2; Google Meet for S1, Telegram for S2 and S3). The folder had no label files.
 - **Facts [RUN, read-only check of the 6 files, 2026-10-26]:**
   - 48 kHz, mono, float32 (WAV format 3). Each mic file has the same length as its call file: S1 70.66 s, S2 62.81 s, S3 59.05 s.
+    - **Correction (2026-10-26, D-048):** at this check, the S2 files and the S3 files had the names of the other script. Aren corrected the names. The correct lengths are S2 59.05 s and S3 62.81 s.
   - `s1.mic.wav` has 500 samples at |x| ≥ 0.999 (clipping, Q-11). The other 5 files have a peak of 0.62–0.99.
   - The call files have no echo of Aren's voice (5 places checked, correlation ≤ 0.07).
   - S1: the two sides speak at the same time three times, for 0.35–1.1 s (Aren's interruptions, on purpose). Source: a level check, not the VAD.
@@ -891,3 +892,38 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude: the normalization changes only the two texts that WER and CER compare. The program output and the MT input keep «՞».
   - Claude: known limit of P1: an ASCII «?» in place of «՞» becomes a space, so the word does not match the reference word.
 - **Revisit when:** a candidate writes 3 or more words with digits on S1–S3 (N2); the ASR outputs show «?» in place of «՞»; or a «՞» on a different word changes the ASR ranking.
+
+## D-048. Eval references for the cut ends of S2 and S3 (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** Aren made the labels (D-046). Two recordings stop before the end of the last line:
+  - s2-10 ("Me", mic side) stops after «Շնորհակալ». «եմ, ցտեսություն» is not in the audio.
+  - s3-10 (Speaker 1, call side) stops inside the last word: the audio has «քե», not «քեզ».
+  - [RUN] The last label of s1-14, s2-10, and s3-10 ends at the end of its file, so these sides end during speech. The VAD closes a segment only after `vad_min_silence_ms` of silence (D-027). The eval audio step needs a rule for the end of a file (proposal with that component).
+  - Aren also corrected the S2 and S3 file names (correction in D-046), and he changed `docs/eval/scripts.md` so that the references agree with the recordings.
+- **Options:**
+  - **A.** Make the references the same as the audio (the rule "Changes" in `docs/eval/scripts.md`). s2-10: «Անպայման։ Շնորհակալ», "Definitely. Thank you". s3-10: «… Վաղն առավոտյան կզանգեմ քե»; the English does not change, because a translation of a part of a word has no correct form. A note under each table gives the original script text. Weak points: the table no longer shows the full text for a new recording; a part of a word in a reference is unusual (a model that writes «քեզ» gets one error).
+  - **B.** Remove s2-10 and s3-10 from all numbers. Weak points: the main numbers then depend on the labels (against D-046 point 2); 2 lines fewer.
+  - **C.** Record the two ends again. Weak points: time, the other speaker, and new labels.
+- **Claude's preference:** A. All models get the same audio, so the effect on the comparison is equal (about 3 of 397 words). Fact that can show A is wrong: a new recording of S2 or S3 (for example in C5) needs the full text.
+- **Decision:** A.
+- **Reason (Aren's words):** "Agree on A for the cut ends". On the file names: "yes the wrong names were wrong".
+- **Revisit when:** a new recording of S2 or S3 needs the full script text.
+
+## D-049. C3 scope: the full shortlists, the eval components, and two dev dependencies (C3)
+
+- **Status:** ACCEPTED (2026-10-26), option B
+- **Context:** at 16:22, about 80 min remained in the C3 time box (2.5 h). The full shortlists (D-014, D-015) need 3 eval components and 5 more candidates, with installs, downloads, and adapters. The total time budget is already over (R16).
+- **Options:**
+  - **A.** Eval components; ASR-1 with RNNT and with CTC (same weights); MT NLLB-600M, and OPUS-MT only if time remains. ONNX-CTC, BuzzASR (ASR-5), and Seamless (ASR-2, MT-5) move to C6, only if the C3 numbers show that ASR or MT is the weakest link. The line view (D-046 point 3) moves to C6. Weak points: no end-to-end model and no other ASR weights measured; D-ASR chooses between two decoders of one model.
+  - **B.** The full shortlists. Weak point: about 1.5–2 h more [UNVERIFIED estimate], over the time box and the budget.
+  - **C.** Numbers for the current models only. Weak point: no comparison; D-ASR and D-MT only confirm the skeleton.
+- **Claude's preference:** A. Fact that can show it is wrong: on our data, the WER of ASR-1 is much higher than its published WER (Common Voice 17.0: 9.90 %), so a candidate that moved to C6 can win.
+- **Decision:** B, with these parts of the plan:
+  1. `c3-metrics`: own edit distance for WER and CER; chrF from `sacrebleu` with its default values.
+  2. `c3-data`: read a 48 kHz float32 WAV file and resample it to 16 kHz with `scipy.signal.resample_poly(x, 1, 3)`; add 1.0 s of zeros at the end of each file (the end rule of D-048); read the references from `docs/eval/scripts.md` and the labels.
+  3. `c3-bakeoff`: the runner (model level), with the line view of D-046 point 3.
+  4. Dev dependencies (D-028): `sacrebleu` (2.6.0, Apache-2.0) and `scipy` (BSD) [SOURCE: wheel METADATA].
+- **Reason (Aren's words):** "No let's not cut on research. Will make cuts later." Earlier in C3: "Let's make sure that we stay under the time box for C3."
+- **Questions raised:** Claude (R14) named the conflict with the time box one time: C3 goes over its time box by about 1.5–2 h [UNVERIFIED estimate], and the later cuts must cover this time (C6 is the first item to cut). Aren did not object. He also did not object to the 1.0 s end rule and the two dependencies.
+- **Revisit when:** the total time comes near the budget (R16).

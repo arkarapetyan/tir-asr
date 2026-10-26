@@ -43,6 +43,7 @@ markers = [
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
+    "sacrebleu>=2.6.0",
 ]
 laptop = [
     "ctranslate2>=4.8.3",
