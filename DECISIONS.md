@@ -779,3 +779,22 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A in points 1 and 2; B in point 6; points 3, 4, 5, and 7 as proposed; T-PIPE-05 is new. The branch `c2d-pipeline` holds `errors.py`, `pipeline.py`, the four base-class lines, and T-PIPE-01 to T-PIPE-05. `app.py` and `parameter_lines` go to `c2d-cli`.
 - **Reason (Aren's words):** "1. A is the best option", "2. A", "6. B", "continue" (points 3, 4, 5, 7, and T-PIPE-05). On the main risk of point 3: "accept point 3 risk".
 - **Revisit when:** C4 (two capture threads on one worker), or L-02 shows lost lines at Ctrl+C.
+
+## D-043. CLI, startup log, and the end-to-end test (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), points 1 to 6. Point 2a is open.
+- **Context:** D-042 put the loading of the adapters and the startup log into a new module `app.py`, and `cli.py` is only the `argparse` interface (D-037). The branch `c2d-cli` needs the details, and T-CFG-02, T-CLI-01, and T-E2E-01 need exact texts.
+- **Points and Claude's proposals:**
+  1. **`cli.py`.** `main(argv=None) -> int` with `argparse` (`prog="tir-asr"`, no flags except `--help`). After the parse, it imports `app` and returns `app.main()`. `pyproject.toml` gets `[project.scripts] tir-asr = "tir_asr.cli:main"`. Weak point: after this change, `uv sync` must run one time, so that the command gets installed. It is [UNVERIFIED] that `uv.lock` does not change; if it must change, `uv sync --locked` in CI fails loudly.
+  2. **Startup log (`app.py`).** Each line of the program starts with `startup: `, so that the lines are easy to find between the NeMo lines: the versions (from `importlib.metadata`), the GPU name, one line for each parameter (`parameter_lines`), each load time with the used GPU memory (`torch.cuda.mem_get_info()`, for the full device, so CTranslate2 is included), the warm-up times, and the microphone name. Then "Listening".
+     - **2a (open).** Load order. Proposed first: MT first, for the cuBLAS preload. Claude found a conflict after Aren's answer: with MT first, a missing CUDA gives an error from CTranslate2 or torch, not the clean `asr: CUDA is not available` of §7 (point 4). The preload is inside the MT adapter, and it only needs to come before any `import ctranslate2`; no other module imports `ctranslate2`. [RUN] The model run of `c2d-pipeline` imported torch and NeMo before the MT adapter in one process, and T-MODEL-MT-01 passed with no `LD_LIBRARY_PATH`. New proposal: ASR first (with its CUDA check), then MT, then VAD; the GPU name after the ASR load; the used GPU memory after each load. Weak point: it differs from the handover advice "import the MT adapter first". Fact that can show it is wrong: T-E2E-01 fails at the MT load.
+  3. **The about 185 NeMo load lines.**
+     - **A.** Leave them for M1: no code, and nothing is hidden (R10). Decide again in C7, before the interview.
+     - **B.** Set the NeMo log level to ERROR during the load. Weak point: it hides the warnings.
+     - Claude's preference: A. Fact that can show it is wrong: in L-01, Aren cannot find the startup lines.
+  4. **Errors and Ctrl+C during the startup.** A `TirError` gives `tir-asr: <message>` and exit code 1 (§7). Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>` and exit code 1 (the rule of D-042 point 6). Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
+  5. **T-E2E-01.** A test WAV source in `tests/support/wav_source.py` (D-025) plays clip 1, then clip 2, at real-time speed. Each block gets its true `time.monotonic()` arrival, and the source drops a last part of a clip that is shorter than one frame (D-032). The test loads the models with the function of the program (`app.load_models`), so `app.py` gets coverage. Expected: 2 blocks in time order, label "Me", no `(no text)`, and each total < 5.0 s.
+  6. **Unit tests.** T-CFG-02: `parameter_lines(Params())` in `config.py`. T-CLI-01: (a) `main(["--help"])` in a new process, with no `laptop` import; (b) the installed command. T-IMPORT-01: `tir_asr.cli` in `REQUIRED`, `tir_asr.app` in `ADAPTERS`.
+- **Decision:** points 1 to 6 as proposed, with A in point 3. Point 2a: Aren decides.
+- **Reason (Aren's words):** "1. agree", "2. agree", "3. A", "4. agree", "5. agree", "6. agree".
+- **Revisit when:** C7 (the NeMo lines at the interview), or T-E2E-01 fails at a model load.
