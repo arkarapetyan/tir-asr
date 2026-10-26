@@ -7,7 +7,7 @@ comes from the Hugging Face cache only; nothing downloads at runtime.
 The CTranslate2 4.8.3 wheels need the CUDA 12 cuBLAS. Before `import ctranslate2`, this module
 loads it from the package `nvidia-cublas-cu12` (D-030). The program needs no LD_LIBRARY_PATH.
 
-This module imports `ctranslate2` and `transformers`. Only the pipeline and the model tests
+This module imports `ctranslate2` and `transformers`. Only `app.py` and the model tests
 import it. The core modules do not (D-021, T-IMPORT-01).
 
 The adapter has no warm-up method. The pipeline does the warm-up call (D-022, D-037).

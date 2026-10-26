@@ -95,9 +95,9 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-PIPE-04 | §2.7, D-042: shutdown line. | 150 fake frames: a normal region (frames 5–24), a short region (frames 60–66, 224 ms), and a region with an empty text (frames 100–119). The fake ASR returns "բարև", then "". Then the source ends. | `run` returns 0. The last output line is exactly `Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0.` | unit | PASSES |
 | T-PIPE-05 | D-022, D-037, D-042: warm-up. | `warm_up(transcriber, translator, clock)` with a fake clock 10.0, 10.4, 10.5. | The fake ASR gets one call: 32000 zeros, float32. The fake MT gets one call: `WARMUP_TEXT`. The result is (0.4 s, 0.1 s). | unit | PASSES |
 | T-CFG-01 | R10, §6: approved parameters. | `config.py`. | Each value is equal to the §6 table. | unit | PASSES |
-| T-CFG-02 | R10, §2.7: parameters in the startup log. | The startup log function. | The startup log has one line for each parameter, with its name and value. | unit | APPROVED |
-| T-CLI-01 | §2.7: help. | `tir-asr --help`. | Exit code 0, a usage text, and no model or device import. | unit | APPROVED |
-| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, `tir_asr.output`, `tir_asr.audio`, `tir_asr.errors`, and `tir_asr.pipeline`; later branches add theirs) |
+| T-CFG-02 | R10, §2.7, D-043: parameters in the startup log. | `parameter_lines(Params())` in `config.py`. | One line `parameter <name> = <value>` for each field of `Params`, in the field order. | unit | PASSES |
+| T-CLI-01 | §2.7, D-043: help. | (a) A new Python process calls `cli.main(["--help"])`. (b) The installed command `tir-asr --help`. | (a) Exit code 0, a text that starts with `usage: tir-asr`, and none of the `laptop` packages and not `tir_asr.app` in `sys.modules`. (b) Exit code 0 and the same usage line. | unit | PASSES |
+| T-IMPORT-01 | D-021: core modules have no `laptop` import. | Import each core module that exists in the branch, in a new Python process. | `torch`, `nemo`, `ctranslate2`, `silero_vad`, `soundcard`, and `transformers` are not in `sys.modules`. | unit | PASSES (C2b modules, `tir_asr.asr`, `tir_asr.mt`, `tir_asr.output`, `tir_asr.audio`, `tir_asr.errors`, `tir_asr.pipeline`, and `tir_asr.cli` |
 
 **Model (Aren's laptop):**
 
@@ -113,7 +113,8 @@ Contracts: `ARCHITECTURE.md` v0.3. Decisions: D-022 to D-033. Unit tests use fak
 | T-AUDIO-01 | §2.1, D-020, D-041: microphone adapter (sim). | A null sink. `SoundcardMicrophone(device="<sink>.monitor")` gives 200 blocks. After block 29, `pw-play` plays a 4 s, 440 Hz tone (peak 0.25) into the sink. | Each block: `samples` (512,) float32, `source` "Me". The arrival times increase. Span ÷ (n − 1) = 32 ms ± 0.5 ms. No gap > 64 ms. Blocks 0–29: max \|x\| < 1e-6. Tone: 440 ± 1 Hz, RMS 0.1768 ± 10 %, no run of 16 or more exact zeros. The playback stream is on the null sink. The default sink and source do not change. | sim | PASSES |
 | T-AUDIO-02 | §2.1, §7, R10: no PulseAudio server. | A new Python process with `PULSE_SERVER` set to a socket that does not exist. It builds `SoundcardMicrophone()`. | `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | PASSES |
 | T-AUDIO-03 | §2.1, R10, D-041: exact device id, no fuzzy match. | A null sink `<sink>`. `SoundcardMicrophone(device="<sink>")`: the id is only a part of the monitor name. | `AudioError`: `audio: no source with the exact id <sink>`. The test first shows that `soundcard.get_microphone("<sink>", include_loopback=True)` selects the monitor. | sim | PASSES |
-| T-E2E-01 | K1, F2, F3, F5, D-025, D-032: full pipeline with the real models. | The test WAV source plays clip 1 and then clip 2 at real-time speed. | 2 blocks in time order, label "Me", no empty text, each total < 5.0 s. | model | APPROVED |
+| T-E2E-01 | K1, F2, F3, F5, D-025, D-032, D-043: full pipeline with the real models. | `app.load_models()` (the function of the program), `warm_up()`, then `run()` with the test WAV source (`tests/support/wav_source.py`): clip 1, then clip 2, at real-time speed. | Exit code 0 and no error output. 2 blocks in time order, label "Me", no `(no text)`, each total < 5.0 s. Fewer blocks give the message "a clip ends with less than 512 ms of silence (D-032)". | model | PASSES |
+| T-E2E-02 | L-02, §2.6, D-044: Ctrl+C stops the program. | The installed command `tir-asr` in a new process (real models, default microphone), output in a pipe. After "Listening" (at most 120 s), wait 2 s, then send SIGINT. | The process ends within 10 s, with exit code 0. The last line of the program starts with `Stopped. Segments: `. | model | PASSES |
 
 **Live (manual, §4):** L-01 to L-03.
 
@@ -140,6 +141,8 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - T-PIPE-01 to T-PIPE-04 now give the exact input values and the exact output (D-042). T-PIPE-02 has two new cases: an exception that is not a `TirError`, and an error in the capture thread. T-PIPE-05 is new (D-042 point 4).
 - The Ctrl+C path (D-042 point 3) has no unit test. L-02 covers it.
 - Aren approved the exact T-PIPE-01 to T-PIPE-05 texts: "accept the tests" (2026-10-26).
+- T-CFG-02, T-CLI-01, and T-E2E-01 now give the exact input and output (D-043). T-CLI-01 has two cases: the function in a new process, and the installed command. Aren: "agree" (2026-10-26).
+- T-E2E-02 is new. It is the automatic form of L-02, after L-02 failed in the first live run (D-044). Aren: "I approve the test" (2026-10-26).
 
 **C2c results (branch `c2c-asr`, Aren's laptop, 2026-10-25):**
 
@@ -171,6 +174,18 @@ Aren approved the tests of §2.4 and §4 on 2026-10-25 ("agree on the tests"). A
 - **Red run:** 1 failed (T-IMPORT-01: no `tir_asr.output`), 1 collection error (`test_output.py`: `No module named 'tir_asr.output'`), 48 passed. File: `test-results/c2d-output-unit-red.txt`.
 - **Green run:** 55 passed. `ruff check --no-cache` and `ruff format --no-cache --check` pass. File: `test-results/c2d-output-unit.txt`.
 - [RUN] With the project layout and no `output.py`, `ruff` reports I001 on the import block of `test_output.py`. With `output.py`, the block passes. Thus a red run of a new module can show I001; the green run is the check.
+
+**C2d results (branch `c2d-cli`, Aren's laptop, 2026-10-26):**
+
+- **Red runs:** unit: 1 collection error (`test_config.py`: no `parameter_lines`), 3 failed (both T-CLI-01 cases, T-IMPORT-01), 63 passed; model: T-E2E-01 failed with `No module named 'tir_asr.app'`. Files: `test-results/c2d-cli-unit-red.txt`, `c2d-cli-e2e-red.txt`.
+- **Green runs:** `uv lock --check` passed, so `uv.lock` did not change with `[project.scripts]`. Unit: 69 passed; `ruff` passes (`test-results/c2d-cli-unit.txt`, and `c2d-cli-unit2.txt` after D-044).
+- **T-E2E-01** (`test-results/c2d-cli-e2e.txt`, again in `c2d-e2e-green.txt`): 2 blocks, totals 0.64 s and 0.62 s (then 0.63 s and 0.62 s). Steps: `vad` 0.51 s (the silence wait, D-027), `asr` 0.03–0.05 s, `mt` 0.08–0.09 s, `out` 0.00 s. The first line is not slower than the second, so the synthetic warm-up is enough (D-022). Startup: ASR 1.52 s (1100 MiB used), MT 1.10 s (+1664 MiB), VAD 0.02 s; warm-up ASR 0.29 s, MT 0.13 s. The load order ASR → MT → VAD works with no `LD_LIBRARY_PATH` (D-043, point 2a).
+- **L-02 failed in the first live run** (`test-results/c2d-live.txt`): Ctrl+C did nothing, and Aren closed the terminal. Probe C (`scripts/probe_sigint.py`, `test-results/c2d-probe-sigint.txt`) found the cause (D-044). T-E2E-02 was red with the old code (`test-results/c2d-e2e02-red.txt`: no stop within 10 s).
+- **After the fix (D-044):** T-E2E-02 passed: exit code 0, 1.17 s after SIGINT, with the shutdown line (`test-results/c2d-e2e-green.txt`). L-02 passed in the terminal (`test-results/c2d-live2.txt`).
+- **The first live run** (Script 4, s4-01 to s4-09, `docs/eval/scripts.md`) gave 8 blocks. Totals 0.21–0.64 s (K1). Data for later chats:
+  - s4-07, s4-08, and the start of s4-09 came in one segment, with a hard cut at `vad_max_speech_s` = 10 s (`vad 0.00s`): the pauses were shorter than 512 ms. The cut split the word «լսել» (the D-026 weak point, now [RUN]). Data for Q15 (PLAN §10.2) and C3.
+  - MT gave no English for the last sentence of the last block (Q-13).
+  - ASR errors: «Ալոս Սորա» for «Ալո, Սոնա», «երեք» for «Երեկ» (MT then gave "three football games"). C3 measures the WER.
 
 **C2d results (branch `c2d-pipeline`, Aren's laptop, 2026-10-26):**
 
@@ -239,10 +254,11 @@ We add a question here when we find it during the work (tip T4).
 | Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | Open. End-to-end model test (C2), C3 bake-off. |
 | Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. [RUN] Data point (T-MODEL-MT-01, 2026-10-25): in a new process, with the cuBLAS preload and no `LD_LIBRARY_PATH`, the first call took 0.126 s. The cause of the 5.1 s in T-INSTALL-03 is not known. |
 | Q-08 | A clip can end with less silence than `vad_min_silence_ms` (clip 1: 150 ms). How does the last segment end? | C2, D-027 | D-032: no added silence; the test plays clip 1, then clip 2 (gap 632 ms). T-E2E-01. |
-| Q-09 | Is the first segment after a long silence or a pause slower, because the GPU clocks down [UNVERIFIED]? | C2, Aren's warm-up question | Open. L-03. |
+| Q-09 | Is the first segment after a long silence or a pause slower, because the GPU clocks down [UNVERIFIED]? | C2, Aren's warm-up question | [RUN] No, for 76 s of silence: the first total after the silence was 0.61 s, the same as before (L-03, 2026-10-26). |
 | Q-10 | Does a long Python step in the worker delay the capture thread (GIL)? | C2, Aren's thread question | Open. Live run (C2 code chat): measure the gaps between block arrivals. |
 | Q-11 | The default microphone gave 22 samples outside [−1, 1] (min −1.0496) at a source volume of 24 % (probe B). Does the input clip, and does a clipped input change the ASR text? | C2d, probe B | Open. The volume is not over 100 % [RUN]. Possible cause [UNVERIFIED]: a full-scale input and the 48 → 16 kHz conversion. C3: count the full-scale samples in each eval recording. D-041 part 4. |
 | Q-12 | Do Bluetooth headphones change to the headset mode when an application opens their microphone, and does the call audio then lose quality? | C2d, Aren's recordings | Open [UNVERIFIED]. C4 setup guide: select the laptop microphone in the call application. |
+| Q-13 | Does NLLB leave out a sentence when one segment has two or more sentences? In the first live run, the EN line of the last block has no translation of «Լավ Սոնա, հետո կզանգեմ, հիմա պիտի գնամ։». | C2d, live run | Open. C3: segments with 2 and 3 sentences in the eval set. |
 
 ## 4. Live checklist (manual)
 
@@ -250,6 +266,6 @@ Only the checks that a sim test cannot do. (C7)
 
 | ID | Check | Expected result | Result |
 |---|---|---|---|
-| L-01 | Aren says 5 Armenian sentences into the microphone, with a pause after each. | One block for each sentence, label "Me", each total < 5 s (K1). | |
-| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | |
-| L-03 | Aren is silent for 60 s, then says one sentence; then he says 3 sentences with short pauses (Q-09). | The total of the first sentence is compared with the next ones. | |
+| L-01 | Aren says 5 Armenian sentences into the microphone, with a pause after each. | One block for each sentence, label "Me", each total < 5 s (K1). | PASSES (2026-10-26): Script 4, s4-01 to s4-05: 5 blocks, label "Me", totals 0.61–0.64 s. |
+| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. |
+| L-03 | Aren is silent for 60 s, then says one sentence; then he says 3 sentences with short pauses (Q-09). | The total of the first sentence is compared with the next ones. || PASSES (2026-10-26): after 76 s of silence, the total of s4-06 was 0.61 s, the same as before (Q-09). |

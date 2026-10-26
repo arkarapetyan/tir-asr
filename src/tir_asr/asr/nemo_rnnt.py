@@ -4,7 +4,7 @@ Model: nvidia/stt_hy_fastconformer_hybrid_large_pc, RNNT decoder, on `cuda` (D-0
 file comes from the Hugging Face cache only; nothing downloads at runtime. There is no CPU
 fallback (R10).
 
-This module imports `torch`, `nemo`, and `huggingface_hub`. Only the CLI and the model tests
+This module imports `torch`, `nemo`, and `huggingface_hub`. Only `app.py` and the model tests
 import it. The core modules do not (D-021, T-IMPORT-01).
 
 The adapter has no warm-up method. The pipeline does the warm-up call (D-022, D-037).

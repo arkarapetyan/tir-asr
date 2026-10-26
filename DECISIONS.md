@@ -779,3 +779,54 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A in points 1 and 2; B in point 6; points 3, 4, 5, and 7 as proposed; T-PIPE-05 is new. The branch `c2d-pipeline` holds `errors.py`, `pipeline.py`, the four base-class lines, and T-PIPE-01 to T-PIPE-05. `app.py` and `parameter_lines` go to `c2d-cli`.
 - **Reason (Aren's words):** "1. A is the best option", "2. A", "6. B", "continue" (points 3, 4, 5, 7, and T-PIPE-05). On the main risk of point 3: "accept point 3 risk".
 - **Revisit when:** C4 (two capture threads on one worker), or L-02 shows lost lines at Ctrl+C.
+
+## D-043. CLI, startup log, and the end-to-end test (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), points 1 to 6 and 2a
+- **Context:** D-042 put the loading of the adapters and the startup log into a new module `app.py`, and `cli.py` is only the `argparse` interface (D-037). The branch `c2d-cli` needs the details, and T-CFG-02, T-CLI-01, and T-E2E-01 need exact texts.
+- **Points and Claude's proposals:**
+  1. **`cli.py`.** `main(argv=None) -> int` with `argparse` (`prog="tir-asr"`, no flags except `--help`). After the parse, it imports `app` and returns `app.main()`. `pyproject.toml` gets `[project.scripts] tir-asr = "tir_asr.cli:main"`. Weak point: after this change, `uv sync` must run one time, so that the command gets installed. It is [UNVERIFIED] that `uv.lock` does not change; if it must change, `uv sync --locked` in CI fails loudly.
+  2. **Startup log (`app.py`).** Each line of the program starts with `startup: `, so that the lines are easy to find between the NeMo lines: the versions (from `importlib.metadata`), the GPU name, one line for each parameter (`parameter_lines`), each load time with the used GPU memory (`torch.cuda.mem_get_info()`, for the full device, so CTranslate2 is included), the warm-up times, and the microphone name. Then "Listening".
+     - **2a (open).** Load order. Proposed first: MT first, for the cuBLAS preload. Claude found a conflict after Aren's answer: with MT first, a missing CUDA gives an error from CTranslate2 or torch, not the clean `asr: CUDA is not available` of §7 (point 4). The preload is inside the MT adapter, and it only needs to come before any `import ctranslate2`; no other module imports `ctranslate2`. [RUN] The model run of `c2d-pipeline` imported torch and NeMo before the MT adapter in one process, and T-MODEL-MT-01 passed with no `LD_LIBRARY_PATH`. New proposal: ASR first (with its CUDA check), then MT, then VAD; the GPU name after the ASR load; the used GPU memory after each load. Weak point: it differs from the handover advice "import the MT adapter first". Fact that can show it is wrong: T-E2E-01 fails at the MT load.
+  3. **The about 185 NeMo load lines.**
+     - **A.** Leave them for M1: no code, and nothing is hidden (R10). Decide again in C7, before the interview.
+     - **B.** Set the NeMo log level to ERROR during the load. Weak point: it hides the warnings.
+     - Claude's preference: A. Fact that can show it is wrong: in L-01, Aren cannot find the startup lines.
+  4. **Errors and Ctrl+C during the startup.** A `TirError` gives `tir-asr: <message>` and exit code 1 (§7). Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>` and exit code 1 (the rule of D-042 point 6). Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
+  5. **T-E2E-01.** A test WAV source in `tests/support/wav_source.py` (D-025) plays clip 1, then clip 2, at real-time speed. Each block gets its true `time.monotonic()` arrival, and the source drops a last part of a clip that is shorter than one frame (D-032). The test loads the models with the function of the program (`app.load_models`), so `app.py` gets coverage. Expected: 2 blocks in time order, label "Me", no `(no text)`, and each total < 5.0 s.
+  6. **Unit tests.** T-CFG-02: `parameter_lines(Params())` in `config.py`. T-CLI-01: (a) `main(["--help"])` in a new process, with no `laptop` import; (b) the installed command. T-IMPORT-01: `tir_asr.cli` in `REQUIRED`, `tir_asr.app` in `ADAPTERS`.
+- **Decision:** points 1 to 6 as proposed, with A in point 3. Point 2a: the new proposal (ASR, then MT, then VAD).
+- **Reason (Aren's words):** "1. agree", "2. agree", "3. A", "4. agree", "5. agree", "6. agree". Point 2a: "agree on 2a".
+- **Revisit when:** C7 (the NeMo lines at the interview), or T-E2E-01 fails at a model load.
+
+## D-044. Ctrl+C: the main thread waits with a time limit (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** In the first live run (2026-10-26), L-02 failed: Ctrl+C did not stop the program, and no shutdown line came (`test-results/c2d-live.txt`). The main thread waited in `events.get()` with no time limit (D-042). Probe C (`scripts/probe_sigint.py`, `test-results/c2d-probe-sigint.txt`) [RUN]:
+  - The SIGINT handler stays `default_int_handler` after each startup step, and the main thread does not block SIGINT. Thus no library replaced or blocked the handler.
+  - The process has 75–79 native threads after the ASR load (1 at the start).
+  - Test 1, `get(timeout=0.5)` in a loop, got `KeyboardInterrupt`.
+  - Test 2 (`get()` with no time limit) has no result: its message had no `flush`, so Aren did not see it (Claude's error). The live run L-02 is the same wait, and it failed.
+  - In the workspace (one thread), both ways of waiting get `KeyboardInterrupt` [RUN].
+  - Inference: Python handles a signal only when the main thread wakes up. With no time limit, the main thread does not wake up when another thread receives the signal.
+- **Options:**
+  - **A.** The main thread waits with `events.get(timeout=STOP_POLL_S)` in a loop, `STOP_POLL_S = 0.5` s. The time limit only wakes the main thread, so that Python can handle a waiting Ctrl+C; it changes nothing else. Weak points: Ctrl+C can take up to 0.5 s; the main thread wakes 2 times each second; it is a time limit in the code (R10), so it must be visible.
+  - **B.** `signal.set_wakeup_fd` with a pipe, and `select()` on that pipe and on an event pipe. No time limit. Weak point: more code, harder to read.
+  - **C.** Block SIGINT in all other threads. Weak point: the libraries make most of the threads.
+- **Claude's preference:** A. Fact that can show it is wrong: T-E2E-02 still hangs after the fix.
+- **Decision:** A. `STOP_POLL_S = 0.5` s is a named constant in `pipeline.py` (`ARCHITECTURE.md` §4 and §5), not a tunable parameter. New test T-E2E-02: the installed command gets SIGINT after "Listening" and must end within 10 s with exit code 0 and the shutdown line.
+- **Reason (Aren's words):** "ok fix with A and I approve the test".
+- **Revisit when:** T-E2E-02 hangs, or C4 changes the threads.
+
+## D-045. Launcher script `run.sh` (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** Aren asked for "a bash executable file for the command that runs the app". The program must start in the project folder (the MT model folder is relative, §2.4). All model tests ran with `HF_HUB_OFFLINE=1`. L-02 passed with `.venv/bin/tir-asr`, with no `uv run` in the signal path.
+- **Options:**
+  - **A.** `run.sh` in the project folder: `cd` to the folder of the script, `HF_HUB_OFFLINE=1`, then `exec .venv/bin/tir-asr "$@"`. Weak points: `uv sync` must run one time before; with `HF_HUB_OFFLINE=1`, a missing file in the Hugging Face cache gives an error, not a download (this is the wanted behaviour for K2).
+  - **B.** The same, with `exec uv run tir-asr "$@"`. Weak points: `uv run` can sync the environment at each start (a download at the interview); `uv` is then in the Ctrl+C path, which L-02 did not test.
+  - **C.** A, but with no `HF_HUB_OFFLINE`. Weak point: the Hugging Face libraries can try the network at the start [UNVERIFIED for this program]; with no network, that can be slow or fail.
+- **Claude's preference:** A. Checks in the workspace with a fake program [RUN]: it works from another folder and through a symbolic link, it passes the arguments, `exec` leaves no extra shell, and a missing command gives exit code 1 with a message. `shellcheck` 0.11.0 has no findings. Fact that can show A is wrong: `./run.sh` fails on Aren's laptop where `.venv/bin/tir-asr` works.
+- **Decision:** A.
+- **Reason (Aren's words):** "agree on D45".
+- **Revisit when:** C4 (device flags go through `"$@"`), or C8 (the README setup steps).
