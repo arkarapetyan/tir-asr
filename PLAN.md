@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.11 · **Date:** 2026-10-26
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far.
+**Version:** 0.12 · **Date:** 2026-10-26
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time.
 
 ---
 
@@ -118,7 +118,10 @@ tir-asr/                    # local folder: /home/aren/dev/armenian-asr
 ├── .github/workflows/ci.yml
 ├── .gitignore              # blocks weights, audio, .env, data/
 ├── src/tir_asr/
-│   ├── cli.py              # flags, device list, startup log
+│   ├── cli.py              # argparse only (D-037, D-043)
+│   ├── app.py              # loads the adapters, startup log (D-042, D-043)
+│   ├── errors.py           # TirError, the base class of the module errors (D-042)
+│   ├── config.py  types.py # parameters and constants; data types
 │   ├── audio/              # capture of microphone and system audio
 │   ├── segment/            # VAD (voice activity detection) → speech segments
 │   ├── asr/                # segment → Armenian text
@@ -129,6 +132,9 @@ tir-asr/                    # local folder: /home/aren/dev/armenian-asr
 ├── eval/                   # scripts that make the eval set and compute metrics
 ├── data/                   # local only, in .gitignore
 ├── tests/{unit,model,sim}/ # the live checklist is in TESTS.md
+├── tests/support/          # test code only: the WAV source (D-025)
+├── scripts/                # tools outside the package: export_chats.py, probe_audio.py, probe_sigint.py
+├── run.sh                  # the launcher (D-045)
 ├── docs/research/RESEARCH.md
 ├── docs/handovers/NN-<phase>.md
 └── chats/NN-<phase>.md     # D3
@@ -162,7 +168,7 @@ Phase order: option B, skeleton first (D-002).
 
 ASR: automatic speech recognition. MT: machine translation.
 
-**Note (C2, C2b, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2b, the expected total is about 22.5 h, or 23.2 h with the buffer (calc), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
+**Note (C2 to C2d, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2d, the expected total is about 23.8 h, or 24.5 h with the buffer (calc: C2c 0.97 h and C2d 2.82 h, against 1.0 h and 1.5 h), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
 
 ### 5.2 Details for each chat
 
@@ -248,7 +254,7 @@ ASR: automatic speech recognition. MT: machine translation.
   | `c2d-cli` | `cli.py` | T-CLI-01, T-CFG-02, T-IMPORT-01 (unit); T-E2E-01 (model); L-01 to L-03 (live) |
 
 - **Done when:** M1 works on Aren's laptop, and all four branches are merged. Each line shows its latency (K1).
-- **Status (2026-10-26):** `c2d-output` is merged (`ab0820f`, D-040). `c2d-audio` is merged (`b363fed`, D-041): T-AUDIO-01 became a sim test with a null sink (Aren), after two probes (`scripts/probe_audio.py`). `c2d-pipeline` and `c2d-cli` are open.
+- **Status (2026-10-26): done, M1 reached.** `c2d-output` merged (`ab0820f`, D-040); `c2d-audio` merged (`b363fed`, D-041: T-AUDIO-01 became a sim test with a null sink, after two probes); `c2d-pipeline` merged (`2bfd7b3`, D-042); `c2d-cli` merged at the end of C2d (D-043 to D-045). T-E2E-01: each total about 0.6 s (K1). L-01 to L-03 pass; L-02 passed after the fix D-044 (Ctrl+C). The launcher is `./run.sh` (D-045).
 
 #### C3. Evaluation set and bake-off
 
@@ -486,7 +492,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 
 | ID | Question | Source | Claude's notes (for the decision later) |
 |---|---|---|---|
-| Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. |
+| Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. [RUN] C2d live run: three phrases with short pauses came in one segment, the 10 s hard cut split the word «լսել», and the MT left out a sentence (TESTS.md, Q-13). |
 | Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). |
 
 ---
@@ -500,7 +506,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C2 | 3 h | 2.65 h | 2026-10-25, 10:01–12:40 (2 h 39 min). Install check, contracts, test design. The C2 scope changed: the code moved to C2b–C2d (D-035), so the 0.35 h under the time box does not go to the buffer. |
 | C2b | 1 h | 0.58 h | 2026-10-25, 12:45–13:20 (35 min). `types`, `config`, and `segment`, with their tests (D-036). 0.42 h under the time box; Aren decides if it goes to the buffer. |
 | C2c | 1 h | 0.97 h | 2026-10-25, 13:32–14:30 (58 min, Aren). `asr` and `mt` adapters, with their tests (D-037 to D-039). 0.03 h under the time box. |
-| C2d | 1.5 h | 1.52 h so far | In progress. 2026-10-25, 17:44–18:35 (51 min); 19:27–19:40 (about 13 min: recording setup for the eval set, C3 preparation); 2026-10-26, 10:04–10:15 (11 min); 10:46–11:02 (16 min). The breaks are not counted (Aren). Over the time box: the sim test for T-AUDIO-01 (D-041) and the two probes. |
+| C2d | 1.5 h | 2.82 h | 2026-10-25, 17:44–18:35 (51 min); 19:27–19:40 (about 13 min: recording setup for the eval set, C3 preparation); 2026-10-26, 10:04–10:15 (11 min); 10:46–12:20 (94 min, to Aren's last message). The breaks are not counted (Aren). 1.32 h over the time box: the sim test for T-AUDIO-01 and its two probes (D-041), and the Ctrl+C fix with probe C (D-044). |
 | C3 | 2.5 h | | |
 | C4 | 2 h | | |
 | C5 | 3 h | | |
@@ -509,7 +515,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 10.02 h | C0 + C1 + C2 + C2b + C2c + C2d so far (1.52 h). S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 22.5 h (R16 note in §5.1). |
+| **Total** | **24.0 h** | 11.32 h | C0 + C1 + C2 + C2b + C2c + C2d. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.8 h (R16 note in §5.1). |
 
 ---
 
@@ -528,3 +534,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.9 | 2026-10-25 | C2b time logged (0.58 h). Expected total now about 22.5 h, or 23.2 h with the buffer (§5.1 note). C2b note: tests pass on Aren's laptop; D-036. |
 | 0.10 | 2026-10-25 | C2c status: the tests pass on Aren's laptop; new tests T-MODEL-ERR-03 and T-MODEL-ERR-04 in the C2c table; D-037 to D-039. C2c time logged (0.97 h). |
 | 0.11 | 2026-10-26 | C2d status: `c2d-output` and `c2d-audio` merged (D-040, D-041); the C2d branch table; C2d time so far (1.52 h, with no breaks). |
+| 0.12 | 2026-10-26 | C2d closed: M1 reached; all four C2d branches; D-042 to D-045; the C2d time (2.82 h, with no breaks); the repository layout (`app.py`, `errors.py`, `tests/support/`, `scripts/`, `run.sh`); the R16 note (expected total about 23.8 h); Q15 data. |
