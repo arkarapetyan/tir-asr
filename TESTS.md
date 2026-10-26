@@ -1,6 +1,6 @@
 # TESTS.md
 
-**Project:** tir-asr · **Date:** 2026-10-25
+**Project:** tir-asr · **Date:** 2026-10-26
 **Rules:** RULES.md R5 (test-driven development) and D-006 (test runs).
 
 Each test comes from a requirement in the brief (F, K, D in `PLAN.md` §1) or from a module contract in `ARCHITECTURE.md`.
@@ -317,6 +317,44 @@ T-IMPORT-01 adds `tir_asr.eval.run` to `REQUIRED`.
 
 **Bake-off runs (model level, D-049, D-051, D-052).** No separate model test for the candidate adapters: each bake-off run is their model-level check, and it stops at an error (R10). All runs passed on Aren's laptop on 2026-10-26: `nemo-rnnt`, `nemo-ctc`, `buzz-whisper`, and `seamless` (ASR); `nllb-ct2`, `opus-ct2`, and `seamless` (MT, also with the reference text); `seamless-s2tt` (end to end). ONNX-CTC was not run (D-052). Unit tests after the candidates: 167 pass (`test-results/c3-cand2-green.txt`). The numbers are in `docs/eval/results.md`. The CPU probe (`scripts/probe_cpu.py`) is in the same file.
 
+### 2.6 Two audio sources (C4)
+
+Contracts: `ARCHITECTURE.md` §2.1, §2.6, §2.7. Decisions: D-054, D-055. Aren approved the tests on 2026-10-26 ("I approve"). D-055: no separate red run; Claude writes the tests and the code in one step, and Aren does only the green run. C4 changes some tests of §2.4; this table gives their C4 form.
+
+**Branch `c4-audio`:**
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-DEV-01 | F1, §2.1, D-054: the text of `--list-devices`. | (a) `format_source_list(sources, "mic-a", "out-b.monitor")` with the records `mic-a` "Laptop microphone", `out-a.monitor` "Monitor of HDMI", `mic-b` "USB microphone", `out-b.monitor` "Monitor of Headphones" (monitors: the two `.monitor` ids). (b) The same, with no monitor. | (a) The exact text of §2.1: the heading `Microphones (--mic):`, `* mic-a  Laptop microphone`, `  mic-b  USB microphone`, the heading `System audio (--system):`, `  out-a.monitor  Monitor of HDMI`, `* out-b.monitor  Monitor of Headphones`, then `* = the default, used when the flag is not given`. (b) The line `  (none)` under the system heading. | unit | APPROVED |
+| T-AUDIO-01 | §2.1, D-041, D-054 (changed in C4). | As in §2.4, with `SoundcardSource("System", "<sink>.monitor")`. | As in §2.4, but each block has the source `"System"`. | sim | APPROVED |
+| T-AUDIO-02 | §2.1, §7 (changed in C4). | No server. One process calls `SoundcardSource("Me", "x")`, then `list_sources()`. | Each call gives `AudioError`: `audio: cannot connect to the PulseAudio server`. | sim | APPROVED |
+| T-AUDIO-03 | §2.1, D-041 (changed in C4). | `SoundcardSource("Me", "<sink>")`. | As in §2.4. | sim | APPROVED |
+| T-AUDIO-04 | F1, §2.1, D-054: the device list and the default ids. | A null sink. `list_sources()`, `default_microphone_id()`, `default_system_id()`. | No id occurs two times. `<sink>.monitor` is in the list with `monitor = True`. `default_microphone_id()` = `pactl get-default-source`. `default_system_id()` = `pactl get-default-sink` + `.monitor`, and the list has it with `monitor = True`. | sim | APPROVED |
+| T-IMPORT-01 | D-021. | `tir_asr.audio.devices` in `REQUIRED`; `tir_asr.audio.soundcard_source` in `ADAPTERS` (in place of `tir_asr.audio.soundcard_mic`). | It passes. | unit | APPROVED |
+
+No test: `audio: no default microphone`, `audio: no default output`, `audio: no monitor source for the default output <id>`. A test must change the system defaults.
+
+**Branch `c4-pipeline`** (frame k arrives at (k + 1) × 0.032 s, as in §2.4):
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-PIPE-01 to T-PIPE-05 | §2.6, D-054 (changed in C4). | `run([(source, vad)], …)`; the fake source has `label = "Me"`. | The same exact output as in §2.4. | unit | APPROVED |
+| T-PIPE-06 | F1, F5, §2.6, D-054: two sources. | Me: 50 frames, speech in frames 5–24. System: 100 frames, a short region in frames 30–36, speech in frames 60–79; it gives its first block only after Me ends. Clock: 0.0; 1.400, 1.500, 1.510; 3.200, 3.300, 3.310. | Exit code 0. "Listening"; `[00:00:00] Me` with `vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s \| Total 0.71s`; `[00:00:01] System` with `vad 0.51s, asr 0.13s, mt 0.10s, out 0.01s \| Total 0.75s`; `Stopped. Segments: 2, short segments: 1, empty texts: 0, not processed: 0.` | unit | APPROVED |
+| T-PIPE-07 | §2.6, D-054: "done" after the end of each source. | Me: 20 silent frames. System: waits for a release event, then 50 frames with speech in frames 5–24. `run()` runs in a thread. Clock: 0.0; 1.400, 1.500, 1.510. | 0.3 s after the end of Me, `run()` has not returned. After the release: exit code 0, one block `[00:00:00] System` (Total 0.71s), and `Segments: 1`. | unit | APPROVED |
+| T-PIPE-08 | §2.6, D-042, D-054: the thread name in the error line. | Me: 10 silent frames. The `blocks()` of System raises `KeyError("x")`. | Exit code 1. The error output is a traceback, then `tir-asr: capture System: KeyError: 'x'`. The output is only "Listening". | unit | APPROVED |
+
+**Branch `c4-cli`:**
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-CLI-01 | §2.7, D-043. | As in §2.4. | As in §2.4. | unit | APPROVED |
+| T-CLI-02 | F1, §2.7, D-054: the flags. | (a) `--mic a --system b`; (b) no flags; (c) `--list-devices`; (d) `--mic x --system x`. A fake replaces `app.main` and `app.list_devices`. | (a) `app.main` gets `mic="a"`, `system="b"`, and `cli` returns its value. (b) `mic=None`, `system=None`. (c) one call of `app.list_devices`, no call of `app.main`, and `cli` returns its value. (d) Exit code 2; the error output ends with `tir-asr: error: --mic and --system select the same source x`. | unit | APPROVED |
+| T-E2E-01 | K1, F2, F3, F5 (changed in C4). | `load_models(params, log, ["Me"])`, then `run([(WavSource(CLIPS), vads[0])], …)`. | As in §2.4. | model | APPROVED |
+| T-E2E-02 | L-02, D-044, D-054 (changed in C4). | As in §2.4 (no flags: the default microphone and the default output monitor). | As in §2.4, and two `startup: source` lines before "Listening". | model | APPROVED |
+| T-SIM-01 | F1, F4 (source labels), F5, K1, D-020, D-054, Q-10: two sources at the same time. | Two null sinks `tir_t_me` and `tir_t_system`. `load_models(…, ["Me", "System"])`, `warm_up()`, then `run()` with `SoundcardSource("Me", "tir_t_me.monitor")` and `SoundcardSource("System", "tir_t_system.monitor")`. A test wrapper on each source records the arrival times and stops the source after the length of S1 + 2.0 s. At the first block of each source, `pw-play --target` plays 16-bit copies of `data/eval/raw/s1.mic.wav` into `tir_t_me` and `s1.call.wav` into `tir_t_system`. | (1) Exit code 0, no error output. (2) Each block has the label `Me` or `System`; each label has one or more blocks; for each label, the block times do not go back. (3) The `Me` text has a lower WER against the S1 mic references than against the call references; the `System` text has the opposite result. (4) Each total < 5.0 s (K1). (5) No arrival gap over 64 ms on each source. (6) The two playback streams are on the two test sinks (else the test stops the players); the default sink and source do not change. Report: the WER of each side, the mean gap, and the span ÷ real time of each source (D-020). | sim, model | APPROVED |
+| L-04 | F1 (§4). | `./run.sh --list-devices` on the laptop. | The list shows the microphone and the output monitor; the defaults have a `*`; exit code 0; no model load. | live | APPROVED |
+| L-05 | F1, F5, K1 (§4). | A video call with one person, wired headphones, `./run.sh` with no flags. | Lines with `Me` and `System` at the same time; Aren still hears the call; each total < 5 s; the two `startup: source` lines name the correct devices. | live | APPROVED |
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -346,3 +384,5 @@ Only the checks that a sim test cannot do. (C7)
 | L-01 | Aren says 5 Armenian sentences into the microphone, with a pause after each. | One block for each sentence, label "Me", each total < 5 s (K1). | PASSES (2026-10-26): Script 4, s4-01 to s4-05: 5 blocks, label "Me", totals 0.61–0.64 s. |
 | L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. |
 | L-03 | Aren is silent for 60 s, then says one sentence; then he says 3 sentences with short pauses (Q-09). | The total of the first sentence is compared with the next ones. || PASSES (2026-10-26): after 76 s of silence, the total of s4-06 was 0.61 s, the same as before (Q-09). |
+| L-04 | `./run.sh --list-devices` (C4, D-054). | The list shows the microphone and the output monitor; the defaults have a `*`; exit code 0; no model load. | |
+| L-05 | A video call with one person, wired headphones, `./run.sh` with no flags (C4, D-054). | Lines with `Me` and `System` at the same time; Aren still hears the call; each total < 5 s (K1); the two `startup: source` lines name the correct devices. | |
