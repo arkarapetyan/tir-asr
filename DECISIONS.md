@@ -817,3 +817,16 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A. `STOP_POLL_S = 0.5` s is a named constant in `pipeline.py` (`ARCHITECTURE.md` §4 and §5), not a tunable parameter. New test T-E2E-02: the installed command gets SIGINT after "Listening" and must end within 10 s with exit code 0 and the shutdown line.
 - **Reason (Aren's words):** "ok fix with A and I approve the test".
 - **Revisit when:** T-E2E-02 hangs, or C4 changes the threads.
+
+## D-045. Launcher script `run.sh` (C2d)
+
+- **Status:** ACCEPTED (2026-10-26), option A
+- **Context:** Aren asked for "a bash executable file for the command that runs the app". The program must start in the project folder (the MT model folder is relative, §2.4). All model tests ran with `HF_HUB_OFFLINE=1`. L-02 passed with `.venv/bin/tir-asr`, with no `uv run` in the signal path.
+- **Options:**
+  - **A.** `run.sh` in the project folder: `cd` to the folder of the script, `HF_HUB_OFFLINE=1`, then `exec .venv/bin/tir-asr "$@"`. Weak points: `uv sync` must run one time before; with `HF_HUB_OFFLINE=1`, a missing file in the Hugging Face cache gives an error, not a download (this is the wanted behaviour for K2).
+  - **B.** The same, with `exec uv run tir-asr "$@"`. Weak points: `uv run` can sync the environment at each start (a download at the interview); `uv` is then in the Ctrl+C path, which L-02 did not test.
+  - **C.** A, but with no `HF_HUB_OFFLINE`. Weak point: the Hugging Face libraries can try the network at the start [UNVERIFIED for this program]; with no network, that can be slow or fail.
+- **Claude's preference:** A. Checks in the workspace with a fake program [RUN]: it works from another folder and through a symbolic link, it passes the arguments, `exec` leaves no extra shell, and a missing command gives exit code 1 with a message. `shellcheck` 0.11.0 has no findings. Fact that can show A is wrong: `./run.sh` fails on Aren's laptop where `.venv/bin/tir-asr` works.
+- **Decision:** A.
+- **Reason (Aren's words):** "agree on D45".
+- **Revisit when:** C4 (device flags go through `"$@"`), or C8 (the README setup steps).
