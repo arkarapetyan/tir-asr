@@ -23,8 +23,8 @@
 | ID | Speaker | Armenian | English |
 |---|---|---|---|
 | s1-01 | Me | Բարև, տղերք։ Լսո՞ւմ եք ինձ։ Ուզում էի խոսել շաբաթ օրվա ճամփորդության մասին։ | Hi, guys. Can you hear me? I wanted to talk about Saturday's trip. |
-| s1-02 | Speaker 1 | Բարև, Աննա։ Այո, լավ եմ լսում։ Ես արդեն մտածել եմ, որ կարող ենք առավոտյան ժամը ութին դուրս գալ Երևանից։ | Hi, Anna. Yes, I can hear you well. I have already thought that we could leave Yerevan at eight in the morning. |
-| s1-03 | Speaker 2 | Ութը շատ վաղ է, Դավիթ։ Գուցե ժամը իննի՞ն։ Ես ուրբաթ երեկոյան մինչև ուշ աշխատում եմ։ | Eight is very early, Davit. Maybe at nine? I work until late on Friday evening. |
+| s1-02 | Speaker 1 | Բարև, Արեն։ Այո, լավ եմ լսում։ Ես արդեն մտածել եմ, որ կարող ենք առավոտյան ժամը ութին դուրս գալ Երևանից։ | Hi, Aren. Yes, I can hear you well. I have already thought that we could leave Yerevan at eight in the morning. |
+| s1-03 | Speaker 2 | Ութը շատ վաղ է, Հրանտ։ Գուցե ժամը իննի՞ն։ Ես ուրբաթ երեկոյան մինչև ուշ աշխատում եմ։ | Eight is very early, Hrant. Maybe at nine? I work until late on Friday evening. |
 | s1-04 | Me | Լավ, թող լինի ժամը ինը։ Ո՞վ է մեքենա վարելու։ | Okay, let it be nine o'clock. Who is going to drive? |
 | s1-05 | Speaker 1 | Ես կարող եմ վարել։ Իմ մեքենայում չորս տեղ կա, բայց բեռնախցիկը փոքր է։ | I can drive. There are four seats in my car, but the trunk is small. |
 | s1-06 | Speaker 2 | Ուրեմն շատ իրեր չվերցնենք։ Իսկ որտե՞ղ ենք գիշերելու։ | Then let's not take many things. And where are we going to stay overnight? |
@@ -34,7 +34,7 @@
 | s1-10 | Speaker 2 | Ես համաձայն եմ։ Միայն թե ուզում եմ կիրակի օրը վաղ վերադառնալ, որովհետև երկուշաբթի հանդիպում ունեմ։ | I agree. I only want to come back early on Sunday, because I have a meeting on Monday. |
 | s1-11 | Speaker 1 | Խնդիր չկա։ Կիրակի ճաշից հետո կճանապարհվենք։ Ճանապարհին կարող ենք կանգնել Սևանի մոտ։ | No problem. We will leave on Sunday after lunch. On the way we can stop near Sevan. |
 | s1-12 | Me | Հիանալի է։ Ուրեմն ես հիմա կգրեմ հյուրատանը և կամրագրեմ սենյակները։ | Great. Then I will write to the guesthouse now and book the rooms. |
-| s1-13 | Speaker 2 | Շնորհակալ եմ, Աննա։ Ես էլ կվերցնեմ մրգեր և ջուր ճանապարհի համար։ | Thank you, Anna. I will also take fruit and water for the road. |
+| s1-13 | Speaker 2 | Շնորհակալ եմ, Արեն։ Ես էլ կվերցնեմ մրգեր և ջուր ճանապարհի համար։ | Thank you, Aren. I will also take fruit and water for the road. |
 | s1-14 | Speaker 1 | Լավ, ուրեմն շաբաթ առավոտյան ժամը ինը ես ձեզ կվերցնեմ տնից։ Մինչ այդ։ | Okay, then I will pick you up from home on Saturday at nine in the morning. See you then. |
 
 ## Script 2: table booking (2 people)
@@ -48,16 +48,18 @@
 | s2-05 | Speaker 1 | Պատշգամբում ազատ տեղ կա միայն ժամը ութից։ Ներսում կարող եմ սեղան տալ ժամը յոթին։ | On the terrace there is a free place only from eight o'clock. Inside I can give you a table at seven o'clock. |
 | s2-06 | Me | Լավ, ուրեմն ներսում, ժամը յոթին։ Մեզ հետ փոքր երեխա էլ կլինի։ Մանկական աթոռ ունե՞ք։ | Okay, then inside, at seven o'clock. A small child will also be with us. Do you have a child's chair? |
 | s2-07 | Speaker 1 | Այո, ունենք, կնշեմ ամրագրման մեջ։ Ի՞նչ անունով գրեմ։ | Yes, we have one; I will note it in the booking. Under what name should I write it? |
-| s2-08 | Me | Լիլիթ Հովհաննիսյան։ Հեռախոսահամարս՝ զրո իննսունինը, տասնմեկ, քսաներկու, երեսուներեք։ | Lilit Hovhannisyan. My phone number is zero ninety-nine, eleven, twenty-two, thirty-three. |
-| s2-09 | Speaker 1 | Շնորհակալություն, տիկին Հովհաննիսյան։ Ամրագրեցի՝ վաղը, ժամը յոթին, վեց հոգի։ Եթե ուշանաք, խնդրում եմ, զանգահարեք։ | Thank you, Mrs. Hovhannisyan. I have booked it: tomorrow, at seven o'clock, six people. If you are late, please call. |
-| s2-10 | Me | Անպայման։ Շնորհակալ եմ, ցտեսություն։ | Definitely. Thank you, goodbye. |
+| s2-08 | Me | Արեն Կարապետյան։ Հեռախոսահամարս՝ զրո իննսունինը, տասնմեկ, քսաներկու, երեսուներեք։ | Aren Karapetyan. My phone number is zero ninety-nine, eleven, twenty-two, thirty-three. |
+| s2-09 | Speaker 1 | Շնորհակալություն, պարոն Կարապետյան։ Ամրագրեցի՝ վաղը, ժամը յոթին, վեց հոգի։ Եթե ուշանաք, խնդրում եմ, զանգահարեք։ | Thank you, Mr. Karapetyan. I have booked it: tomorrow, at seven o'clock, six people. If you are late, please call. |
+| s2-10 | Me | Անպայման։ Շնորհակալ | Definitely. Thank you |
+
+Note (D-048): the recording of 2026-10-26 stops after «Շնորհակալ». The reference of s2-10 has only the words in the audio. The script text was «Անպայման։ Շնորհակալ եմ, ցտեսություն։» ("Definitely. Thank you, goodbye.").
 
 ## Script 3: work deadline (2 people)
 
 | ID | Speaker | Armenian | English |
 |---|---|---|---|
-| s3-01 | Me | Գոռ, բարև։ Ներողություն, մի քիչ ուշացա։ Կարո՞ղ ենք արագ քննարկել ներկայացումը։ | Gor, hi. Sorry, I am a little late. Can we quickly discuss the presentation? |
-| s3-02 | Speaker 1 | Բարև, Մարիամ։ Իհարկե։ Ես պատրաստել եմ առաջին տասը սլայդը, մնացածը դեռ պետք է անել։ | Hi, Mariam. Of course. I have prepared the first ten slides; the rest still has to be done. |
+| s3-01 | Me | Մարկ, բարև։ Ներողություն, մի քիչ ուշացա։ Կարո՞ղ ենք արագ քննարկել ներկայացումը։ | Mark, hi. Sorry, I am a little late. Can we quickly discuss the presentation? |
+| s3-02 | Speaker 1 | Բարև, Արեն։ Իհարկե։ Ես պատրաստել եմ առաջին տասը սլայդը, մնացածը դեռ պետք է անել։ | Hi, Aren. Of course. I have prepared the first ten slides; the rest still has to be done. |
 | s3-03 | Me | Լավ է։ Իսկ Արմենն ուղարկե՞լ է վերջին թվերը։ Առանց դրանց չենք կարող ավարտել։ | Good. And has Armen sent the latest numbers? We cannot finish without them. |
 | s3-04 † | Speaker 1 | Ոչ, նա ասաց, որ կուղարկի այսօր՝ մինչև ժամը վեցը։ Հիմա նա ուրիշ նախագծով է զբաղված։ | No, he said that he will send them today, by six o'clock. He is busy with another project now. |
 | s3-05 | Me | Հասկանալի է։ Հաճախորդի հետ հանդիպումը հինգշաբթի է՝ ժամը տասնմեկին։ Ուզում եմ, որ չորեքշաբթի երեկոյան ամեն ինչ պատրաստ լինի։ | Understood. The meeting with the client is on Thursday, at eleven o'clock. I want everything to be ready on Wednesday evening. |
@@ -65,7 +67,9 @@
 | s3-07 | Me | Հինգշաբթին տեղափոխել չենք կարող, հաճախորդն արդեն հաստատել է։ Ես ինքս կզանգեմ Արմենին։ | We cannot move Thursday; the client has already confirmed. I will call Armen myself. |
 | s3-08 | Speaker 1 | Լավ միտք է։ Եվ մի բան էլ։ Դիզայնը փոխե՞նք, թե նույնը թողնենք։ | Good idea. And one more thing. Should we change the design, or keep it the same? |
 | s3-09 † | Me | Թողնենք նույնը։ Նա արդեն հավանել է այս տարբերակը։ | Let's keep it the same. He/she has already approved this version. |
-| s3-10 | Speaker 1 | Համաձայն եմ։ Ուրեմն ես շարունակում եմ սլայդները, իսկ դու խոսիր Արմենի հետ։ Վաղն առավոտյան կզանգեմ քեզ։ | I agree. Then I continue with the slides, and you talk to Armen. I will call you tomorrow morning. |
+| s3-10 | Speaker 1 | Համաձայն եմ։ Ուրեմն ես կշարունակեմ սլայդները, իսկ դու խոսիր Արմենի հետ։ Վաղն առավոտյան կզանգեմ քե | I agree. Then I shall continue with the slides, and you talk to Armen. I will call you tomorrow morning. |
+
+Note (D-048): the recording of 2026-10-26 stops inside the last word: the audio has «քե», not «քեզ». The Armenian reference has only the sounds in the audio. The English reference does not change. The script text was «… Վաղն առավոտյան կզանգեմ քեզ։».
 
 ## Script 4: two friends (2 people)
 
