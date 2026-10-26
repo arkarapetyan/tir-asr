@@ -1,12 +1,17 @@
-"""T-PIPE-01 to T-PIPE-05: the pipeline with fakes (C2d, branch c2d-pipeline).
+"""T-PIPE-01 to T-PIPE-08: the pipeline with fakes (C2d `c2d-pipeline`, C4 `c4-pipeline`).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
-D-042. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s (TESTS.md 2.4).
-Only the main thread and the worker call the fake clock. Thus the times are the same in each
-run, and a clock call that the contract does not need makes the test fail.
+D-042, D-054. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s (TESTS.md
+2.4). Only the main thread and the worker call the fake clock. Thus the times are the same in
+each run, and a clock call that the contract does not need makes the test fail.
+
+T-PIPE-06 to T-PIPE-08 have two sources (C4). A fake source can wait for an event before its
+first block, so that the sequence of the segments in the queue is always the same.
 """
 
 import io
+import threading
+import time
 
 import numpy as np
 import pytest
@@ -20,6 +25,8 @@ FRAME_S = VAD_FRAME / SAMPLE_RATE  # 0.032 s
 SPEECH = 0.9
 SILENCE = 0.1
 LISTENING = "Listening. Press Ctrl+C to stop.\n"
+WAIT_S = 5.0  # test only: a limit for each wait, so that a failed test does not hang
+NOT_DONE_S = 0.3  # T-PIPE-07: run() must not return in this time after the end of Me
 
 
 def probabilities(count: int, regions: list[tuple[int, int]]) -> list[float]:
@@ -31,13 +38,33 @@ def probabilities(count: int, regions: list[tuple[int, int]]) -> list[float]:
 
 
 class FakeSource:
-    def __init__(self, count: int):
+    """`count` blocks with the label. `after`: an event to wait for before the first block.
+
+    `ended` is set after the last block. `error`: an exception that `blocks()` raises.
+    """
+
+    def __init__(
+        self,
+        count: int,
+        label: str = "Me",
+        after: threading.Event | None = None,
+        error: BaseException | None = None,
+    ):
         self.count = count
+        self.label = label
+        self.after = after
+        self.error = error
+        self.ended = threading.Event()
 
     def blocks(self):
+        if self.error is not None:
+            raise self.error
+        if self.after is not None:
+            assert self.after.wait(timeout=WAIT_S), f"{self.label}: no start event"
         for k in range(self.count):
             samples = np.zeros(VAD_FRAME, dtype=np.float32)
-            yield AudioBlock(source="Me", samples=samples, arrival=(k + 1) * FRAME_S)
+            yield AudioBlock(source=self.label, samples=samples, arrival=(k + 1) * FRAME_S)
+        self.ended.set()
 
 
 class FakeVad:
@@ -91,8 +118,7 @@ def start(frames, regions, transcriber, translator, clock):
     """Run the pipeline with a fake source and a fake VAD. Return (code, output, errors)."""
     out, err = io.StringIO(), io.StringIO()
     code = run(
-        FakeSource(frames),
-        FakeVad(probabilities(frames, regions)),
+        [(FakeSource(frames), FakeVad(probabilities(frames, regions)))],
         transcriber,
         translator,
         Params(),
@@ -155,8 +181,7 @@ def test_pipe_02_error_in_the_capture_thread():
     out, err = io.StringIO(), io.StringIO()
 
     code = run(
-        FakeSource(10),
-        FakeVad([1.2] * 10),
+        [(FakeSource(10), FakeVad([1.2] * 10))],
         FakeTranscriber([]),
         FakeTranslator(),
         Params(),
@@ -217,3 +242,104 @@ def test_pipe_05_warm_up_calls_each_model_once():
     assert not audio.any()
     assert translator.calls == [WARMUP_TEXT]
     assert (asr_s, mt_s) == (pytest.approx(0.4), pytest.approx(0.1))
+
+
+def test_pipe_06_two_sources_give_labelled_blocks_and_summed_counts():
+    me = FakeSource(50)
+    system = FakeSource(100, label="System", after=me.ended)  # its segment comes after Me
+    translator = FakeTranslator("hi")
+    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 3.200, 3.300, 3.310])
+    out, err = io.StringIO(), io.StringIO()
+
+    code = run(
+        [
+            (me, FakeVad(probabilities(50, [(5, 24)]))),
+            (system, FakeVad(probabilities(100, [(30, 36), (60, 79)]))),  # 30-36: short
+        ],
+        FakeTranscriber(["բարև", "բարև"]),
+        translator,
+        Params(),
+        clock,
+        out,
+        err,
+    )
+
+    assert out.getvalue() == (
+        LISTENING + "[00:00:00] Me\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s | Total 0.71s]\n"
+        "\n"
+        "[00:00:01] System\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, asr 0.13s, mt 0.10s, out 0.01s | Total 0.75s]\n"
+        "\n"
+        "Stopped. Segments: 2, short segments: 1, empty texts: 0, not processed: 0.\n"
+    )
+    assert err.getvalue() == ""
+    assert code == 0
+    assert translator.calls == ["բարև", "բարև"]
+
+
+def test_pipe_07_done_only_after_the_end_of_each_source():
+    release = threading.Event()
+    me = FakeSource(20)
+    system = FakeSource(50, label="System", after=release)
+    out, err = io.StringIO(), io.StringIO()
+    result = {}
+
+    def call_run() -> None:
+        result["code"] = run(
+            [
+                (me, FakeVad([SILENCE] * 20)),
+                (system, FakeVad(probabilities(50, [(5, 24)]))),
+            ],
+            FakeTranscriber(["բարև"]),
+            FakeTranslator("hi"),
+            Params(),
+            FakeClock([0.0, 1.400, 1.500, 1.510]),
+            out,
+            err,
+        )
+
+    runner = threading.Thread(target=call_run, daemon=True)
+    runner.start()
+    assert me.ended.wait(timeout=WAIT_S), "Me did not end"
+    time.sleep(NOT_DONE_S)
+    running_after_me = runner.is_alive()
+    release.set()
+    runner.join(timeout=WAIT_S)
+
+    assert running_after_me, "run() returned after the end of Me only"
+    assert not runner.is_alive(), "run() did not return after the end of both sources"
+    assert out.getvalue() == (
+        LISTENING + "[00:00:00] System\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s | Total 0.71s]\n"
+        "\n"
+        "Stopped. Segments: 1, short segments: 0, empty texts: 0, not processed: 0.\n"
+    )
+    assert err.getvalue() == ""
+    assert result["code"] == 0
+
+
+def test_pipe_08_error_line_names_the_capture_thread_of_the_source():
+    system = FakeSource(10, label="System", error=KeyError("x"))
+    out, err = io.StringIO(), io.StringIO()
+
+    code = run(
+        [(FakeSource(10), FakeVad([SILENCE] * 10)), (system, FakeVad([]))],
+        FakeTranscriber([]),
+        FakeTranslator(),
+        Params(),
+        FakeClock([0.0]),
+        out,
+        err,
+    )
+
+    assert err.getvalue().startswith("Traceback (most recent call last):\n"), err.getvalue()
+    assert err.getvalue().endswith("tir-asr: capture System: KeyError: 'x'\n"), err.getvalue()
+    assert out.getvalue() == LISTENING
+    assert code == 1

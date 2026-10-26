@@ -1,19 +1,21 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.19 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 changes (C4) apply D-054, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.20 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 and v0.20 changes (C4) apply D-054, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
 ## 1. Overview
 
-The program captures the microphone, cuts the audio into speech segments, transcribes each segment to Armenian text, translates the text to English, and prints one block for each segment.
+The program captures the microphone and the system audio (C4), cuts the audio of each source into speech segments, transcribes each segment to Armenian text, translates the text to English, and prints one block for each segment.
 Core modules have no model import and no audio-device import. Adapter modules hold the model and device code (D-021). Unit tests give fakes to the core modules.
 
 ```
  microphone ──► audio (adapter) ──AudioBlock──► segment: Endpointer (core) ◄── SpeechProbability (Silero adapter, CPU)
-                capture thread                          │
-                                                        ▼ Segment
+ "Me"           capture thread "capture Me"             │
+ system audio ─► audio (adapter) ──AudioBlock──► segment: Endpointer (core) ◄── SpeechProbability (Silero adapter, CPU)
+ "System"       capture thread "capture System"         │
+                                                        ▼ Segment (from both sources)
                                                  segment queue (unbounded)
                                                         │
                                    worker thread        ▼
@@ -134,15 +136,15 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 
 ### 2.6 `pipeline`
 
-- **Core** `pipeline.py` (D-042). `run(source, vad, transcriber, translator, params, clock, out, err) -> int` builds the `Endpointer`, starts the threads (§4), and returns the exit code. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
+- **Core** `pipeline.py` (D-042, D-054). `run(sources, transcriber, translator, params, clock, out, err) -> int` takes a list of `(source, vad)` pairs, one for each audio source. It builds one `Endpointer` for each pair, starts the threads (§4), and returns the exit code. Each capture thread has the name `capture <label>` (the `label` of its source). All capture threads put their segments in one queue, and the worker writes the blocks in the order in which the segments close. Thus the `[hh:mm:ss]` times of two sources are not always in sequence: a long segment of one source can come after a later, short segment of the other source. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
 - **Warm-up (D-022, D-037, D-042):** `warm_up(transcriber, translator, clock) -> (asr_s, mt_s)` calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`, and returns the two times. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
-- **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. The source opens its stream at its first block (D-041). Thus no block time is before the session start.
+- **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. Each source opens its stream at its first block (D-041). Thus no block time is before the session start.
 - **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then the write time from the clock, and `write_block` (§2.5).
 - **Stop (D-042):**
-  - Ctrl+C: the shutdown line, then exit code 0. Ctrl+C takes effect within `STOP_POLL_S` (0.5 s, D-044). The open segment, the segments in the queue, and a segment in ASR or MT are not processed; the shutdown line gives their number. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. T-E2E-02 (model test) and L-02 check this path; it has no unit test.
-  - End of the source (tests and the WAV source only, D-025): the capture thread puts an end mark in the queue. The worker finishes the segments in the queue, and then the shutdown line comes, with exit code 0.
-  - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the written blocks. An output lock makes the shutdown line the last line.
-- **Errors (D-042):** the first exception in a thread stops the program. `run()` writes the error line to `err` and returns 1, with no shutdown line. A `TirError` gives `tir-asr: <module>: <cause>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>` (the thread is `capture` or `worker`).
+  - Ctrl+C: the shutdown line, then exit code 0. Ctrl+C takes effect within `STOP_POLL_S` (0.5 s, D-044). The open segments, the segments in the queue, and a segment in ASR or MT are not processed. "Not processed" in the shutdown line counts the segments in the queue and in ASR or MT; it does not count the open segments of the `Endpointer`s. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. T-E2E-02 (model test) and L-02 check this path; it has no unit test.
+  - End of the sources (tests and the WAV source only, D-025): each capture thread puts an end mark in the queue at the end of its source. The worker continues until it has the end mark of each source (D-054, T-PIPE-07), and then the shutdown line comes, with exit code 0.
+  - Shutdown line: `Stopped. Segments: <n>, short segments: <n>, empty texts: <n>, not processed: <n>.` "Segments" counts the written blocks. The counts are the sums of all sources. An output lock makes the shutdown line the last line.
+- **Errors (D-042):** the first exception in a thread stops the program. `run()` writes the error line to `err` and returns 1, with no shutdown line. A `TirError` gives `tir-asr: <module>: <cause>`. Any other exception gives its traceback, then `tir-asr: <thread>: <type>: <message>` (the thread is `capture <label>` or `worker`, T-PIPE-08).
 
 ### 2.7 `cli` and `app`
 
@@ -183,7 +185,7 @@ All times are `time.monotonic()` values in seconds. All audio is float32, mono, 
 | | `speech_end` | `float` | True end of speech (D-023). |
 | | `closed` | `float` | Time when the `Endpointer` closed the segment. |
 | | `cut` | `bool` | True for a hard cut (§2.2 rule 5). |
-| `Line` | `label` | `str` | `"Me"` (C2); `"Speaker N"` (C5). |
+| `Line` | `label` | `str` | The source label: `"Me"` or `"System"` (C4); `"Speaker N"` on the system side (C5). |
 | | `start` | `float` | `Segment.start`. |
 | | `hy`, `en` | `str` | Armenian text, English text. |
 | | `speech_end`, `closed`, `asr_end`, `mt_end`, `write` | `float` | The times of §2.5. |
@@ -192,7 +194,7 @@ Interfaces (core, `typing.Protocol`):
 
 | Interface | Method | Adapter (C2) | Unit-test fake |
 |---|---|---|---|
-| `AudioSource` | `blocks() -> Iterator[AudioBlock]` | `SoundcardSource` (microphone or monitor) | a list of blocks |
+| `AudioSource` | attribute `label: str`; `blocks() -> Iterator[AudioBlock]` | `SoundcardSource` (microphone or monitor) | a list of blocks |
 | `SpeechProbability` | `__call__(samples) -> float` | Silero VAD | a list of numbers |
 | `Transcriber` | `transcribe(audio) -> str` | NeMo RNNT | a fixed text |
 | `Translator` | `translate(text) -> str` | CTranslate2 NLLB | a fixed text |
@@ -204,16 +206,16 @@ The WAV file source is test code only (D-025). It is in `tests/support/`, not in
 | Thread | Work | Blocks on |
 |---|---|---|
 | Main | Startup (§2.7), then it waits for Ctrl+C, for "done", or for an error from a thread. | the event queue |
-| Capture (one for each source) | Reads the blocks, calls `Endpointer.push` (which calls `SpeechProbability`), puts each `Segment` in the segment queue. At the end of the source (tests only), it puts an end mark. | `record()` |
-| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then writes the block. At the end mark, it puts "done" in the event queue. | the segment queue |
+| Capture (one for each source, name `capture <label>`) | Reads the blocks of its source, calls the `Endpointer.push` of its source (which calls the `SpeechProbability` of its source), puts each `Segment` in the segment queue. At the end of its source (tests only), it puts an end mark. | `record()` |
+| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then writes the block. After the end mark of each source, it puts "done" in the event queue. | the segment queue |
 
-- **Segment queue:** `queue.Queue` with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
+- **Segment queue:** one `queue.Queue` for all sources, with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
 - **One worker thread** uses the GPU, so the GPU models run one at a time.
 - **Main-thread wait (D-044):** the main thread waits on the event queue with a time limit of `STOP_POLL_S` (0.5 s), in a loop. The time limit changes nothing except that the main thread wakes up. [RUN] With no time limit, Ctrl+C did nothing: the process has 75–79 native threads, and Python handles a signal only when the main thread wakes up (L-02, probe C). T-E2E-02 checks Ctrl+C on the real program.
 - **Errors:** each thread puts its exception in the event queue. The main thread stops the program (§2.6). The threads are daemon threads, so that they do not keep the program alive after the main thread returns.
 - **No parallel GPU work.** One worker runs ASR and then MT. [RUN] This takes 0.10–0.17 s for each segment, and a new segment comes at most once in 0.76 s (calc). Two GPU threads would share the GPU, so each call would be slower; the gain is only when segments wait in the queue. C4 and C5 measure the queue wait before a change (R6).
 - **No `asyncio`.** `soundcard`, NeMo, and CTranslate2 have blocking APIs. With `asyncio`, they would run in threads anyway. Threads and queues are simpler.
-- **GIL:** the worker and the capture thread share the Python interpreter lock. A long Python step in the worker can delay the capture thread; PulseAudio then keeps the audio in its buffer [UNVERIFIED buffer size]. Q-10 checks it in the live run.
+- **GIL:** the worker and the capture threads share the Python interpreter lock. A long Python step in the worker can delay a capture thread; PulseAudio then keeps the audio in its buffer [UNVERIFIED buffer size]. Q-10 checks it in the live run; T-SIM-01 measures the arrival gaps of two sources (C4).
 
 ## 5. Configuration
 
@@ -371,3 +373,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.17 | 2026-10-26 | C3, branch `c3-candidates` (§8.2), D-051: the candidates `nemo-ctc` and `opus-ct2`. |
 | 0.18 | 2026-10-26 | C3, branch `c3-candidates` (§8.2), D-051: the candidates `buzz-whisper` and `seamless` (ASR, MT, end to end). |
 | 0.19 | 2026-10-26 | C4, branch `c4-audio` (§2.1, §3, §7), D-054: `SoundcardSource(label, device)` in `audio/soundcard_source.py` replaces `SoundcardMicrophone`; the device id is required; the adapter functions `list_sources`, `default_microphone_id`, and `default_system_id`; the core module `audio/devices.py` (`SourceInfo`, `format_source_list`); the source label `"System"`; new errors. |
+| 0.20 | 2026-10-26 | C4, branch `c4-pipeline` (§1, §2.6, §3, §4), D-054: `run(sources, …)` with one `(source, vad)` pair, one `Endpointer`, and one capture thread `capture <label>` for each source; one queue and one worker; "done" after the end mark of each source; the sums in the shutdown line; the attribute `label` of `AudioSource`; the text of "not processed" agrees with the code. |

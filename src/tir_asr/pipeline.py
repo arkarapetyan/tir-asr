@@ -1,18 +1,18 @@
 """Pipeline: the warm-up, the threads, the segment queue, and the stop (ARCHITECTURE.md 2.6, 4).
 
-Decisions: D-022, D-029, D-031, D-037, D-042. This module is core: it gets the adapters as
-arguments, and it imports no model and no audio-device package (D-021).
+Decisions: D-022, D-029, D-031, D-037, D-042, D-054. This module is core: it gets the adapters
+as arguments, and it imports no model and no audio-device package (D-021).
 
-Threads (section 4): the capture thread reads the blocks, calls `Endpointer.push`, and puts each
-segment in the segment queue. The worker thread does ASR, then MT (if the text is not empty),
-then writes the block. The main thread waits for "done" (the end of the source) or for the first
-error, or it gets Ctrl+C.
+Threads (section 4): one capture thread for each audio source reads the blocks of its source,
+calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
+worker thread does ASR, then MT (if the text is not empty), then writes the block. The main
+thread waits for "done" (the end of all sources) or for the first error, or it gets Ctrl+C.
 """
 
 import queue
 import threading
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TextIO
 
 import numpy as np
@@ -25,7 +25,7 @@ from tir_asr.types import AudioSource, Line, SpeechProbability, Transcriber, Tra
 
 PROGRAM = "tir-asr"
 LISTENING = "Listening. Press Ctrl+C to stop."
-END = None  # the end mark in the segment queue: the source has no more blocks
+END = None  # the end mark in the segment queue: one source has no more blocks
 # D-044: the main thread waits for an event with this time limit, in a loop. The limit only wakes
 # the main thread, so that Python can handle a waiting Ctrl+C. With no limit, Ctrl+C did nothing
 # when another thread received the signal (L-02, probe C, T-E2E-02).
@@ -49,8 +49,7 @@ def warm_up(transcriber: Transcriber, translator: Translator, clock: Clock) -> t
 
 
 def run(
-    source: AudioSource,
-    vad: SpeechProbability,
+    sources: Sequence[tuple[AudioSource, SpeechProbability]],
     transcriber: Transcriber,
     translator: Translator,
     params: Params,
@@ -58,28 +57,42 @@ def run(
     out: TextIO,
     err: TextIO,
 ) -> int:
-    """Run until Ctrl+C, the end of the source, or the first error. Return the exit code.
+    """Run until Ctrl+C, the end of all sources, or the first error. Return the exit code.
 
-    Ctrl+C or the end of the source: the shutdown line, then 0. An error: the error line on
+    `sources` has one (source, VAD) pair for each audio source. Each pair gets its own
+    Endpointer and its own capture thread, with the name `capture <label>` (D-054). All
+    capture threads put their segments in one queue, and one worker takes them in that order.
+    Ctrl+C or the end of all sources: the shutdown line, then 0. An error: the error line on
     `err`, no shutdown line, then 1 (D-042).
     """
-    endpointer = Endpointer(params, vad)
-    segments: queue.Queue = queue.Queue()  # no size limit (D-029)
+    endpointers = [Endpointer(params, vad) for _, vad in sources]
+    segments: queue.Queue = queue.Queue()  # one queue for all sources, no size limit (D-029)
     events: queue.Queue = queue.Queue()  # ("done", None) or ("error", (thread name, error))
     output_lock = threading.Lock()  # the shutdown line is the last line (D-042)
     stopped = threading.Event()
-    counts = {"queued": 0, "written": 0, "empty": 0}
+    queued = [0] * len(sources)  # one count for each capture thread, so no lock is necessary
+    counts = {"written": 0, "empty": 0}  # the worker writes them
 
-    def capture() -> None:
-        for block in source.blocks():
-            segment = endpointer.push(block)
-            if segment is not None:
-                counts["queued"] += 1
-                segments.put(segment)
-        segments.put(END)  # only the tests and the WAV source end (D-025)
+    def capture(index: int) -> Callable[[], None]:
+        source, endpointer = sources[index][0], endpointers[index]
+
+        def read() -> None:
+            for block in source.blocks():
+                segment = endpointer.push(block)
+                if segment is not None:
+                    queued[index] += 1
+                    segments.put(segment)
+            segments.put(END)  # only the tests and the WAV source end (D-025)
+
+        return read
 
     def work() -> None:
-        while (segment := segments.get()) is not END:
+        ends = 0
+        while ends < len(sources):  # "done" only after the end mark of each source (D-054)
+            segment = segments.get()
+            if segment is END:
+                ends += 1
+                continue
             hy = transcriber.transcribe(segment.audio)
             asr_end = clock()
             if hy:
@@ -123,7 +136,8 @@ def run(
     out.flush()
     try:
         thread("worker", work).start()
-        thread("capture", capture).start()
+        for index, (source, _) in enumerate(sources):
+            thread(f"capture {source.label}", capture(index)).start()
         while True:
             try:
                 kind, detail = events.get(timeout=STOP_POLL_S)
@@ -145,9 +159,10 @@ def run(
 
     with output_lock:
         stopped.set()
-        not_processed = counts["queued"] - counts["written"]
+        not_processed = sum(queued) - counts["written"]  # in the queue, in ASR, or in MT
+        short = sum(endpointer.short_segments for endpointer in endpointers)
         out.write(
-            f"Stopped. Segments: {counts['written']}, short segments: {endpointer.short_segments}, "
+            f"Stopped. Segments: {counts['written']}, short segments: {short}, "
             f"empty texts: {counts['empty']}, not processed: {not_processed}.\n"
         )
         out.flush()

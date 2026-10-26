@@ -100,4 +100,4 @@ def main(out: TextIO | None = None, err: TextIO | None = None) -> int:
         err.flush()
         return 1
 
-    return run(microphone, vad, transcriber, translator, params, time.monotonic, out, err)
+    return run([(microphone, vad)], transcriber, translator, params, time.monotonic, out, err)
