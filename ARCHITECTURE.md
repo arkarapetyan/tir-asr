@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.15 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.16 · **Date:** 2026-10-26
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 change (C3) applies D-051. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -321,6 +321,15 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `assign_segments(segments, labels)`: for each segment, the ID of the label with the largest time overlap; on equal overlaps, the label that starts first; `None` with no overlap (the line view of D-046).
   - Errors: `DataError(TirError)`, `data: <file>: <cause>`: channels, sample format, sample rate, columns, no lines for a script, label fields, a time that is not a number, end before start, unknown, missing, or repeated ID.
   - Dependency: `scipy` in the dev group (CI installs it).
+- **`run.py`** (branch `c3-run`, D-046, D-048, D-051), core with no `laptop` import:
+  - `segment_file(audio, vad, params)`: adds the end rule (`with_end_silence`), then sends each 512-sample frame into the program's `Endpointer`. Frame k gets the arrival time (k + 1) × 0.032 s, so all segment times are audio times, the same as the label times.
+  - `transcribe_all(segments, transcriber, clock)` and `translate_all(texts, translator, clock)`: one call for each segment, with its time (`Timed(text, seconds)`). An empty ASR text gets no MT call: "" and 0.0 s (D-031).
+  - `score_side(lines, labels, segments, hy, en, asr_s, mt_s) -> SideScore`: WER, CER, and chrF of the joined texts (D-046 point 2); the digit words; the line view with `assign_segments` (D-046 point 3) and the number of segments outside each label; the audio time, the ASR RTF, and the mean and maximum time of the ASR calls and of the MT calls.
+- **`scripts/bakeoff.py`** (model level, D-051): `--asr <name> --mt <name> [--mt-input asr|reference]`.
+  - It runs S1–S3, both sides, and writes `test-results/bakeoff/<asr>+<mt>.json` (with `--mt-input reference`: `none+<mt>+ref.json`, the MT of the reference Armenian lines, with no ASR).
+  - The JSON holds the versions, the GPU, the parameters, the load time, the VRAM (`torch.cuda.mem_get_info()`, before and after each load), the warm-up time, the texts and times of each segment, the scores of each file, and the totals for "mic", "call", and "all".
+  - Load order ASR, MT, VAD (D-043). One new `SileroSpeechProbability` for each file, because the VAD keeps its state.
+  - Command: `env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run python scripts/bakeoff.py --asr nemo-rnnt --mt nllb-ct2` (D-030).
 - The next C3 branches add their contracts here.
 
 ## 9. Open points for Aren (C2)
@@ -347,3 +356,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.13 | 2026-10-26 | C3, branch `c3-normalize` (§8), D-046 and D-047: §8 is now "Tools that the program does not use"; new §8.2 with the eval data and `normalize_hy`. |
 | 0.14 | 2026-10-26 | C3, branch `c3-metrics` (§8.2), D-049: the contract of `metrics.py`. |
 | 0.15 | 2026-10-26 | C3, branch `c3-data` (§8.2), D-046, D-048, D-049: the contract of `data.py`. |
+| 0.16 | 2026-10-26 | C3, branch `c3-run` (§8.2), D-051: the contracts of `run.py` and `scripts/bakeoff.py`. |
