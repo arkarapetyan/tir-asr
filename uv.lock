@@ -3917,6 +3917,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "ruff" },
+    { name = "sacrebleu" },
 ]
 laptop = [
     { name = "ctranslate2" },
@@ -3937,6 +3938,7 @@ requires-dist = [{ name = "numpy", specifier = ">=2.5.4" }]
 dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.2" },
+    { name = "sacrebleu", specifier = ">=2.6.0" },
 ]
 laptop = [
     { name = "ctranslate2", specifier = ">=4.8.3" },
