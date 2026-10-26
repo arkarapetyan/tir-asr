@@ -40,7 +40,7 @@ Do chat C3 (`PLAN.md` §5.2 C3): the eval scripts and the metrics, with tests fi
 - **QA (`TESTS.md` §3):** Q-06, Q-07, Q-10, Q-11, Q-12, Q-13.
 - **C7:** the NeMo load lines (D-043 point 3); the removal of the `(no text)` block (D-031).
 - **After M3:** the start/pause keys (D-034).
-- **Time (R16):** C2d took 2.82 h (1.32 h over). Total 11.32 h; expected about 23.8 h. C6 is the first item to cut (Aren decides).
+- **Time (R16):** C2d took 2.92 h (1.42 h over). Total 11.42 h; expected about 23.9 h. C6 is the first item to cut (Aren decides).
 
 ## Read list for the next chat
 
