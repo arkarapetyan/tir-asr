@@ -1035,3 +1035,44 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "we have to make sure it is in the time box so perhaps we'll dont do separate red tests just as in C3".
 - **Questions raised:** Claude (R14) named the risk one time: a test that cannot fail stays hidden. Mitigation: the tests come from the approved table, not from the code.
 - **Revisit when:** C5 starts, or a test that cannot fail is found.
+
+## D-056. Target hardware, the C6 scope, and the order of C5 and C6
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** Q16 (a CPU-only mode) waited for an answer from the Mathrix team (D-053). Aren asked if a different runtime (ONNX Runtime, TensorRT) can make P4 fast enough on the CPU. The handover of C4 (open question 1) asked for the order of C5 and C6.
+- **Facts (chat C5, 2026-10-27):**
+  - TensorRT runs only on NVIDIA GPUs [SOURCE: NVIDIA developer forum]. On the GPU, P4 gives 0.63 s mean and 0.83 s maximum for each line [RUN, D-053]. Thus a faster GPU runtime gives no K1 gain.
+  - Optimum has no ONNX export for `seamless_m4t_v2` [SOURCE: Optimum ONNX overview]. The OpenVINO export stops with "unsupported architecture" (optimum-intel issue #1667, open since 2026-03-30) [SOURCE].
+  - unity.cpp (GGML, Meta) gives converted models for SeamlessM4T v1 only; v2 support is [UNVERIFIED] [SOURCE: `seamless_communication/ggml` README].
+  - CTranslate2 has no converter for the Seamless speech encoder [SOURCE].
+  - The CPU probe (D-053) needs a speedup of about 2–8× for each line and about 6× for the throughput of two sources [calc]. faster-whisper against openai/whisper on the CPU: 3.8× (float32) and 5.1× (int8) [SOURCE: faster-whisper 1.0.0 README]. A runtime change does not change WER or chrF, because the weights stay the same.
+  - `src/tir_asr/eval/seamless.py` runs the speech encoder two times for each segment (`transcribe` and `to_english`) [SOURCE: the file].
+- **Options (chat C5):**
+  - **A.** C5 first; P4 on the GPU in C6; the CPU question waits for Q16.
+  - **B.** C6 first, P4 on the GPU only.
+  - **C.** C6 first, with a CPU probe in a time box (checks in PyTorch, then a custom export only if the numbers come close to the target).
+  - **D.** An ONNX or TensorRT export first.
+- **Claude's preference:** A. Weak points: the P1 translation errors stay longer; C5 must fit the C6 design later. Fact that can show A is wrong: the Mathrix team requires a CPU-only run.
+- **Decision (Aren):**
+  1. **Q16 is closed.** No question to the Mathrix team. The target hardware is Aren's laptop with its GPU (K4). The README states the CPU limits of P4.
+  2. **C6 scope:**
+     1. P4 in the program, mainly for the GPU.
+     2. P1 stays the default. A flag starts the program with P4. C6 proposes the name and the form of the flag (R10).
+     3. P4 gets all possible optimizations for the CPU and for the GPU, for example one encoder pass for the HY line and the EN line, and INT8 if the quality drop is acceptable (C6 measures it, R6).
+     4. A separate performance test of P4 alone, and a live test of P4.
+     5. No custom ONNX implementation of P4 for now.
+     6. The Template Method design for P1 and P4 stays (D-053, addition).
+  3. **Order:** if C5 depends on the P4 implementation, C6 comes first; if not, C5 comes first, and this entry records the C6 decisions. Claude's check (below): C5 does not depend on P4. Thus C5 comes next, then C6.
+- **Dependency check (Claude, 2026-10-27):**
+  - The speaker step uses only `Segment.audio` and gives only a label. It uses no ASR or MT output. P4 changes only the text step (HY and EN). The C5 metric (label accuracy) does not use the texts.
+  - Both chats change the worker and the latency line: C5 adds `spk` (D-024); C6 changes the text steps. Rule for C5: the speaker step is its own component, with its own interface and one call in the worker, separate from the text step. Then C6 changes only the text step.
+  - GPU memory: P4 2.9 GB [RUN, D-053] plus a speaker model of about 23M parameters or less (SPK-3, `RESEARCH.md` §4.1) [SOURCE], well under 8 GB [calc].
+  - Fact that can show this check is wrong: the C6 design must put the speaker step inside the Template Method, or the speaker step and P4 must share a model or an encoder.
+- **Reason (Aren's words):** "it plainly states "Your hardware, your OS" and that "A solution that is honest about its limits beats one that hides them"". "since we know that P4 is borderline unusable on CPU-only setting, we are also to keep the P1 as default, and use a flag for runing the application with the P4". "We won't design custom ONNX implementation for P4 for now." "if C5 will depend on P4 implementation, then we begin with C6, if not, then we continue with C5 and put on record all the decisions made for the C6 for future".
+- **Questions raised (Claude, R14), open for C6:**
+  1. P1 has no CPU mode now: the ASR adapter stops with `asr: CUDA is not available` (R10). On the CPU, P1 gave 0.38–0.43 s for each line [RUN, D-053]. If the CPU optimization of P4 means a CPU mode of the program, P1 needs a device flag too, and CTranslate2 needs a CPU value for `mt_compute_type` (float16 support on the CPU is [UNVERIFIED]). C6 decides.
+  2. INT8 on the GPU: VRAM is not a limit (P4 uses 2.9 GB of 8 GB). The 8-bit GPU path of Transformers (bitsandbytes) can be slower than float16, and its support for the RTX 5070 is [UNVERIFIED]. C6 does the research before a decision (R8).
+  3. The reuse of the encoder output in `generate` is [UNVERIFIED]. C6 checks it with a run.
+  4. The CPU probe line of 36.4 s can come from a very long output (a repeat loop) [UNVERIFIED]. C6 reads `scripts/probe_cpu.py` and `test-results/c3-probe-cpu.txt`, after Aren approves (R4).
+  5. R16: the C6 scope is now larger than the time box of 2 h [UNVERIFIED estimate]. C6 gives a new time box.
+- **Revisit when:** C6 starts, or C5 needs a change to the text step.
