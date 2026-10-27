@@ -1,6 +1,8 @@
-# C3 bake-off results
+# Bake-off results (C3, C5)
 
-**Date:** 2026-10-26 · **Decision:** D-053 (P4: Seamless end to end) · **Rules:** R6 (measure, do not guess)
+**Date:** 2026-10-26 (C3), 2026-10-27 (C5) · **Decisions:** D-053 (P4: Seamless end to end), D-058 (speaker model) · **Rules:** R6 (measure, do not guess)
+
+The sections up to "Not measured" are the C3 bake-off. The section "Speaker labels (C5)" is the C5 sweep.
 
 ## Conditions
 
@@ -76,3 +78,38 @@ The line time is the ASR time plus the MT time of one segment. The VAD wait (abo
 - Power and temperature at live speed (the bake-off runs the segments with no pause).
 - Other voices and devices than the S1–S3 speakers; S4.
 - Seamless with `SeamlessM4Tv2Model` (one load for speech and text input).
+
+## Speaker labels (C5)
+
+### Conditions
+
+- **Laptop (Aren), 2026-10-27:** RTX 5070 Laptop GPU. torch 2.14.1, torchaudio 2.11.0, NeMo 3.0.0, speechbrain 1.1.2, pyannote.audio 4.0.7, silero-vad 6.2.3.
+- **Data (D-057 part 1):** the call sides of S1 (Google Meet; Speaker 1 and Speaker 2), S2 and S3 (Telegram; one speaker each). The four speakers are different people. Four streams, each a new session: S1, S2, S3, and stream D (S1 0–34.0 s, S2, S1 34.0 s to the end, S3; 192.5 s).
+- **Segments:** the program's VAD and `Endpointer` with `Params()`. S1: 9, S2: 5, S3: 5, D: 19 segments, 2.40–8.19 s of speech. Each segment overlaps a labelled line (0 outside).
+- **Method:** one embedding for each segment; the segments go into the clusterer in time order; `min_new_s` = 1.0 s (no segment was shorter, so this rule did not act); 15 thresholds from 0.20 to 0.90.
+- **Metric (D-057 part 2):** label accuracy after the best one-to-one mapping of the labels to the true speakers; an extra label counts as an error. "Wrong" counts the segments.
+- **Pass rule (D-057 part 3):** at one threshold, at most 1 wrong segment on each stream; the passing thresholds cover 0.10 or more.
+- **Files (local):** `test-results/bakeoff/spk-*.json`, `test-results/c5-spk-*.txt`.
+
+### Results
+
+| | TitaNet-large (SPK-3) | ECAPA, SpeechBrain (SPK-2) | WeSpeaker ResNet34-LM, pyannote (SPK-1) |
+|---|---|---|---|
+| Passing range, rule A (centroid) | 0.40–0.65 (0.25) | 0.35–0.55 (0.20) | 0.50–0.65 (0.15) |
+| Passing range, rule B-max (nearest) | 0.40–0.65 (0.25) | 0.35–0.60 (0.25) | 0.50–0.65 (0.15) |
+| Zero errors on all four streams (both rules) | 0.40–0.60 | 0.35–0.45 | 0.50–0.60 |
+| Stream D: lowest same-speaker cosine | 0.542 | 0.396 | 0.620 |
+| Stream D: highest different-speaker cosine | 0.372 | 0.413 | 0.496 |
+| Stream D: margin (lowest same − highest different) [calc] | +0.170 | −0.017 | +0.124 |
+| Embedding time per segment, mean / max | 6.0–9.8 / 28.3 ms | 5.5–6.5 / 7.7 ms | 11.7–13.8 / 19.2 ms |
+| Load time; VRAM | 3.34 s; 200 MiB | 0.32 s; 104 MiB | 2.19 s; 30 MiB |
+| New packages | 0 (NeMo) | 5 | 27 |
+
+TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 % (0.30–0.35), 100 % (0.40–0.60), 94.7 % (0.65), 84.2 % (0.70), 63.2 % (0.80), 26.3 % (0.90). At 0.50: 100 % on all four streams, by count and by speech time (9/9, 5/5, 5/5, 19/19).
+
+### Decision and limits
+
+- **D-058:** TitaNet-large with rule A (centroid). The widest range (0.25) is shared by TitaNet with rule A and ECAPA with rule B-max; the tie-break (fewer new packages) selects TitaNet. For TitaNet, B-max is not wider than A, so A stays. Start values: `spk_threshold` = 0.50 (the middle of the zero-error range), `spk_min_new_s` = 1.0 s. L-06 tests both.
+- **Removed after the sweep (D-058):** the ECAPA and WeSpeaker adapters and the dependency group `spk-eval` (`speechbrain`, `pyannote.audio`). The `c5-embed` commits in git keep them.
+- **Limits:** 4 voices and 19 segments. 0 errors in 19 segments gives an approximate 95 % upper limit of about 15 % for the error rate [calc]. No segment under 2.40 s and no noise, so `spk_min_new_s` and Q-14 are not tested. The live check is L-06.
+- **H-S1 (D-003):** three models trained on English voices separate the four Armenian voices with no error over a range of thresholds. No fine-tuning is necessary on this data.
