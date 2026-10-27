@@ -1035,3 +1035,193 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "we have to make sure it is in the time box so perhaps we'll dont do separate red tests just as in C3".
 - **Questions raised:** Claude (R14) named the risk one time: a test that cannot fail stays hidden. Mitigation: the tests come from the approved table, not from the code.
 - **Revisit when:** C5 starts, or a test that cannot fail is found.
+
+## D-056. Target hardware, the C6 scope, and the order of C5 and C6
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** Q16 (a CPU-only mode) waited for an answer from the Mathrix team (D-053). Aren asked if a different runtime (ONNX Runtime, TensorRT) can make P4 fast enough on the CPU. The handover of C4 (open question 1) asked for the order of C5 and C6.
+- **Facts (chat C5, 2026-10-27):**
+  - TensorRT runs only on NVIDIA GPUs [SOURCE: NVIDIA developer forum]. On the GPU, P4 gives 0.63 s mean and 0.83 s maximum for each line [RUN, D-053]. Thus a faster GPU runtime gives no K1 gain.
+  - Optimum has no ONNX export for `seamless_m4t_v2` [SOURCE: Optimum ONNX overview]. The OpenVINO export stops with "unsupported architecture" (optimum-intel issue #1667, open since 2026-03-30) [SOURCE].
+  - unity.cpp (GGML, Meta) gives converted models for SeamlessM4T v1 only; v2 support is [UNVERIFIED] [SOURCE: `seamless_communication/ggml` README].
+  - CTranslate2 has no converter for the Seamless speech encoder [SOURCE].
+  - The CPU probe (D-053) needs a speedup of about 2–8× for each line and about 6× for the throughput of two sources [calc]. faster-whisper against openai/whisper on the CPU: 3.8× (float32) and 5.1× (int8) [SOURCE: faster-whisper 1.0.0 README]. A runtime change does not change WER or chrF, because the weights stay the same.
+  - `src/tir_asr/eval/seamless.py` runs the speech encoder two times for each segment (`transcribe` and `to_english`) [SOURCE: the file].
+- **Options (chat C5):**
+  - **A.** C5 first; P4 on the GPU in C6; the CPU question waits for Q16.
+  - **B.** C6 first, P4 on the GPU only.
+  - **C.** C6 first, with a CPU probe in a time box (checks in PyTorch, then a custom export only if the numbers come close to the target).
+  - **D.** An ONNX or TensorRT export first.
+- **Claude's preference:** A. Weak points: the P1 translation errors stay longer; C5 must fit the C6 design later. Fact that can show A is wrong: the Mathrix team requires a CPU-only run.
+- **Decision (Aren):**
+  1. **Q16 is closed.** No question to the Mathrix team. The target hardware is Aren's laptop with its GPU (K4). The README states the CPU limits of P4.
+  2. **C6 scope:**
+     1. P4 in the program, mainly for the GPU.
+     2. P1 stays the default. A flag starts the program with P4. C6 proposes the name and the form of the flag (R10).
+     3. P4 gets all possible optimizations for the CPU and for the GPU, for example one encoder pass for the HY line and the EN line, and INT8 if the quality drop is acceptable (C6 measures it, R6).
+     4. A separate performance test of P4 alone, and a live test of P4.
+     5. No custom ONNX implementation of P4 for now.
+     6. The Template Method design for P1 and P4 stays (D-053, addition).
+  3. **Order:** if C5 depends on the P4 implementation, C6 comes first; if not, C5 comes first, and this entry records the C6 decisions. Claude's check (below): C5 does not depend on P4. Thus C5 comes next, then C6.
+- **Dependency check (Claude, 2026-10-27):**
+  - The speaker step uses only `Segment.audio` and gives only a label. It uses no ASR or MT output. P4 changes only the text step (HY and EN). The C5 metric (label accuracy) does not use the texts.
+  - Both chats change the worker and the latency line: C5 adds `spk` (D-024); C6 changes the text steps. Rule for C5: the speaker step is its own component, with its own interface and one call in the worker, separate from the text step. Then C6 changes only the text step.
+  - GPU memory: P4 2.9 GB [RUN, D-053] plus a speaker model of about 23M parameters or less (SPK-3, `RESEARCH.md` §4.1) [SOURCE], well under 8 GB [calc].
+  - Fact that can show this check is wrong: the C6 design must put the speaker step inside the Template Method, or the speaker step and P4 must share a model or an encoder.
+- **Reason (Aren's words):** "it plainly states "Your hardware, your OS" and that "A solution that is honest about its limits beats one that hides them"". "since we know that P4 is borderline unusable on CPU-only setting, we are also to keep the P1 as default, and use a flag for runing the application with the P4". "We won't design custom ONNX implementation for P4 for now." "if C5 will depend on P4 implementation, then we begin with C6, if not, then we continue with C5 and put on record all the decisions made for the C6 for future".
+- **Questions raised (Claude, R14), open for C6:**
+  1. P1 has no CPU mode now: the ASR adapter stops with `asr: CUDA is not available` (R10). On the CPU, P1 gave 0.38–0.43 s for each line [RUN, D-053]. If the CPU optimization of P4 means a CPU mode of the program, P1 needs a device flag too, and CTranslate2 needs a CPU value for `mt_compute_type` (float16 support on the CPU is [UNVERIFIED]). C6 decides.
+  2. INT8 on the GPU: VRAM is not a limit (P4 uses 2.9 GB of 8 GB). The 8-bit GPU path of Transformers (bitsandbytes) can be slower than float16, and its support for the RTX 5070 is [UNVERIFIED]. C6 does the research before a decision (R8).
+  3. The reuse of the encoder output in `generate` is [UNVERIFIED]. C6 checks it with a run.
+  4. The CPU probe line of 36.4 s can come from a very long output (a repeat loop) [UNVERIFIED]. C6 reads `scripts/probe_cpu.py` and `test-results/c3-probe-cpu.txt`, after Aren approves (R4).
+  5. R16: the C6 scope is now larger than the time box of 2 h [UNVERIFIED estimate]. C6 gives a new time box.
+- **Revisit when:** C6 starts, or C5 needs a change to the text step.
+
+## D-057. Speaker labels: design and process (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** F4: lines from the system side get "Speaker 1", "Speaker 2", and so on, and each person keeps the same label for the full session. The C5 shortlist is D-017. D-056: the speaker step is its own component, separate from the text step.
+- **Facts (chat C5, 2026-10-27):**
+  - Eval data, call side [RUN, label files and `docs/eval/scripts.md`]: 4 voices (S1 Speaker 1 and S1 Speaker 2 on Google Meet; S2 Speaker 1 and S3 Speaker 1 on Telegram), all different people (Aren). 19 lines, 87.1 s of speech. The shortest line is 2.52 s.
+  - TitaNet-large: NeMo `EncDecSpeakerLabelModel.infer_segment(segment)` takes a 16 kHz numpy array and gives the embedding [SOURCE: NeMo 3.0.0 `label_models.py`]. About 23M parameters, CC-BY-4.0, "several thousand hours of English speech" [SOURCE: model card].
+  - NeMo `verify_speakers` uses the score (cos + 1) / 2 with the threshold 0.7, that is cosine 0.4 [SOURCE: `label_models.py`].
+  - `torchaudio` is not on the laptop; the newest `torchaudio` on PyPI is 2.11.0; the laptop has torch 2.14.1 [RUN].
+  - Lock-only check in the workspace with uv 0.12.21 [RUN]: `speechbrain` adds 5 packages, `pyannote.audio` adds 27, both add 31; no package of the 177 in the current lock changes its version; the resolver selects `torchaudio` 2.11.0 and `torchcodec` 0.17.0. That they work with torch 2.14.1 is [UNVERIFIED].
+  - diart (online diarization on pyannote) uses centroids: a new centroid when the distance to all centroids is larger than `delta_new`; a centroid update only when the speech ratio is larger than `rho_update` [SOURCE: diart docs].
+- **Parts, options, Claude's preference, and decision:**
+  1. **Eval streams.**
+     - **A.** Four streams, each a new session: S1 call, S2 call, S3 call, and stream D (S1 call 0–34.0 s, then S2 call, then S1 call 34.0 s to the end, then S3 call; 4 voices, 192.5 s; the cut is in a 7.3 s silence of the call side). **B.** S1 call only. **C.** New recordings with 3 or more people on the call side.
+     - Claude's preference: A. Weak points: 19 lines (one error = 5 %); from S1 to S2 the call app changes with the speaker, which can make the result look better (S2 and S3 are both Telegram). Fact that can show A is wrong: L-06 gives many more errors than stream D.
+     - **Decision:** A.
+  2. **Metric.** Label accuracy after the best one-to-one mapping of the labels to the true speakers (`scipy` `linear_sum_assignment`), weighted by the speech time of each segment; an extra label is an error. The true speaker of a segment comes from `assign_segments` (D-046). Also reported: the accuracy with each segment counted equally, the speaker count, the segments with two voices (Q-04), and the time of each embedding call.
+     - **Decision:** as proposed.
+  3. **Speaker models.**
+     - **A.** All three of D-017 now. **B.** TitaNet-large first (no new package); ECAPA and WeSpeaker only if TitaNet fails. **C.** TitaNet-large with NeMo's `titanet_small` and `ecapa_tdnn` (no new package; NGC download).
+     - Claude's preference: B. Weak point: no comparison if TitaNet passes. Fact that can show B is wrong: TitaNet passes the eval but fails L-06.
+     - **Decision:** A, with three points:
+       1. `speechbrain` and `pyannote.audio` go into a new dependency group `spk-eval`, which is not in `default-groups`. Thus a plain `uv sync` and CI do not install them, and the program stays as it is. At the end of C5, the packages of the models that lose leave the project.
+       2. **Selection rule:** a model passes when, at one threshold, at most one segment on each stream has a wrong label, and the passing thresholds cover a range of 0.10 or more in cosine. Among the passing models, the widest range wins. If two models are equal, the model with fewer new packages wins.
+       3. **Adapters:** the three candidate adapters go in `tir_asr/eval/`, one commit for each (as D-051). In `c5-pipeline`, the adapter of the winning model moves to `speakers/`; T-MODEL-SPK-01 and T-MODEL-SPK-02 test it there. The sweep run is the model-level check of the candidates.
+     - Risk (Claude, R14, one time): `torchaudio` 2.11.0 and `torchcodec` 0.17.0 have compiled parts and can fail with torch 2.14.1 at import or at the first call [UNVERIFIED]; pyannote telemetry is on by default (D-017), and the eval adapter must turn it off; the WeSpeaker model can need a Hugging Face token (RK6) [UNVERIFIED]. A candidate that fails gets a recorded result, with a maximum of three tries (R12).
+  4. **Clustering rule.**
+     - **A.** Online centroids: cosine similarity of the L2-normalized embedding to the centroid of each speaker; the highest similarity `spk_threshold` or more gives that speaker and an update of its centroid; else a new speaker. **B.** The similarity to all stored embeddings of each speaker. **C.** Cluster all embeddings again from time to time (against F4).
+     - Claude's answer to Aren's question ("in what ways is B not better?"): B-mean (the mean similarity) is A multiplied by the length of the mean vector, which is 1 or less [calc], so it gives no new information. B-max (the nearest stored embedding) is better for one person with two voice groups. It is weaker when one wrong segment (two voices, or a noise) is stored, because later segments of a different person can match it; weaker in long sessions, because a speaker with more stored embeddings has more chances to be near a different person [calc]; and its threshold gets easier to pass as the session grows. Memory and time are equal in practice (about 0.8 MB for 1000 segments [calc]). Our eval has only 4–5 segments for each speaker, so it can give the same result for both rules.
+     - **Decision:** measure both. `c5-cluster` gets an abstract `OnlineClusterer` with the shared steps (Template Method), the program rule `CentroidClusterer` (A) in `speakers/cluster.py`, and `NearestClusterer` (B-max) in `tir_asr.eval.nearest` for the sweep only. The program keeps one rule. B-max wins only if it passes the rule with a wider threshold range on stream D; else A stays.
+  5. **Short segments.**
+     - **A.** No special rule (weak point: in L-05, about 11 of 84 blocks were noises, Q-14). **B.** A new parameter `spk_min_new_s`: a shorter segment starts no new speaker and changes no speaker; it gets the label of the most similar speaker. If no speaker exists yet, it starts "Speaker 1".
+     - **Decision:** B. Start value of `spk_min_new_s`: 1.0 s [UNVERIFIED]: no source gives a value, and the eval has no segment under 2.5 s. L-06 sets the value (R10).
+  6. **Place in the program.**
+     - **A.** A core component `SpeakerLabeler` (embedder and clusterer) with `label(segment) -> str`. The worker calls it after MT, only for `"System"`. The system line shows `vad, asr, mt, spk, out`; `"Me"` lines do not change. The model runs on the GPU in the worker (no new thread). Load order: sources, ASR, MT, VAD, speaker model; one warm-up call. **B.** The speaker step before ASR (the queue wait moves into `spk`). **C.** A separate speaker thread (two GPU threads).
+     - Claude's preference: A. Fact that can show A is wrong: in T-SIM-02, `spk` adds more than 0.1 s to a line.
+     - **Decision:** A.
+  7. **Branches:** `c5-cluster` (the clusterer, the metric, the embedder interface); `c5-embed` (the candidate adapters, the stream builder, `scripts/spk_bakeoff.py` with a threshold sweep from 0.20 to 0.90 in steps of 0.05; then Aren sets `spk_threshold`); `c5-pipeline` (the labeler in the program, the sim test, and the live test).
+     - **Decision:** as proposed.
+  8. **Process:** no separate red run in C5 (as D-055). Claude (R14) named the risk one time: a test that cannot fail stays hidden. Mitigation: the tests come from the approved table.
+- **Tests:** `TESTS.md` §2.7. Aren approved them on 2026-10-27, and also the new tests T-SPK-07 (from part 4) and T-SPK-08 to T-SPK-10 (the sweep core in `c5-embed`): "agree".
+- **Reason (Aren's words):** "1. A approved", "2. agree", "3. A", "5. full agree", "6. A", "7. agree on branches", "agree on the tests". "no red runs for C5 as well". "Lets measure both rules". "risk of Part3. A noted and proposed point 1 as the decision". For part 3, Aren gave no other reason. Part 3, points 2 and 3, and T-SPK-07: "1. approve", "2. agree", "3. agree".
+- **Revisit when:** a candidate does not install or does not run in `c5-embed`; the sweep shows no passing threshold; or L-06 shows extra labels or merged speakers.
+
+## D-058. Speaker model, clustering rule, and start values (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-057 parts 3 and 4: the sweep and the selection rule decide the model and the rule; Aren sets `spk_threshold` (R10). D-057 part 3, point 1: the packages of the models that lose leave the project.
+- **Facts [RUN, Aren's laptop, 2026-10-27]:** `docs/eval/results.md`, "Speaker labels (C5)"; `TESTS.md` §2.7.
+  - All three models ran on the GPU and pass the rule. Passing ranges, rule A / rule B-max: TitaNet 0.40–0.65 / 0.40–0.65 (width 0.25 / 0.25); ECAPA 0.35–0.55 / 0.35–0.60 (0.20 / 0.25); WeSpeaker 0.50–0.65 / 0.50–0.65 (0.15 / 0.15).
+  - Zero errors on all four streams: TitaNet 0.40–0.60; ECAPA 0.35–0.45; WeSpeaker 0.50–0.60. Below the range, two S1 voices get one label; above it, one voice gets two or more labels.
+  - Stream D margin (lowest same-speaker cosine − highest different-speaker cosine) [calc]: TitaNet +0.170, ECAPA −0.017, WeSpeaker +0.124.
+  - TitaNet: 200 MiB VRAM, load 3.34 s, embedding at most 28.3 ms; no new package.
+- **Options and Claude's proposal:**
+  1. **Model and rule:** from the D-057 rules, TitaNet-large with rule A. The widest range (0.25) is shared by TitaNet with rule A and ECAPA with rule B-max; the tie-break (fewer new packages) selects TitaNet; for TitaNet, B-max is not wider than A. The margin also is the largest for TitaNet.
+  2. **`spk_threshold`:** 0.45 (fewer split labels, nearer to the merge edge), **0.50** (the middle of the zero-error range 0.40–0.60), or 0.55 (fewer merges, nearer to the split edge). Weak point of 0.50: 4 voices only. Fact that can show it is wrong: L-06 shows extra labels for one person (lower the value) or one label for two people (raise the value).
+  3. **`spk_min_new_s`:** 1.0 s stays the start value (D-057 part 5B). No eval segment was shorter than 2.40 s, so the sweep did not test it.
+  4. **The losing packages:** remove them now, as the last commits of `c5-embed`, not at the end of C5. Weak point: a new comparison needs the files back; `git revert` of the removal commits restores them with the same lock.
+- **Decision:**
+  1. TitaNet-large (`nvidia/speakerverification_en_titanet_large`, SPK-3) with rule A (`CentroidClusterer`).
+  2. New parameter `spk_threshold = 0.50` (approved 2026-10-27, R10), a start value. L-06 tests it.
+  3. New parameter `spk_min_new_s = 1.0` s (approved 2026-10-27, R10), a start value. L-06 tests it.
+  4. The test was done, and its results are recorded (`docs/eval/results.md`, `TESTS.md` §2.7; the local files `test-results/bakeoff/spk-*.json`). The ECAPA and WeSpeaker adapters and the dependency group `spk-eval` (`speechbrain`, `pyannote.audio`, and their 29 other new packages) are removed. The `c5-embed` commits in git keep them.
+  - The two parameters go into `Params` and `ARCHITECTURE.md` §6 in `c5-pipeline`, with the code that uses them.
+- **Reason (Aren's words):** "agree on TitaNet and Centroid"; "let's decide on 0.50 and test it against L-06"; "same for spk min threshold"; "yes we remove the adapters and their packages and record that the test was conducted, results obtained, packages removed".
+- **Questions raised:**
+  - Aren asked how the evaluation works and what the accuracy is in percent. Claude: each stream is cut by the program's VAD; each segment gets one embedding and its true speaker from the labels; the clusterer gets the segments in time order; the labels are matched to the people by the best one-to-one mapping. TitaNet with rule A at 0.50 gives 100 % on all four streams (9/9, 5/5, 5/5, 19/19), by count and by speech time. Stream D by count: 52.6 % at 0.20, 78.9 % at 0.30, 100 % from 0.40 to 0.60, 94.7 % at 0.65, 26.3 % at 0.90.
+  - Claude (R14): 0 errors in 19 segments gives an approximate 95 % upper limit of about 15 % for the error rate [calc]; the eval has no short segment and no noise (Q-14). Thus L-06 is the real test.
+  - Claude (correction for C6): D-056 question 4 proposed a very long output as the cause of the 36.4 s CPU line. `docs/eval/results.md` says that the English output of that segment had a normal length (110 characters), so this cause is probably wrong.
+- **Revisit when:** L-06 shows extra labels for one person, one label for two people, or labels from noise.
+
+## D-059. Interface of the speaker step in the program (C5, `c5-pipeline`)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-057 part 6 (option A) puts the speaker step in the worker, after MT, for `"System"` only. D-056: the speaker step is its own component, separate from the text step. The contracts of `run()`, `warm_up()`, `Line`, the output, the adapter, the startup, and T-SIM-02 needed details.
+- **Points, options, and Claude's preference:**
+  1. **Labeler.** A core class `SpeakerLabeler(embedder, clusterer)` in `speakers/labeler.py`; `label(segment)` calls `clusterer.assign(embedder.embed(segment.audio), segment.speech_end - segment.start)`. An interface `Labeler` in `types.py`, so that unit tests use fakes.
+  2. **`run()`.** **A.** A new argument `labelers: Mapping[str, Labeler] | None = None`, keyed by the source label; a source with no labeler keeps its label. **B.** Triples `(source, vad, labeler)`; weak point: all T-PIPE tests change. Preference: A.
+  3. **Empty ASR text on the system side.** **A.** No labeler call: the block keeps `System` and has no `spk` step; this also keeps noise (Q-14) out of the centroids. **B.** Always call the labeler; weak point: noise can start new speakers. Preference: A. Fact that can show A is wrong: in L-06, real speech gets no text and so no label.
+  4. **`Line` and the output.** A new field `spk_end: float | None = None`. A system line with a text shows `vad, asr, mt, spk, out`; `out` counts from `spk_end` when it exists, else from `mt_end`. "Me" lines and empty-text blocks do not change.
+  5. **Warm-up.** `warm_up(transcriber, translator, embedder, clock)` returns three times; one embedding call with the same 2 s of zeros; it gets the embedder, not the labeler, so it cannot change a clusterer.
+  6. **Adapter.** `eval/spk_titanet.py` moves to `speakers/titanet.py` (D-057 part 3, point 3). `hf_hub_download(repo, "speakerverification_en_titanet_large.nemo", local_files_only=True)`, as the ASR adapter ([RUN] the file name is in the TitaNet load log); the error text agrees with T-MODEL-SPK-02.
+  7. **Startup.** `Params` gets `spk_threshold = 0.50` and `spk_min_new_s = 1.0` (D-058). Load order: sources, ASR, MT, VAD, speaker model, with a `startup: speaker model loaded in …` line. The shutdown line does not change.
+  8. **T-SIM-02.** "Me" plays `s1.mic.wav`; "System" plays stream D, written to a temporary 16-bit WAV file. A wrapper on the labeler records the time and the label of each call; the test maps the times to the turns of stream D, with the start of the System player as time 0. Expected: at most 1 wrong segment, 4 speakers, "Me" blocks `Me`, each total < 5 s.
+- **Decision:** A in points 2 and 3; points 1 and 4 to 8 as proposed. `ARCHITECTURE.md` v0.25. Tests: `TESTS.md` §2.7 (T-SPK-11 is new; T-SIM-01 changes only for the new signatures).
+- **Reason (Aren's words):** "1. agree", "2. A", "3. A", "4. agree", "5. agree", "6. agree", "7. agree", "8. agree".
+- **Questions raised:** Claude (R14): with point 3A, a system segment with no text has the label `System` in C2 to C6. C7 removes the empty-text blocks for the delivery (D-031), so the delivered program shows only `Speaker N` on the system side.
+- **Revisit when:** L-06 (point 3), or C6 (the Template Method design for P1 and P4 must keep the speaker step separate, D-056).
+
+## D-060. L-06 result: a first noise, two voices in one segment, and the next steps (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** L-06 (`TESTS.md` §4) is the first live test of F4. D-057 part 5B and D-058 said that L-06 checks `spk_threshold` and `spk_min_new_s`.
+- **Facts (L-06, 2026-10-27, `test-results/c5-l06.txt`) [RUN]:**
+  - A call with 2 people on the call side (person A, person B), about 1 min 15 s; 9 `System` lines and 8 `Me` lines. The protocol asked for 5 min, so the sample is small.
+  - Totals 0.57–0.70 s; the `spk` step 0.01–0.02 s (K1 passes).
+  - On clean turns, each person kept one label (A: `Speaker 2`; B: `Speaker 3`), and no two people got one label.
+  - The first segment of the session was a cough of A («Լա։» → "What is it?"). It started `Speaker 1`, because the first segment always started a speaker (D-057 part 5B). A's speech then got `Speaker 2`. Thus A had two labels.
+  - Two segments had two voices (00:00:40 and 00:00:55, Aren confirmed the times). The VAD cuts only after 500 ms of silence, so a fast change or an interruption stays in one segment. The segment got the label of the voice with more speech (Q-04).
+  - Three of the 9 `System` lines were noises with one letter or a fragment (Q-14).
+  - After `Stopped.`, the output had `terminate called without an active exception` (a C++ abort at the stop). L-05 and T-E2E-02 did not have it.
+- **Aren's observations (his words):** "on the other end of the line there were two people"; "The first cough was identified but then it wasnt attributed to the Speaker 2 rightfully"; "No interruptions were correctly registered. In some cases even the speech of Speaker 3, if spoken shortly after Speaker 2, were not registered as theirs"; "In one case, Speaker 2 spoke for a bit, then Speakerr three for some more and it was attributed to Speaker 3"; "If they spoke with enough pauses, identification was correct, no other speaker was registered throughout (except initial cough part)".
+- **Parts, options, preferences, and decision:**
+  1. **L-06 status.** By the approved expected result ("each person keeps one label"), L-06 fails on one point (A had two labels). The clean turns pass.
+     - **Decision:** as stated.
+  2. **A noise as the first segment.** **A.** A short first segment (`duration_s < spk_min_new_s`, no speaker yet) gets no label and starts no speaker. **B.** All short segments get no label. **C.** No change.
+     - Claude's preference: A. Weak point: if the cough was 1.0 s or longer, A does not help [UNVERIFIED], because the output shows no segment length. Fact that can show A is wrong: a later live run again gives a first noise line with a speaker label.
+     - **Decision:** A. The label is `Unidentified` (Aren), not `System`. Design (Claude): `OnlineClusterer.assign` gives `None`, and `SpeakerLabeler.label` gives `UNIDENTIFIED`; the pipeline and the output do not change. `label_accuracy` counts a segment with no label as an error.
+  3. **Two voices in one segment.** **A.** Record the limit now (README, Q-04, ARCHITECTURE §2.8). **B.** A shorter `vad_min_silence_ms`, measured in C7. **C.** Find a speaker change inside a segment (embeddings on short windows), and cut the audio before ASR.
+     - Claude's preference: A now, B in C7, and C after C7 if mixed lines are still frequent.
+     - Aren's proposal: `vad_min_silence_ms` down to 250 ms, because "it is better to have separated same speech than not separated different speeches".
+     - Claude (R14): this is correct for the speaker step, but it has a cost in the text step. T-INSTALL-04 had pauses of 64–448 ms at sentence ends; slower speakers can pause 250–500 ms inside a sentence [UNVERIFIED]; a half sentence gives worse ASR and MT, and NLLB invents text for fragments (Q-14). More segments under `spk_min_new_s` get the nearest label, which is a guess. A gap under 250 ms and two people who speak at the same time stay in one segment. The latency gets about 0.25 s lower. C7 measures 250, 300, 400, and 500 ms on S1–S3 (WER, chrF, segment count and lengths), and the speaker sweep on a new stream with fast changes (made from the S1–S3 turns). A separate value for the System side is possible.
+     - **Decision:** A now; Aren's proposal (B, from 250 ms) goes to C7 with the measurement; C stays open for after C7.
+  4. **Noises (Q-14).** Aren's proposal: a slightly higher `vad_threshold`, so that minor coughs do not pass; Aren saw that longer coughs do not pass the VAD.
+     - Claude (R14): a higher threshold can also remove quiet speech, word starts, and short words such as «Այո» [UNVERIFIED]; `vad_end_threshold` (0.35) must stay lower. Other options: a higher `vad_min_speech_ms`, or a rule that removes texts with one or two letters (the L-06 noise lines: «Լա։», «Հովհ.», «Հ։»). The eval set has no noises: C7 needs a short recording with coughs, laughs, and short words («Այո», «Հա», «Լավ»).
+     - **Decision:** C7 measures `vad_threshold`, `vad_min_speech_ms`, and the short-text rule with the new recording (R6). 2A stays also with a higher threshold.
+  5. **Speaker parameters.** **Decision:** `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s stay (D-058). C7 checks them again.
+  6. **Diagnostic line.** A flag (for example `--debug-speakers`) writes one line to stderr for each System segment: the speech length, the similarities, and the decision (new, update, short, or no label). Then C7 can set `spk_min_new_s` from facts (R10).
+     - Claude's preference: add it in C7, before its live test, because C7 uses it and the C5 time box has little time left.
+     - **Decision:** add the line (Aren: "yes let's add the diagnostic line"). Aren did not give the chat; after "proceed", Claude's preference (C7) applies. Aren can change this.
+  7. **M3.** **Decision:** M3 is reached after 2A and the exit check, with the limits in the README.
+- **Tests:** `TESTS.md` §2.7 (T-SPK-03 changed; T-SPK-05 and T-SPK-11 have one more case each). Aren: "proceed".
+- **Reason (Aren's words):** "1. Let's decrease min silence for VAD, even to 250ms, it is better to have separated same speech than not separated different speeches"; "2. let's increase vad threshold for speech very slightly so minor coughs are not registered"; "3. I actually noticed that longer coughs are not registered as speech at all so A is a go, I think we wont even need it if we are to increase the vad threshold, also please write "Unidentified" or something like that instead of "System""; "4. ok I see your point. my proposals (1, 2) go to C7"; "5. yeah let's keep the spk parameters"; "6. yes let's add the diagnostic line"; "7. Yup"; "proceed".
+- **Questions raised:** Claude (R14): with 3A, the delivered program has a known limit for interruptions; the README states it ("A solution that is honest about its limits beats one that hides them"). The abort at the stop is open: see L-02 in `TESTS.md` §4.
+- **Revisit when:** the C7 measurements (parts 3 and 4), the diagnostic line (part 5), or the exit check shows a repeated abort.
+
+## D-061. The clean stop: run() waits for its threads (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-060 part 7: M3 comes after the exit check. In L-06, `terminate called without an active exception` came after the shutdown line. The pipe hid the exit code.
+- **Facts:**
+  - Exit check (`test-results/c5-exit1.txt`, 2026-10-27) [RUN]: only `Me` lines, no speaker call. After the shutdown line: `Assertion 'pthread_mutex_lock(&m->mutex) == 0' failed at ../src/pulsecore/mutex-posix.c:92, function pa_mutex_lock(). Aborting.`, exit code 134. Thus the cause is not the speaker step.
+  - `soundcard` 0.4.6 registers `atexit.register(_pulse._shutdown)`. `_shutdown` stops and frees the PulseAudio main loop. Each `record()` call locks that main loop [SOURCE: `soundcard/pulseaudio.py`, lines 125–132 and 291].
+  - Python runs the `atexit` functions while daemon threads still run [RUN: workspace test with Python 3.13: a daemon thread ran 20 times during a 0.2 s `atexit` function]. The same order in Python 3.12 is [UNVERIFIED].
+  - Before D-061, `run()` returned while the capture threads (daemon threads) were still in `record()`. Thus a capture thread could lock a freed mutex. The worker can also be in a model call at the exit; this is a possible cause of the L-06 line [UNVERIFIED].
+  - The race was in the code since C2d. T-E2E-02 passed in C2d, C4, and C5. Why it shows more often now is [UNVERIFIED].
+- **Options:**
+  - **A.** A clean stop in `run()`: at each end, set the stop event; each capture thread stops at its next block and closes its block iterator (the adapter closes the stream); a wake-up mark lets the worker stop; the main thread waits for all threads with one limit of 2 s; then return.
+  - **B.** `os._exit(code)` after a flush of the output, in a separate entry function. No `atexit` function runs. Weak points: it hides the cause; no library cleanup.
+  - **C.** Record it now and fix it in C7 (error behaviour).
+- **Claude's preference:** A, on the branch `c5-stop`, because the program now exits with code 134 at each stop, and an interviewer sees it. Weak points: the stop takes about 0.1 s longer; a source that gives no blocks does not stop in 2 s, and the race can stay for it [UNVERIFIED]. Fact that can show A is wrong: the live exit check still shows an abort.
+- **Decision:** A (Aren: "approved, proceed"). Details:
+  1. The constant `STOP_JOIN_S` = 2.0 s in `pipeline.py` (§5): one time limit for all threads. It is a program constant, not a tuning parameter.
+  2. R10 (Claude): a time limit must not be silent. A thread that does not stop in `STOP_JOIN_S` gives `tir-asr: stop: thread <name> did not stop in <s> s` on `err`; the exit code does not change. Test T-PIPE-13 (Aren: "ci is green, continue").
+  3. A second Ctrl+C during the wait makes `run()` return at once: that is the user's own request, not a hidden error.
+- **Tests:** `TESTS.md` §2.7, branch `c5-stop`: T-PIPE-11, T-PIPE-12, the change of T-E2E-02, and the live exit check (Aren: "approved, proceed"); T-PIPE-13.
+- **Reason (Aren's words):** "approved, proceed"; for point 2 and T-PIPE-13: "ci is green, continue".
+- **Revisit when:** the live exit check or T-E2E-02 shows an abort, or the error line of point 2 comes in a live run.

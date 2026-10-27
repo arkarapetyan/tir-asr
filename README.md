@@ -3,7 +3,7 @@
 Live Armenian speech transcription and English translation in the terminal, with speaker labels.
 All models run locally.
 
-**Status:** C0, project setup. The program does not work yet. See `PLAN.md` for the phases.
+**Status:** M3 (MVP, C5). The program captures your microphone (`Me`) and the other side of a call (`Speaker 1`, `Speaker 2`, …), and prints the Armenian text and the English translation of each speech segment, with its latency. See `PLAN.md` for the phases.
 
 The name comes from Tir. In Armenian mythology, Tir is the god of written language and wisdom, the scribe of the chief god Aramazd, and an interpreter of dreams ([source](https://en.wikipedia.org/wiki/Tir_(god))).
 
@@ -15,6 +15,27 @@ The name comes from Tir. In Armenian mythology, Tir is the god of written langua
 2. Chosen models, the alternatives, and the reasons.
 3. Architecture.
 4. Known limits and possible improvements.
+
+## Run (MVP)
+
+The full setup guide comes at milestone M5. The audio setup is in `docs/setup-audio.md`.
+
+```bash
+uv sync --locked          # one time: install the environment
+./run.sh --list-devices   # show the sources and their exact ids
+./run.sh                  # start: the default microphone and the monitor of the default output
+```
+
+Push Ctrl+C one time to stop. The models must be in the local Hugging Face cache (`run.sh` sets `HF_HUB_OFFLINE=1`, so nothing downloads).
+
+## Known limits (M3)
+
+- **Interruptions:** the program cuts the speech only after 0.5 s of silence. When a person starts to speak less than 0.5 s after another person, or interrupts, both voices are in one line. That line gets the label of the person who spoke more (D-060, Q-04).
+- **Noises:** a cough or another short sound can pass as speech. Then the line has one letter or a fragment, and the translation can be an invented sentence (Q-14). A short sound before the first speaker gets the label `Unidentified` (D-060).
+- **Translation:** the default pipeline (P1: NeMo ASR, then NLLB) sometimes leaves out a sentence or gives a wrong translation (`docs/eval/results.md`).
+- **Hardware:** the program needs an NVIDIA GPU with CUDA. It has no CPU mode.
+
+C7 measures the possible improvements (D-060).
 
 ## Project documents
 

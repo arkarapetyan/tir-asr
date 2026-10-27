@@ -1,13 +1,16 @@
-"""WER, CER, and chrF for the bake-off (D-047, D-049).
+"""WER, CER, and chrF for the bake-off (D-047, D-049); label accuracy for the speakers (D-057).
 
 WER and CER compare the normalized Armenian texts (`normalize_hy`, D-047).
 chrF compares the English texts with no normalization (sacrebleu default values).
 Each score is for the full list: the total edits divided by the total reference length.
+The label accuracy compares the speaker labels with the true speakers after the best mapping.
 """
 
 from collections.abc import Callable, Sequence
 
+import numpy as np
 from sacrebleu.metrics import CHRF
+from scipy.optimize import linear_sum_assignment
 
 from tir_asr.errors import TirError
 from tir_asr.eval.normalize import normalize_hy
@@ -57,6 +60,39 @@ def digit_words(texts: Sequence[str]) -> int:
         for text in texts
         for word in normalize_hy(text).split()
     )
+
+
+def label_accuracy(
+    truths: Sequence[str], labels: Sequence[str | None], weights: Sequence[float]
+) -> float:
+    """Label accuracy after the best one-to-one mapping of labels to true speakers (D-057).
+
+    Each segment has its true speaker, its label from the program, and its weight (its speech
+    time in seconds, or 1 for a count of segments). The mapping gives the largest matched
+    weight (Hungarian method). A label with no true speaker counts as an error, and so does a
+    true speaker with no label. A segment with no label (None, D-060) is always an error. The
+    result is the matched weight divided by the total weight.
+    """
+    if not len(truths) == len(labels) == len(weights):
+        raise MetricError(
+            f"metrics: {len(truths)} true speakers, {len(labels)} labels, "
+            f"and {len(weights)} weights"
+        )
+    if not truths:
+        raise MetricError("metrics: no segments")
+    for weight in weights:
+        if not weight > 0:  # also a NaN
+            raise MetricError(f"metrics: weight {weight} is not positive")
+    true_ids = sorted(set(truths))
+    label_ids = sorted({label for label in labels if label is not None})
+    if not label_ids:
+        return 0.0
+    matrix = np.zeros((len(label_ids), len(true_ids)))
+    for truth, label, weight in zip(truths, labels, weights, strict=True):
+        if label is not None:
+            matrix[label_ids.index(label), true_ids.index(truth)] += weight
+    rows, cols = linear_sum_assignment(matrix, maximize=True)
+    return float(matrix[rows, cols].sum() / sum(weights))
 
 
 def _check_lengths(refs: Sequence[str], hyps: Sequence[str]) -> None:

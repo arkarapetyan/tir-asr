@@ -1,4 +1,4 @@
-"""T-OUT-01 to T-OUT-04: the output block (ARCHITECTURE.md section 2.5, D-024, D-031, D-040).
+"""T-OUT-01 to T-OUT-05: the output block (ARCHITECTURE.md 2.5, D-024, D-031, D-040, D-059).
 
 All times are `time.monotonic()` values. The session starts at SESSION_START.
 """
@@ -101,3 +101,15 @@ def test_out_04_one_write_and_one_flush_for_each_block():
     write_block(make_line(), SESSION_START, stream)
 
     assert stream.calls == [("write", BLOCK), ("flush",)]
+
+
+def test_out_05_system_line_with_the_speaker_step():
+    # D-059: the speaker step comes after MT; `out` counts from its end.
+    line = make_line(label="Speaker 1", mt_end=1076.12, spk_end=1076.13, write=1076.14)
+
+    block = format_block(line, SESSION_START)
+
+    assert block.splitlines()[0] == "[00:01:12] Speaker 1"
+    assert latency_line(block) == (
+        " [Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]"
+    )

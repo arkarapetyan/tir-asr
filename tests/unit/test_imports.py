@@ -12,7 +12,14 @@ from pathlib import Path
 
 import pytest
 
-FORBIDDEN = ["torch", "nemo", "ctranslate2", "silero_vad", "soundcard", "transformers"]
+FORBIDDEN = [
+    "torch",
+    "nemo",
+    "ctranslate2",
+    "silero_vad",
+    "soundcard",
+    "transformers",
+]
 
 ADAPTERS = {
     "tir_asr.segment.silero",
@@ -24,6 +31,7 @@ ADAPTERS = {
     "tir_asr.eval.opus_ct2",
     "tir_asr.eval.buzz_whisper",
     "tir_asr.eval.seamless",
+    "tir_asr.speakers.titanet",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.
@@ -45,6 +53,12 @@ REQUIRED = {
     "tir_asr.eval.metrics",
     "tir_asr.eval.data",
     "tir_asr.eval.run",
+    "tir_asr.speakers",
+    "tir_asr.speakers.cluster",
+    "tir_asr.eval.nearest",
+    "tir_asr.eval.streams",
+    "tir_asr.eval.spk_run",
+    "tir_asr.speakers.labeler",
 }
 
 CHECK = """

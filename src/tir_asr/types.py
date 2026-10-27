@@ -37,7 +37,7 @@ class Segment:
 class Line:
     """One output block: the texts and the times of ARCHITECTURE.md section 2.5."""
 
-    label: str  # the source label "Me" or "System" (C4); "Speaker N" (C5)
+    label: str  # "Me"; system side: "Speaker N" or "Unidentified" (C5); "System": empty text
     start: float  # Segment.start
     hy: str  # Armenian text
     en: str  # English text
@@ -46,6 +46,7 @@ class Line:
     asr_end: float
     mt_end: float
     write: float
+    spk_end: float | None = None  # end of the speaker step; None: no speaker step (D-059)
 
 
 class AudioSource(Protocol):
@@ -64,3 +65,11 @@ class Transcriber(Protocol):
 
 class Translator(Protocol):
     def translate(self, text: str) -> str: ...
+
+
+class SpeakerEmbedder(Protocol):
+    def embed(self, audio: np.ndarray) -> np.ndarray: ...  # one speaker embedding, one dimension
+
+
+class Labeler(Protocol):
+    def label(self, segment: Segment) -> str: ...  # "Speaker N" or "Unidentified" (D-059, D-060)

@@ -1,6 +1,7 @@
 """T-E2E-01, T-E2E-02: the full program with the real models (C2d, branch c2d-cli).
 
-Requirements: K1 (each total < 5 s), F2, F3, F5. Decisions: D-022, D-025, D-032, D-043, D-054.
+Requirements: K1 (each total < 5 s), F2, F3, F5. Decisions: D-022, D-025, D-032, D-043, D-054,
+D-059 (C5: `load_models` also loads the speaker model, and the warm-up calls it).
 The test loads the models with the functions of the program (`app.log_versions`,
 `app.load_models`), does the warm-up, and runs the pipeline with the test WAV source as the one
 source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips is
@@ -9,7 +10,8 @@ source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips 
 T-E2E-02 is the automatic form of L-02 (D-044). It starts the installed command `tir-asr` in a
 new process, with the real models, the default microphone, and the monitor of the default
 output (no flags, D-054), waits for "Listening", and sends SIGINT, as Ctrl+C does. The time
-limits are in this test only, not in the program.
+limits are in this test only, not in the program. D-061 (C5): the output must have no abort line
+after the stop (L-02: `Aborting.` or `terminate called`, exit code 134).
 
 Run the tests with `env -u LD_LIBRARY_PATH` (D-030). The test runs on Aren's laptop only. It imports
 the program modules inside the test function, so that CI can collect this file (D-021).
@@ -69,11 +71,14 @@ def test_e2e_01_full_pipeline_with_the_real_models():
     params = Params()
     log = io.StringIO()
     log_versions(params, log)
-    vads, transcriber, translator = load_models(params, log, ["Me"])
+    vads, transcriber, translator, embedder = load_models(params, log, ["Me"])
     for line in log.getvalue().splitlines():
         report(line)
-    asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
-    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s")
+    assert any(
+        line.startswith("startup: speaker model loaded in ") for line in log.getvalue().splitlines()
+    )
+    asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
 
     out, err = io.StringIO(), io.StringIO()
     source = wav_source.WavSource(CLIPS)
@@ -148,6 +153,8 @@ def test_e2e_02_ctrl_c_stops_the_program():
     for line in program[-12:]:
         report(line)
     report(f"exit code {code}, {stopped_s:.2f} s after SIGINT")
+    aborts = [line for line in output if "Aborting" in line or "terminate called" in line]
+    assert aborts == [], f"the program aborted at the stop (D-061): {aborts}"
     assert code == 0
     # D-054: the two sources come before "Listening", one line for each label.
     before = program[: program.index(LISTENING)]

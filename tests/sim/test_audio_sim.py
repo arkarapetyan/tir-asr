@@ -1,4 +1,4 @@
-"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01: the audio sources (C2d `c2d-audio`; C4 `c4-audio`, `c4-cli`).
+"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01, T-SIM-02: the audio sources and the speaker labels.
 
 Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041, D-054. The limits come
 from probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
@@ -12,6 +12,12 @@ T-SIM-01 (C4, D-054) loads two null sinks and runs the program functions with th
 and two sources at the same time: `pw-play` plays the two sides of eval script S1 into the two
 sinks, and the program captures their monitors. It is also a model test: run it with
 `env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1` (D-030). Its input files are local only (data/).
+
+T-SIM-02 (C5, D-057, D-059) is T-SIM-01 with the speaker step: "Me" plays the S1 microphone
+side, and "System" plays eval stream D (four people; the two S1 people come back after a new
+person). A test wrapper on the program labeler records the times and the label of each speaker
+call. The test maps these times to the turns of stream D, with the start of the System player
+as time 0, and computes the label accuracy after the best mapping (D-057 part 2).
 
 Caution: the tests change the audio server for a few seconds. Do not run them during a call.
 If a test stops and the sink stays, run `pactl list short modules | grep null-sink`, then
@@ -67,11 +73,16 @@ S1_FILES = {
     "System": ROOT / "data" / "eval" / "raw" / "s1.call.wav",
 }
 SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
-AFTER_PLAY_S = 2.0  # each source stops this time after the length of S1
+AFTER_PLAY_S = 2.0  # each source stops this time after the length of the longest file
 START_LIMIT_S = 30.0  # test only: the time for the first block of each source
 K1_S = 5.0
 HEAD = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] (.+)$")
 TOTAL = re.compile(r"\| Total (\d+\.\d\d)s\]$")
+
+# T-SIM-02 (D-057, D-059)
+RAW = ROOT / "data" / "eval" / "raw"
+MAX_WRONG = 1  # the pass rule of D-057 part 3: at most 1 wrong segment
+STREAM_D_SPEAKERS = 4
 
 
 def report(line: str) -> None:
@@ -339,6 +350,11 @@ def write_pcm16(source: Path, target: Path) -> float:
 
     rate, audio = wavfile.read(source)
     assert audio.ndim == 1 and audio.dtype == np.float32, f"{source}: not mono float32"
+    return write_array_pcm16(audio, rate, target)
+
+
+def write_array_pcm16(audio: np.ndarray, rate: int, target: Path) -> float:
+    """Write mono float audio as a 16-bit WAV file. Return its length in seconds."""
     samples = np.round(np.clip(audio, -1.0, 1.0) * 32767).astype("<i2")
     with wave.open(str(target), "wb") as file:
         file.setnchannels(1)
@@ -385,6 +401,7 @@ class Players(threading.Thread):
         self.processes: list[subprocess.Popen] = []
         self.new: dict[str, str] = {}
         self.error: BaseException | None = None
+        self.started_at: dict[str, float] = {}  # time.monotonic() just before each player starts
 
     def kill(self) -> None:
         for process in self.processes:
@@ -398,6 +415,7 @@ class Players(threading.Thread):
             before = {row[0] for row in pactl_rows("sink-inputs")}
             for label, path in self.files.items():
                 command = ["pw-play", "--target", self.sinks[label], str(path)]
+                self.started_at[label] = time.monotonic()
                 self.processes.append(
                     subprocess.Popen(
                         command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
@@ -451,11 +469,11 @@ def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
     log = io.StringIO()
     log_versions(params, log)
     sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
-    vads, transcriber, translator = load_models(params, log, list(SIM_SINKS))
+    vads, transcriber, translator, embedder = load_models(params, log, list(SIM_SINKS))
     for line in log.getvalue().splitlines():
         report(line)
-    asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
-    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s")
+    asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
 
     recorded = [Recorded(source, count) for source in sources]
     indexes = {row[0] for row in pactl_rows("sinks") if row[1] in SIM_SINKS.values()}
@@ -532,4 +550,142 @@ def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
             f"max {gaps.max() * 1000:.1f}; span / (n - 1) {mean_gap * 1000:.3f} ms; "
             f"span / real time {mean_gap / BLOCK_S:.4f}"
         )
+        assert gaps.max() <= MAX_GAP_S, f"{source.label}: a gap of {gaps.max() * 1000:.1f} ms"
+
+
+class RecordedLabeler:
+    """Test wrapper of the program labeler: it records (start, speech end, label) of each call."""
+
+    def __init__(self, labeler):
+        self.labeler = labeler
+        self.calls: list[tuple[float, float, str]] = []
+
+    def label(self, segment) -> str:
+        label = self.labeler.label(segment)
+        self.calls.append((segment.start, segment.speech_end, label))
+        return label
+
+
+@pytest.mark.model
+def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
+    from tir_asr.app import load_models, log_versions, speaker_labeler
+    from tir_asr.audio.soundcard_source import SoundcardSource
+    from tir_asr.config import Params
+    from tir_asr.eval.data import load_wav_16k, read_labels, read_references
+    from tir_asr.eval.metrics import label_accuracy
+    from tir_asr.eval.spk_run import truth_of
+    from tir_asr.eval.streams import call_stream, stream_d
+    from tir_asr.pipeline import run, warm_up
+
+    calls = {}
+    for script in ("s1", "s2", "s3"):
+        path = RAW / f"{script}.call.wav"
+        assert path.exists(), f"{path} is missing (local eval data, D-046)"
+        lines = read_references(SCRIPTS_MD, script)
+        labels = read_labels(RAW / f"{script}.labels.txt", lines)
+        calls[script] = call_stream(script, load_wav_16k(path), lines, labels)
+    d = stream_d(calls["s1"], calls["s2"], calls["s3"])
+    copies = {"Me": tmp_path / "Me.wav", "System": tmp_path / "System.wav"}
+    lengths = [
+        write_pcm16(S1_FILES["Me"], copies["Me"]),
+        write_array_pcm16(d.audio, SAMPLE_RATE, copies["System"]),
+    ]
+    count = math.ceil((max(lengths) + AFTER_PLAY_S) / BLOCK_S)
+    true_speakers = sorted({turn.speaker for turn in d.turns})
+    report(
+        f"Me: S1 mic {lengths[0]:.1f} s; System: stream D {lengths[1]:.1f} s, {len(d.turns)} turns"
+        f" of {len(true_speakers)} speakers {true_speakers}; each source stops after {count} blocks"
+    )
+
+    params = Params()
+    log = io.StringIO()
+    log_versions(params, log)
+    sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
+    vads, transcriber, translator, embedder = load_models(params, log, list(SIM_SINKS))
+    for line in log.getvalue().splitlines():
+        report(line)
+    asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+    report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
+    labeler = RecordedLabeler(speaker_labeler(embedder, params))
+
+    recorded = [Recorded(source, count) for source in sources]
+    indexes = {row[0] for row in pactl_rows("sinks") if row[1] in SIM_SINKS.values()}
+    players = Players(copies, SIM_SINKS, [r.started for r in recorded], indexes)
+    players.start()
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        code = run(
+            list(zip(recorded, vads, strict=True)),
+            transcriber,
+            translator,
+            params,
+            time.monotonic,
+            out,
+            err,
+            labelers={"System": labeler},
+        )
+    finally:
+        players.join(timeout=START_LIMIT_S)
+        players.kill()
+
+    for line in out.getvalue().splitlines():
+        report(line)
+    report(f"routing: new playback streams (stream: sink) {players.new}, test sinks {indexes}")
+    for process in players.processes:
+        _, errors = process.communicate()
+        report(f"pw-play exit code {process.returncode}, stderr {errors.strip()!r}")
+    assert players.error is None, f"the players failed: {players.error!r}"
+    assert set(players.new.values()) == indexes, "the audio went to another sink"
+    assert all(process.returncode == 0 for process in players.processes)
+
+    # (1) Exit code and errors.
+    assert code == 0, err.getvalue()
+    assert err.getvalue() == ""
+
+    # (2) The labels of the blocks: "Me", "Speaker N", or "System" for an empty text only.
+    blocks = parse_blocks(out.getvalue())
+    for label, _, hy, _ in blocks:
+        assert (
+            label == "Me"
+            or label.startswith("Speaker ")
+            or (label == "System" and hy == "(no text)")
+        ), f"a block with the label {label!r} and the text {hy!r}"
+    me_blocks = [b for b in blocks if b[0] == "Me"]
+    speaker_blocks = [b for b in blocks if b[0].startswith("Speaker ")]
+    report(f"blocks: {len(me_blocks)} Me, {len(speaker_blocks)} Speaker N, {len(blocks)} in all")
+    assert me_blocks, "no Me block"
+    assert len(speaker_blocks) == len(labeler.calls)
+
+    # (3) Label accuracy after the best mapping (D-057 part 2), with the System player start as
+    # time 0 of stream D. The segment times include the player start-up and the stream latency.
+    offset = players.started_at["System"]
+    scored = []
+    for start, end, label in labeler.calls:
+        truth = truth_of(start - offset, end - offset, d.turns)
+        report(f"segment {start - offset:7.2f}-{end - offset:7.2f} s: {label} (true: {truth})")
+        if truth is not None:
+            scored.append((truth, label, end - start))
+    assert scored, "no labelled segment overlaps a turn"
+    truths = [s[0] for s in scored]
+    names = [s[1] for s in scored]
+    by_count = label_accuracy(truths, names, [1.0] * len(scored))
+    by_time = label_accuracy(truths, names, [s[2] for s in scored])
+    wrong = len(scored) - round(by_count * len(scored))
+    labels_used = sorted({label for _, _, label in labeler.calls})
+    report(
+        f"labelled segments {len(labeler.calls)}, scored {len(scored)}, wrong {wrong}; accuracy "
+        f"{by_count:.3f} (count), {by_time:.3f} (time); labels {labels_used}"
+    )
+    assert wrong <= MAX_WRONG, f"{wrong} wrong segments, more than {MAX_WRONG}"
+    assert len(labels_used) == STREAM_D_SPEAKERS, f"{len(labels_used)} speaker labels"
+
+    # (4) K1.
+    totals = [block[3] for block in blocks]
+    report(f"totals: max {max(totals):.2f} s, mean {sum(totals) / len(totals):.2f} s")
+    assert all(total < K1_S for total in totals), f"a total is not under {K1_S} s: {totals}"
+
+    # (5) Arrival gaps of each source, with the speaker model in the worker (Q-10).
+    for source in recorded:
+        gaps = np.diff(np.array(source.arrivals))
+        report(f"{source.label}: {len(source.arrivals)} blocks; max gap {gaps.max() * 1000:.1f} ms")
         assert gaps.max() <= MAX_GAP_S, f"{source.label}: a gap of {gaps.max() * 1000:.1f} ms"

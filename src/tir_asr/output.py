@@ -1,6 +1,7 @@
 """Terminal output: one block for each segment (ARCHITECTURE.md section 2.5).
 
-Decisions: D-024 (format, one write), D-031 (empty ASR text), D-040 (interface, blank line).
+Decisions: D-024 (format, one write), D-031 (empty ASR text), D-040 (interface, blank line),
+D-059 (the `spk` step on the system side).
 This module imports no model and no audio-device package (D-021).
 """
 
@@ -34,8 +35,14 @@ def format_block(line: Line, session_start: float) -> str:
         rows = [head, f" HY: {NO_TEXT}"]
     else:
         mt = line.mt_end - line.asr_end
-        out = line.write - line.mt_end
-        steps = f"vad {vad:.2f}s, asr {asr:.2f}s, mt {mt:.2f}s, out {out:.2f}s"
+        steps = f"vad {vad:.2f}s, asr {asr:.2f}s, mt {mt:.2f}s"
+        if line.spk_end is None:
+            out = line.write - line.mt_end
+        else:  # D-059: the speaker step comes after MT
+            spk = line.spk_end - line.mt_end
+            out = line.write - line.spk_end
+            steps += f", spk {spk:.2f}s"
+        steps += f", out {out:.2f}s"
         rows = [head, f" HY: {line.hy}", f" EN: {line.en}"]
 
     rows.append(f" [Latency: {steps} | Total {total:.2f}s]")

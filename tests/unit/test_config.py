@@ -19,6 +19,8 @@ SECTION_6 = {
     "vad_min_speech_ms": 250,
     "vad_max_speech_s": 10,
     "mt_beam_size": 2,
+    "spk_threshold": 0.50,
+    "spk_min_new_s": 1.0,
 }
 
 

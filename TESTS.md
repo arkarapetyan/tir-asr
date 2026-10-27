@@ -1,6 +1,6 @@
 # TESTS.md
 
-**Project:** tir-asr · **Date:** 2026-10-26
+**Project:** tir-asr · **Date:** 2026-10-27
 **Rules:** RULES.md R5 (test-driven development) and D-006 (test runs).
 
 Each test comes from a requirement in the brief (F, K, D in `PLAN.md` §1) or from a module contract in `ARCHITECTURE.md`.
@@ -382,6 +382,119 @@ No test: `audio: no default microphone`, `audio: no default output`, `audio: no 
 - **L-04:** not run in C4 (no result file).
 - **L-05** (`test-results/c4-l05.txt`, about 6 min, video call with one person): PASSES. The `System` source was the monitor of Bluetooth buds (`bluez_output.E0:08:71:6B:2A:A2.monitor`, "Redmi Buds 3 Lite"), the `Me` source the laptop microphone. 84 blocks (38 `Me`, 46 `System`); totals 0.11–0.68 s, mean 0.57 s; mean of the first 10 blocks 0.589 s, of the last 10 blocks 0.583 s; 2 hard cuts at `vad_max_speech_s`; 10 short segments; no empty text; no error. Aren's words: "The system and mic listening works superb. every interruption caught"; "latency is very small and does not increase over time"; "voice activation detects small coughs or sounds between intervals as speech" (Q-14); "10s limit for speech sometimes is not enough for long sentences" (Q15); "Overall P1 isnt bad, but it fails frequently, especially on translation".
 
+### 2.7 Speaker labels (C5)
+
+Contracts: `ARCHITECTURE.md` §2.8, §3, §8.2. Decisions: D-057. Aren approved the tests on 2026-10-27 ("agree on the tests"). D-057 part 8: no separate red run; Claude writes the tests and the code in one step, and Aren does only the green run. T-SPK-07 is new: it comes from Aren's decision to measure both rules (D-057 part 4). Aren approved it on 2026-10-27 ("agree").
+
+Eval streams (D-057 part 1): S1 call, S2 call, S3 call, and stream D (S1 call 0–34.0 s, S2 call, S1 call 34.0 s to the end, S3 call; 4 voices, 192.5 s). Metric (part 2): label accuracy after the best mapping, weighted by the speech time; the count of segments too.
+
+**Branch `c5-cluster`** (2-D test vectors at an angle a: the cosine of two vectors is cos(a1 − a2); "long" = 3.0 s):
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-01 | F4, §2.8 steps 2 and 4. Both rules. | Threshold 0.5. Vectors (1, 0, 0), (0.9, 0.1, 0), (0, 1, 0), (0.05, 1, 0), (0, 0, 1), all long. | `Speaker 1`, `Speaker 1`, `Speaker 2`, `Speaker 2`, `Speaker 3`; `count` = 3. | unit | PASSES |
+| T-SPK-02 | §2.8, rule A: the centroid moves. | Threshold 0.7. `CentroidClusterer`: 0°, 40°, 60°. Control: a new clusterer with 0°, 60°. | `Speaker 1` three times (the centroid of 0° and 40° is at 20°; cos 40° = 0.77). Control: `Speaker 1`, `Speaker 2` (cos 60° = 0.5). | unit | PASSES |
+| T-SPK-03 | §2.8 step 3, D-057 part 5B. Both rules. | Threshold 0.9, `min_new_s` 1.0. 0° (0.5 s), 90° (long), 40° (0.5 s), 35° (long), 180° (1.0 s). | `Speaker 1` (a short first segment starts a speaker); `Speaker 2`; `Speaker 1` (short: the most similar, no new speaker, `count` = 2); `Speaker 3` (Speaker 1 did not change: cos 35° = 0.82 < 0.9); `Speaker 4` (1.0 s counts as long); `count` = 4. | unit | PASSES |
+| T-SPK-04 | §2.8 errors. Both rules. | (a) Threshold 1.5; `min_new_s` −0.1. (b) An embedding of shape (1, 3); one with NaN; one with inf; zeros. (c) (1, 0, 0), then (1, 0). | (a) `speakers: threshold 1.5 is not in [-1, 1]`; `speakers: min_new_s -0.1 is negative`. (b) `speakers: embedding has shape (1, 3), expected one dimension`; `speakers: embedding has values that are not finite` (two times); `speakers: embedding has zero length`; `count` stays 0. (c) `speakers: embedding has 2 values, expected 3`. | unit | PASSES |
+| T-SPK-05 | D-057 part 2, §8.2: `label_accuracy`. | (a) Truths A A B B, labels S2 S2 S1 S1, weights 1. (b) A A A B; S1 S1 S2 S3; 1. (c) A B; S1 S1; 3.0, 1.0. (d) A B C; S1 S1 S1; 1, 2, 1. (e) 3 truths and 2 labels; no segments; weight 0.0; weight NaN. | (a) 1.0. (b) 0.75 (the extra label is an error). (c) 0.75. (d) 0.5. (e) `metrics: 3 true speakers, 2 labels, and 3 weights`; `metrics: no segments`; `metrics: weight 0.0 is not positive`; `metrics: weight nan is not positive`. | unit | PASSES |
+| T-SPK-07 | D-057 part 4: the two rules differ. **New.** | Threshold 0.7. 0°, 40°, 80°, all long, for each rule. | Rule A: `Speaker 1`, `Speaker 1`, `Speaker 2` (centroid at 20°; cos 60° = 0.5). Rule B-max: `Speaker 1` three times (nearest stored vector 40°; cos 40° = 0.77). | unit | PASSES |
+| T-IMPORT-01 | D-021. | `tir_asr.speakers`, `tir_asr.speakers.cluster`, and `tir_asr.eval.nearest` in `REQUIRED`. | It passes. | unit | PASSES |
+
+**Results (branch `c5-cluster`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8). `ruff check --no-cache` and `ruff format --no-cache --check` pass; 206 passed, 17 deselected (`test-results/c5-cluster-unit.txt`). `test_speakers.py` has 26 test functions (T-SPK-01, T-SPK-03, and T-SPK-04 run for both rules); T-IMPORT-01 checks 3 more core modules.
+
+**Branch `c5-embed`** (D-057 part 3, points 1 to 3). T-SPK-08 to T-SPK-10 are new: they test the sweep core. Aren approved them on 2026-10-27 ("agree").
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-06 | D-057 part 1, §8.2: the stream builder. | Audio whose sample k has the value k. (a) `call_stream` with a "Me" line and two call lines. (b) A 10 s stream with turns 1–3 s and 5–7 s: `cut` at 0–4 s and 4 s to the end, then `join` in the order second, first. (c) A cut at 2.0 s. (d) `stream_d`: S1 40 s (turns 10–12 s, 36–38 s), S2 and S3 5 s (turn 1–2 s). (e) `truth_of` with turns 1–3 s and 3.5–6 s. | (a) Only the two call turns, `s1/Speaker 1` and `s1/Speaker 2`, in time order. (b) 4 s with the turn 1–3 s; 6 s that starts at sample 64000 with the turn 1–3 s; the join has 10 s and the turns 1–3 s and 7–9 s. (c) `data: s1: the cut at 2.00 s is inside a turn (1.00–3.00 s)`. (d) 50 s; turns 10–12, 35–36, 41–43, 46–47 s; the sample at 39 s is the S1 sample at 34 s. (e) 2.5–4.0 s: the earlier turn (equal overlaps); 3.2–5.0 s: the second turn; 7–8 s: None. | unit | PASSES |
+| T-SPK-08 | D-057 parts 2 and 4, §8.2: `sweep`. **New.** Both rules. | Vectors at 0° (4 s, A), 30° (2 s, A), 100° (3 s, B), 130° (1 s, B), 200° (3 s, no turn). Thresholds 0.5 and 0.95, `min_new_s` 1.0. | 0.5: accuracy 1.0 (time and count), 0 wrong, 4 scored, 3 speakers (the segment with no turn starts a speaker). 0.95: accuracy 0.7 (time) and 0.5 (count), 2 wrong, 4 scored, 5 speakers. | unit | PASSES |
+| T-SPK-09 | §8.2: `pairwise`. **New.** | (a) A at 0°, A at 60° (length 2), B at 90°, and a vector with no turn. (b) Two vectors of one speaker. | (a) 1 same pair, lowest and mean 0.5; 2 different pairs, highest cos 30° = 0.866, mean 0.433. (b) 0 different pairs; highest and mean None. | unit | PASSES |
+| T-SPK-10 | D-057 part 3, §8.2: `pass_range`. **New.** | Thresholds 0.20–0.40. (a) Wrong counts S: 3, 1, 0, 0, 2 and T: 2, 0, 1, 0, 0. (b) S: 0, 2, 0, 2, 0. (c) All 2. | (a) (0.25, 0.35). (b) (0.2, 0.2), the first of equal runs. (c) None. | unit | PASSES |
+| T-IMPORT-01 | D-021, D-057. | `tir_asr.eval.streams` and `tir_asr.eval.spk_run` in `REQUIRED`; the three candidates in `ADAPTERS`; `speechbrain` and `pyannote` in `FORBIDDEN`. | It passes. | unit | PASSES |
+| Sweep | D-057 parts 1–4. | Each candidate model, both rules, thresholds 0.20–0.90 in steps of 0.05, the four streams. | Report (not pass or fail): the accuracy of each stream (time and count), the speaker count, the pairwise similarities, and the time of each embedding call. Aren sets `spk_threshold`. | model | PASSES |
+
+**Results (branch `c5-embed`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 218 passed, 17 deselected (`test-results/c5-embed-unit.txt`).
+- **Install (`spk-eval`):** 31 new packages, no version change of the existing packages; torch 2.14.1+cu130 and torchaudio 2.11.0+cu130 import together; `speechbrain` and `pyannote.audio` import (`test-results/c5-add-spk.txt`). Downloads with no token: TitaNet 5 files, ECAPA 10 files, WeSpeaker 4 files (`test-results/c5-downloads.txt`).
+- **Sweep** (`test-results/c5-spk-*.txt`, `test-results/bakeoff/spk-*.json`; table in `docs/eval/results.md`, "Speaker labels (C5)"): all three models ran on the GPU and pass the rule of D-057.
+  - Passing ranges, rule A / rule B-max: TitaNet 0.40–0.65 / 0.40–0.65; ECAPA 0.35–0.55 / 0.35–0.60; WeSpeaker 0.50–0.65 / 0.50–0.65.
+  - Stream D margin (lowest same-speaker − highest different-speaker cosine): TitaNet +0.170, ECAPA −0.017, WeSpeaker +0.124.
+  - TitaNet, rule A, 0.50: 100 % on all four streams (9/9, 5/5, 5/5, 19/19), by count and by speech time. Embedding time at most 28.3 ms.
+  - Library messages, no error: SpeechBrain "Falling back to device 0" (the GPU); pyannote turned TF32 off; NeMo "no telemetry data will be collected"; the WAV chunk warning of C4.
+- **D-058:** TitaNet with rule A; `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s as start values for L-06. After the sweep, the ECAPA and WeSpeaker adapters and the group `spk-eval` are removed. T-IMPORT-01 then has only `tir_asr.eval.spk_titanet` of the three candidates in `ADAPTERS`, and `speechbrain` and `pyannote` leave `FORBIDDEN`.
+
+**Branch `c5-pipeline`** (D-059). T-SPK-11 is new: it tests the core labeler, which T-PIPE-09 replaces with a fake. Aren approved it on 2026-10-27. T-SIM-01 changes only for the new signatures of `load_models` and `warm_up`; it runs with no labeler, so its labels stay `Me` and `System`.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-11 | §2.8, D-059 point 1: `SpeakerLabeler`. **New.** | A fake embedder (vectors at 0°, 90°, 80°) and `CentroidClusterer(0.9, 1.0)`. Segments 1.0–4.0 s, 5.0–8.0 s, 9.0–9.5 s; the audio of each shows its start. | `Speaker 1`, `Speaker 2`, `Speaker 2` (the third segment has 0.5 s of speech, so it is short: the most similar speaker, cos 10°). The embedder got the audio of the three segments in order. | unit | PASSES |
+| T-MODEL-SPK-01 | §2.8, the selected adapter. | `TitanetEmbedder()`, one warm-up call with 2 s of zeros, then clip 1, clip 2, clip 1 (`data/eval/c2-check{1,2}.16k.wav`). | Each embedding is 1-D, float32, finite, with norm > 0; clip 1 two times gives cos ≥ 0.999. Report: the load time, the call times, the cosine of the two clips of Aren, the peak VRAM. | model | PASSES |
+| T-MODEL-SPK-02 | §2.8, §7. | (a) `TitanetEmbedder(filename="no-such-model.nemo")`. (b) `torch.cuda.is_available` patched to False. | (a) `SpeakerError` that starts with `speakers: model file not in the Hugging Face cache: ` and names the file. (b) `speakers: CUDA is not available`. | model | PASSES |
+| T-PIPE-05 (changed) | §2.6, D-022, D-059 point 5. | `warm_up(transcriber, translator, embedder, clock)` with fakes; a `SpeakerLabeler` holds the same fake embedder. Clock 10.0, 10.4, 10.5, 10.53. | One ASR call with 2 s of zeros, one MT call with `WARMUP_TEXT`, one embedding call with the same zeros; the clusterer has 0 speakers; times 0.4, 0.1, 0.03 s. | unit | PASSES |
+| T-PIPE-09 | F4, F5, D-059 points 2 to 4. | Me (50 frames, speech 5–24) and System (140 frames: short 30–36, speech 60–79, speech 100–119 with an empty text), System after Me; a fake labeler for `"System"` that gives `Speaker 2`. Clock 0.0; 1.400, 1.500, 1.510; 3.200, 3.300, 3.320, 3.330; 4.500, 4.510. | `[00:00:00] Me` with `vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s \| Total 0.71s`; `[00:00:01] Speaker 2` with `vad 0.51s, asr 0.13s, mt 0.10s, spk 0.02s, out 0.01s \| Total 0.77s`; `[00:00:03] System`, `HY: (no text)`, `vad 0.51s, asr 0.15s \| Total 0.67s`; `Stopped. Segments: 3, short segments: 1, empty texts: 1, not processed: 0.`; one labeler call, for the System segment that starts at 1.92 s. | unit | PASSES |
+| T-PIPE-10 | §2.6, §7, R10. | One System source (speech 5–24); a fake labeler that raises `speakers: test` (a `TirError`). Clock 0.0, 1.400, 1.500. | Exit code 1; the error output `tir-asr: speakers: test`; the output is only "Listening". | unit | PASSES |
+| T-OUT-05 | D-024, D-059 point 4. | The T-OUT-01 line with the label `Speaker 1`, `mt_end` 1076.12, `spk_end` 1076.13, `write` 1076.14. | `[00:01:12] Speaker 1`; `[Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s \| Total 1.14s]`. | unit | PASSES |
+| T-CFG-01 (changed) | R10, D-058. | `asdict(Params())`. | The §6 table, now with `spk_threshold` 0.50 and `spk_min_new_s` 1.0. | unit | PASSES |
+| T-IMPORT-01 (changed) | D-021. | `tir_asr.speakers.labeler` in `REQUIRED`; `tir_asr.speakers.titanet` in `ADAPTERS` (in place of `tir_asr.eval.spk_titanet`). | It passes. | unit | PASSES |
+| T-E2E-01 (changed) | K1, F2, F3, F5, D-059. | As in §2.6, with `load_models(…)` that returns the embedder too, and `warm_up(…, embedder, …)`. | As in §2.6, and a `startup: speaker model loaded in` line. | model | PASSES |
+| T-SIM-01 (changed) | D-054, D-059. | As in §2.6, with the new signatures. | As in §2.6. | sim, model | PASSES |
+| T-SIM-02 | F4, F5, K1, D-057, D-059 point 8. | Two null sinks. "Me" plays `s1.mic.wav`; "System" plays stream D (a 16-bit copy at 16 kHz). The program labeler of `"System"` (`app.speaker_labeler`) in a wrapper that records the start, the speech end, and the label of each call. Time 0 of stream D: the start of the System player. | (1) Exit code 0, no error output. (2) Each block has `Me`, `Speaker N`, or `System` with `(no text)` only; one `Speaker N` block for each labeler call. (3) Label accuracy after the best mapping: at most 1 wrong segment (D-057 part 3); exactly 4 speaker labels. (4) Each total < 5 s. (5) No arrival gap over 64 ms on each source (Q-10). Report: each segment with its label and true speaker, the accuracy by count and by time. | sim, model | PASSES |
+| L-06 | F4, K1 (§4). | A call with 2 or more people on the call side, `./run.sh` with no flags. | Each person keeps one label; the count of extra labels (noise, Q-14) and of merged people; each total < 5 s. The values of `spk_threshold` and `spk_min_new_s` are checked (D-058). | live | FAILS on one point (D-060) |
+
+**Results (branch `c5-pipeline`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 223 passed, 21 deselected (`test-results/c5-pipeline-unit.txt`).
+- **Model** (`test-results/c5-pipeline-model.txt`): 5 passed in 32.87 s.
+  - T-MODEL-SPK-01: shape (192,), float32; load 0.34 s, warm-up 0.388 s, each call 6–10 ms; the same audio gives cosine 1.000000; two clips of Aren give 0.788; peak torch VRAM 254 MiB.
+  - T-MODEL-SPK-02: `speakers: model file not in the Hugging Face cache: nvidia/speakerverification_en_titanet_large/no-such-model.nemo`; `speakers: CUDA is not available`.
+  - T-E2E-01: totals 0.64 s and 0.62 s; the line `startup: speaker model loaded in 0.20 s`. T-E2E-02: exit code 0, 1.17 s after SIGINT; `torch CPU threads 1`.
+- **Sim** (`test-results/c5-pipeline-sim.txt`): 2 passed in 278.46 s.
+  - T-SIM-01: the same result as in C4: 14 blocks (5 `Me`, 9 `System`), WER `Me` 0.085 and `System` 0.205 on their own references, totals at most 0.66 s, gaps at most 48.7 ms.
+  - T-SIM-02: 24 blocks (5 `Me`, 19 `Speaker N`); 19 labelled segments, 19 scored, **0 wrong**; accuracy 1.000 by count and by time; 4 labels: `Speaker 1` = s1/Speaker 1 (5 segments), `Speaker 2` = s1/Speaker 2 (4), `Speaker 3` = s2/Speaker 1 (5), `Speaker 4` = s3/Speaker 1 (5). The two S1 people kept their labels after the S2 voice (from 1:37). The `spk` step took 0.01–0.02 s; totals 0.59–0.68 s; the largest arrival gap 43.3 ms (`Me`) and 50.5 ms (`System`).
+  - Not errors of the speaker step: the labels `Speaker 3` and `Speaker 4` (each script calls its first remote person "Speaker 1", but stream D is one session with four people); one `Me` block before an earlier `Speaker 3` block (a long segment closes later, D-054); "Me" plays all of S1 while "System" plays stream D, so the two sides do not make one conversation after 34 s; ASR word errors (P1).
+- **Probe** (`test-results/c5-probe-spk-load.txt`, after ASR and the Silero import): the TitaNet load adds 196 MiB of torch memory (458 → 654 MiB allocated) from the reserved torch cache (918 MiB before and after), so the device value does not change; the torch CPU threads stay 1. Two consequences:
+  - The startup line showed `(+-256 MiB)` for the speaker model: a sign format error in `app.py`, corrected to `(-256 MiB)` (also for the MT line). The cause of the −256 MiB of the full device is [UNVERIFIED] (probably CTranslate2 after its load).
+  - In T-SIM-02, the VAD line showed `torch CPU threads 4`: the second model load in the same test process changed it [UNVERIFIED cause]. The program loads each model one time, and T-E2E-01/02 show 1.
+- **L-06** (`test-results/c5-l06.txt`, 2026-10-27, Bluetooth buds, about 1 min 15 s; the protocol asked for 5 min): **fails on one point** (D-060).
+  - 2 people on the call side (A, B); 9 `System` lines, 8 `Me` lines; totals 0.57–0.70 s; `spk` 0.01–0.02 s (K1 passes).
+  - Clean turns: A kept `Speaker 2` (00:00:06, 00:00:30), B kept `Speaker 3` (00:00:16, 00:00:46); no two people got one label.
+  - The failure: the first segment was a cough of A («Լա։» → "What is it?"). It started `Speaker 1` (D-057 part 5B), so A had two labels. D-060 part 2 changes the rule.
+  - Two segments had two voices (00:00:40: A, then B for longer, label `Speaker 3`; 00:00:55: A, then B shortly after, label `Speaker 2`). Aren: "No interruptions were correctly registered" (Q-04).
+  - 3 of 9 `System` lines were noises with one letter or a fragment: «Լա։», «Հովհ.» (`Speaker 3`), «Հ։» (`Speaker 2`) (Q-14).
+  - After `Stopped.`: `terminate called without an active exception`. The pipe hid the exit code (L-02).
+  - The startup line: `speaker model loaded in 0.20 s; GPU memory used 2508 MiB (-256 MiB)`.
+
+**Changes after L-06 (branch `c5-pipeline`, D-060).** Aren: "proceed" (2026-10-27).
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-03 (changed) | §2.8 steps 2 and 3, D-060 part 2. Both rules. | Threshold 0.9, `min_new_s` 1.0. 0° (0.5 s), then the old inputs: 0° (long), 90° (long), 40° (0.5 s), 35° (long), 180° (1.0 s). | `None` and `count` = 0 (a short first segment starts no speaker); then `Speaker 1`, `Speaker 2`, `Speaker 1` (short: the most similar, `count` = 2), `Speaker 3`, `Speaker 4`; `count` = 4. | unit | PASSES |
+| T-SPK-05 (one more case) | §8.2, D-060 part 2. | (f) Truths A A B, labels None S1 S2, weights 1. (g) Truths A B, labels None None. | (f) 2/3 (no label is always an error). (g) 0.0. | unit | PASSES |
+| T-SPK-11 (one more case) | §2.8, D-060 part 2. | A fake embedder (0°, 0°), `CentroidClusterer(0.9, 1.0)`. Segments 1.0–1.5 s (0.5 s of speech), then 2.0–5.0 s. | `Unidentified`, then `Speaker 1`. `UNIDENTIFIED` is `"Unidentified"`. | unit | PASSES |
+
+**Results (D-060 changes, Aren's laptop, 2026-10-27):** no red run (D-057 part 8). `ruff check --no-cache` and `ruff format --no-cache --check` pass; 226 passed, 21 deselected (`test-results/c5-d060-unit.txt`): 223 as before, 2 new cases of T-SPK-05, and the new T-SPK-11 function.
+
+**Branch `c5-stop`** (D-061, the clean stop). Aren approved T-PIPE-11, T-PIPE-12, the change of T-E2E-02, and the live exit check on 2026-10-27 ("approved, proceed"). T-PIPE-13 is new: R10 does not allow a silent time limit, so a thread that does not stop gives an error line. Aren approved it on 2026-10-27 ("ci is green, continue").
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-PIPE-11 | §2.6 clean stop, D-061: Ctrl+C. **New.** | One `Me` source that gives silence blocks with no end (1 ms between blocks). A helper thread calls `_thread.interrupt_main()` after the first block. Clock 0.0. | Exit code 0. The output is only `Listening` and `Stopped. Segments: 0, short segments: 0, empty texts: 0, not processed: 0.`; no error output. When `run()` returns, the block iterator of the source is closed, and no thread of `run()` runs. | unit | PASSES |
+| T-PIPE-12 | §2.6 clean stop, D-061: an error. **New.** | The same endless source, with speech in frames 5–24. The transcriber raises `asr: test`. Clock 0.0. | Exit code 1. The error output is `tir-asr: asr: test`; the output is only `Listening`; one ASR call. When `run()` returns, the iterator is closed, and no thread of `run()` runs. | unit | PASSES |
+| T-PIPE-13 | §2.6 clean stop, §7, D-061, R10. **New.** | `STOP_JOIN_S` patched to 0.1 s. A `Me` source that gives one block and then no block until the test releases it. Ctrl+C as in T-PIPE-11. | Exit code 0; the shutdown line; the error output `tir-asr: stop: thread capture Me did not stop in 0.1 s`. After the release, the source ends. | unit | PASSES |
+| T-E2E-02 (changed) | L-02, D-061. | As before (SIGINT 2 s after "Listening"). | Also: the output has no line with `Aborting` and no line with `terminate called`. | model | PASSES |
+| L-02 (exit check) | D-061. | 3 runs of `./run.sh`, each with `echo "exit code ${PIPESTATUS[0]}"`: 2 runs with `pw-play` on the System side, 1 run with only the microphone; Ctrl+C one time. | Exit code 0 and no abort line in each run. | live | PASSES |
+
+**Results (branch `c5-stop`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 229 passed, 21 deselected (`test-results/c5-stop-unit.txt`).
+- **Model** (`test-results/c5-stop-model.txt`): T-E2E-01 and T-E2E-02 pass in 32.07 s. T-E2E-01: totals 0.63 s and 0.61 s. T-E2E-02: exit code 0, 1.12 s after SIGINT, no abort line.
+- **Sim** (`test-results/c5-stop-sim2.txt`): 2 passed in 280.01 s.
+  - T-SIM-01: 14 blocks (5 `Me`, 9 `System`); WER `Me` 0.068 and `System` 0.196 on their own references (c5-pipeline: 0.085 and 0.205; the segments can differ a little from run to run [UNVERIFIED]); totals at most 0.65 s; arrival gaps at most 45.6 ms.
+  - T-SIM-02: 19 of 19 labels correct, 4 labels; totals at most 0.70 s; arrival gaps at most 47.9 ms.
+  - The first sim run (`test-results/c5-stop-sim.txt`) stopped before the model load and has no result.
+- **Live exit check:** 3 runs, each with exit code 0 and no abort line. `c5-exit2.txt`: S2 call on the System side, 5 `Speaker 1` lines and 1 `Me` line. `c5-exit3.txt`: S3 call, 5 `Speaker 1` lines. `c5-exit4.txt`: only the microphone, 6 `Me` lines. Before D-061, `c5-exit1.txt` gave exit code 134.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -391,7 +504,7 @@ We add a question here when we find it during the work (tip T4).
 | Q-01 | Which branch does the app show when a chat has edited messages? | S1, C0 export | The branch to the newest message. Aren confirmed it for C0 (2026-10-23). T-EXPORT-03. |
 | Q-02 | Does the final export after C8 have the same format as the C0 export? | S1, D-012 | Open. T-EXPORT-11, run 2. |
 | Q-03 | Is the first model call slower for each new input length, also after one warm-up run? | C2, D-022 | [RUN] No, for these inputs: after call 1, new lengths (2.78–12.17 s of audio, 25–52 tokens) are as fast as old lengths. T-INSTALL-02, T-INSTALL-03. |
-| Q-04 | Does the minimum silence put two remote speakers into one segment when they change turns fast? | C2, D-027 | Open. C5 speaker purity of the segments. |
+| Q-04 | Does the minimum silence put two remote speakers into one segment when they change turns fast? | C2, D-027 | [RUN] Yes. L-06: an interruption and a fast change each gave one segment with two voices; the segment got the label of the voice with more speech (§2.7, D-060). C7 measures a shorter `vad_min_silence_ms` (from 250 ms) and the speaker sweep on a stream with fast changes. |
 | Q-05 | Does `vad_min_speech_ms = 250` remove short answers such as "ոչ" or "հա"? | C2, D-026 | Open. C3 recordings with short answers. |
 | Q-06 | ASR writes commas where the reference has "։" (T-INSTALL-02). Does the MT quality drop with this ASR text? | C2 | [RUN] C3 bake-off: the opposite. Where the ASR writes «։» between two sentences, NLLB leaves out the second sentence (Q-13); a comma keeps it. `docs/eval/results.md`, finding 2. |
 | Q-07 | Is the first CTranslate2 call (5.1 s) a compile step that the driver keeps between program starts [UNVERIFIED]? | C2, D-022 | Open. Run T-INSTALL-03 two times in two processes. [RUN] Data point (T-MODEL-MT-01, 2026-10-25): in a new process, with the cuBLAS preload and no `LD_LIBRARY_PATH`, the first call took 0.126 s. The cause of the 5.1 s in T-INSTALL-03 is not known. |
@@ -401,7 +514,7 @@ We add a question here when we find it during the work (tip T4).
 | Q-11 | The default microphone gave 22 samples outside [−1, 1] (min −1.0496) at a source volume of 24 % (probe B). Does the input clip, and does a clipped input change the ASR text? | C2d, probe B | The volume is not over 100 % [RUN]. Possible cause [UNVERIFIED]: a full-scale input and the 48 → 16 kHz conversion. [RUN] C3: `s1.mic.wav` has 500 samples at full scale, the other 5 eval files none; the S1 mic WER (6.8 %, `nemo-rnnt`) is close to the other mic files. D-041 part 4. |
 | Q-12 | Do Bluetooth headphones change to the headset mode when an application opens their microphone, and does the call audio then lose quality? | C2d, Aren's recordings | Open [UNVERIFIED]. C4 setup guide: select the laptop microphone in the call application. [RUN] L-05: Bluetooth buds as the output and the laptop microphone as the input worked; the quality of the call audio was not measured. |
 | Q-13 | Does NLLB leave out a sentence when one segment has two or more sentences? In the first live run, the EN line of the last block has no translation of «Լավ Սոնա, հետո կզանգեմ, հիմա պիտի գնամ։». | C2d, live run | [RUN] C3: yes. With the ASR text: s1-05, s3-07; with the reference text: also s2-06, s2-07, s3-04. Seamless does not leave out these sentences. D-053 (P4). |
-| Q-14 | Noises (coughs, short sounds) of 250 ms or more pass the VAD. Then the ASR gives one letter or a fragment, and NLLB invents a sentence. What can stop these blocks? | C4, L-05 (Aren) | Open. [RUN] L-05: about 11 of 84 blocks have only one letter or a fragment, for example «Հ։» → "A: What is it?" and «Հովհ.» → "John: What is it?"; 10 shorter sounds were removed as short segments. Possible changes (no decision): `vad_threshold`, `vad_min_speech_ms`, a rule for texts with one letter, or P4 (C6). C7 decides with numbers (R6). |
+| Q-14 | Noises (coughs, short sounds) of 250 ms or more pass the VAD. Then the ASR gives one letter or a fragment, and NLLB invents a sentence. What can stop these blocks? | C4, L-05 (Aren) | Open. [RUN] L-05: about 11 of 84 blocks have only one letter or a fragment, for example «Հ։» → "A: What is it?" and «Հովհ.» → "John: What is it?"; 10 shorter sounds were removed as short segments. Possible changes (no decision): `vad_threshold`, `vad_min_speech_ms`, a rule for texts with one letter, or P4 (C6). C7 decides with numbers (R6). [RUN] L-06: 3 of 9 `System` lines; a cough as the first segment started a speaker (D-060 part 2). Aren: longer coughs do not pass the VAD. D-060 part 4: C7 measures `vad_threshold`, `vad_min_speech_ms`, and the short-text rule with a new recording of noises and short words. |
 
 ## 4. Live checklist (manual)
 
@@ -410,7 +523,8 @@ Only the checks that a sim test cannot do. (C7)
 | ID | Check | Expected result | Result |
 |---|---|---|---|
 | L-01 | Aren says 5 Armenian sentences into the microphone, with a pause after each. | One block for each sentence, label "Me", each total < 5 s (K1). | PASSES (2026-10-26): Script 4, s4-01 to s4-05: 5 blocks, label "Me", totals 0.61–0.64 s. |
-| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. |
+| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. C5, open: in L-06, `terminate called without an active exception` came after the shutdown line; the exit code is not known (exit check, D-060). **FAILS** (exit check, `test-results/c5-exit1.txt`, 2026-10-27, only `Me` lines, no speaker call): the shutdown line, then `Assertion 'pthread_mutex_lock(&m->mutex) == 0' failed at ../src/pulsecore/mutex-posix.c:92, function pa_mutex_lock(). Aborting.`, exit code 134. Cause: the `atexit` function of `soundcard` frees the PulseAudio main loop while the capture threads still record. The fix comes in branch `c5-stop` (D-061). After D-061: **PASSES** (2026-10-27): 3 runs (`c5-exit2.txt` to `c5-exit4.txt`), each with the shutdown line, exit code 0, and no abort line. |
 | L-03 | Aren is silent for 60 s, then says one sentence; then he says 3 sentences with short pauses (Q-09). | The total of the first sentence is compared with the next ones. || PASSES (2026-10-26): after 76 s of silence, the total of s4-06 was 0.61 s, the same as before (Q-09). |
 | L-04 | `./run.sh --list-devices` (C4, D-054). | The list shows the microphone and the output monitor; the defaults have a `*`; exit code 0; no model load. | Not run in C4. |
 | L-05 | A video call with one person, wired headphones, `./run.sh` with no flags (C4, D-054). | Lines with `Me` and `System` at the same time; Aren still hears the call; each total < 5 s (K1); the two `startup: source` lines name the correct devices. | PASSES (2026-10-26, Bluetooth buds in place of wired headphones): 84 blocks in about 6 min, totals 0.11–0.68 s, no growth; Aren heard the call (§2.6 results). |
+| L-06 | A call with 2 or more people on the call side, `./run.sh` with no flags (C5, D-058, D-059). | Each person keeps one label for the full call; no label for two people; count the extra labels from noise (Q-14); each total < 5 s (K1). The result decides `spk_threshold` and `spk_min_new_s`. | FAILS on one point (2026-10-27, D-060): 2 people, about 1 min 15 s; clean turns correct; a first cough gave person A a second label; two segments had two voices (Q-04); totals 0.57–0.70 s. Both parameters kept. C7 runs it again with the D-060 changes. |
