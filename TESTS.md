@@ -402,11 +402,15 @@ Eval streams (D-057 part 1): S1 call, S2 call, S3 call, and stream D (S1 call 0�
 
 **Results (branch `c5-cluster`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8). `ruff check --no-cache` and `ruff format --no-cache --check` pass; 206 passed, 17 deselected (`test-results/c5-cluster-unit.txt`). `test_speakers.py` has 26 test functions (T-SPK-01, T-SPK-03, and T-SPK-04 run for both rules); T-IMPORT-01 checks 3 more core modules.
 
-**Branch `c5-embed`** (after D-057 part 3, proposals 2 and 3):
+**Branch `c5-embed`** (D-057 part 3, points 1 to 3). T-SPK-08 to T-SPK-10 are new: they test the sweep core. Aren approved them on 2026-10-27 ("agree").
 
 | ID | Requirement | Input | Expected result | Level | Status |
 |---|---|---|---|---|---|
-| T-SPK-06 | D-057 part 1: the stream builder. | Fake arrays for S1, S2, S3 and their labels. | Stream D: the cut at 34.0 s, the order S1a, S2, S1b, S3, and the label times shifted by the start of each part. | unit | APPROVED |
+| T-SPK-06 | D-057 part 1, §8.2: the stream builder. | Audio whose sample k has the value k. (a) `call_stream` with a "Me" line and two call lines. (b) A 10 s stream with turns 1–3 s and 5–7 s: `cut` at 0–4 s and 4 s to the end, then `join` in the order second, first. (c) A cut at 2.0 s. (d) `stream_d`: S1 40 s (turns 10–12 s, 36–38 s), S2 and S3 5 s (turn 1–2 s). (e) `truth_of` with turns 1–3 s and 3.5–6 s. | (a) Only the two call turns, `s1/Speaker 1` and `s1/Speaker 2`, in time order. (b) 4 s with the turn 1–3 s; 6 s that starts at sample 64000 with the turn 1–3 s; the join has 10 s and the turns 1–3 s and 7–9 s. (c) `data: s1: the cut at 2.00 s is inside a turn (1.00–3.00 s)`. (d) 50 s; turns 10–12, 35–36, 41–43, 46–47 s; the sample at 39 s is the S1 sample at 34 s. (e) 2.5–4.0 s: the earlier turn (equal overlaps); 3.2–5.0 s: the second turn; 7–8 s: None. | unit | WRITTEN |
+| T-SPK-08 | D-057 parts 2 and 4, §8.2: `sweep`. **New.** Both rules. | Vectors at 0° (4 s, A), 30° (2 s, A), 100° (3 s, B), 130° (1 s, B), 200° (3 s, no turn). Thresholds 0.5 and 0.95, `min_new_s` 1.0. | 0.5: accuracy 1.0 (time and count), 0 wrong, 4 scored, 3 speakers (the segment with no turn starts a speaker). 0.95: accuracy 0.7 (time) and 0.5 (count), 2 wrong, 4 scored, 5 speakers. | unit | WRITTEN |
+| T-SPK-09 | §8.2: `pairwise`. **New.** | (a) A at 0°, A at 60° (length 2), B at 90°, and a vector with no turn. (b) Two vectors of one speaker. | (a) 1 same pair, lowest and mean 0.5; 2 different pairs, highest cos 30° = 0.866, mean 0.433. (b) 0 different pairs; highest and mean None. | unit | WRITTEN |
+| T-SPK-10 | D-057 part 3, §8.2: `pass_range`. **New.** | Thresholds 0.20–0.40. (a) Wrong counts S: 3, 1, 0, 0, 2 and T: 2, 0, 1, 0, 0. (b) S: 0, 2, 0, 2, 0. (c) All 2. | (a) (0.25, 0.35). (b) (0.2, 0.2), the first of equal runs. (c) None. | unit | WRITTEN |
+| T-IMPORT-01 | D-021, D-057. | `tir_asr.eval.streams` and `tir_asr.eval.spk_run` in `REQUIRED`; the three candidates in `ADAPTERS`; `speechbrain` and `pyannote` in `FORBIDDEN`. | It passes. | unit | WRITTEN |
 | Sweep | D-057 parts 1–4. | Each candidate model, both rules, thresholds 0.20–0.90 in steps of 0.05, the four streams. | Report (not pass or fail): the accuracy of each stream (time and count), the speaker count, the pairwise similarities, and the time of each embedding call. Aren sets `spk_threshold`. | model | APPROVED |
 
 **Branch `c5-pipeline`:**
