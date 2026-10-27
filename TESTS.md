@@ -495,6 +495,42 @@ Eval streams (D-057 part 1): S1 call, S2 call, S3 call, and stream D (S1 call 0�
   - The first sim run (`test-results/c5-stop-sim.txt`) stopped before the model load and has no result.
 - **Live exit check:** 3 runs, each with exit code 0 and no abort line. `c5-exit2.txt`: S2 call on the System side, 5 `Speaker 1` lines and 1 `Me` line. `c5-exit3.txt`: S3 call, 5 `Speaker 1` lines. `c5-exit4.txt`: only the microphone, 6 `Me` lines. Before D-061, `c5-exit1.txt` gave exit code 134.
 
+### 2.8 P4: Seamless end to end (C6)
+
+Contracts: `ARCHITECTURE.md` §2.6, §2.7, and the new §2.9 (`text`, branch `c6-textstep`). Decisions: D-062; D-063 selects the P4 variant and gives the limits of T-PERF-P4-01. Aren approved the tests on 2026-10-27 ("agree on the tests"). D-062 part 10: no separate red run; Claude writes the tests and the code in one step, and Aren does only the green run.
+
+**Branch `c6-probe`** (research, R8, D-062 part 1): no tests. `scripts/probe_p4.py` is a model-level script, as `scripts/bakeoff.py` and `scripts/probe_cpu.py`. Its numbers go into D-063 and `docs/eval/results.md`.
+
+**Branch `c6-textstep`** (D-062 part 2). Core `text/step.py`. In T-TEXT-01 to T-TEXT-05, a recorder subclass of `TextStep` records each hook call; its `_prepare` gives a new state object at each call.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-TEXT-01 | §2.9, D-062 part 2: the template order and the clock reads. | The recorder: `_armenian` gives "բարև", `_english` gives "hi". `process(audio, clock)`; clock 1.0, 2.0. | The hook calls in this order: `_prepare(audio)` with the same array, `_armenian(state)`, `_english(state, "բարև")`, both with the state of `_prepare`. The result is `TextResult("բարև", "hi", 1.0, 2.0)`. The clock has no values left (2 reads). | unit | APPROVED |
+| T-TEXT-02 | §2.9, D-031 for P1 and P4. | The recorder with `_armenian` = "". `process(audio, clock)`; clock 1.0. | No `_english` call. The result is `TextResult("", "", 1.0, 1.0)`. 1 clock read. | unit | APPROVED |
+| T-TEXT-03 | §2.9, D-022, D-037: the warm-up of each path. | The recorder with `_armenian` = "" (zeros give no text). `warm_up(zeros, clock)`; clock 10.4, 10.5. | `_prepare(zeros)`, `_armenian(state)`, then `_english(state, WARMUP_TEXT)`, also with the empty HY text. The result is `TextResult("", "hi", 10.4, 10.5)`. | unit | APPROVED |
+| T-TEXT-04 | §2.9, D-062 part 2: P1 in the template. | `CascadeTextStep(FakeTranscriber(["բարև"]), FakeTranslator("hi"))`: `process(audio, clock)`, clock 1.0, 2.0. Then a new one with `FakeTranscriber([""])`: `warm_up(zeros, clock)`, clock 10.4, 10.5. | `process`: the transcriber gets the same audio array, the translator gets "բարև", and the result is `TextResult("բարև", "hi", 1.0, 2.0)`. `warm_up`: the transcriber gets the zeros, the translator gets `WARMUP_TEXT`, and the result is `TextResult("", "hi", 10.4, 10.5)`. `CascadeTextStep` does not define `process` or `warm_up`: the template stays in `TextStep`. | unit | APPROVED |
+| T-TEXT-05 | §2.9, §7, R10: an error goes up with no change. | (a) The recorder with an `_armenian` that raises `FakeAsrError("asr: test")`. (b) The recorder with an `_english` that raises `KeyError("x")`; clock 1.0. | (a) The same exception object; no `_english` call; no clock read. (b) The same `KeyError` object; 1 clock read. | unit | APPROVED |
+| T-PIPE-01 to T-PIPE-13 (changed) | §2.6, D-062 part 2: no change of behaviour. | `run(sources, text_step, …)` and `warm_up(text_step, embedder, clock)`, with `CascadeTextStep(FakeTranscriber, FakeTranslator)`. All other inputs and all clock values as before. | The same expected results as before (§2.4, §2.6, §2.7). | unit | APPROVED |
+| T-IMPORT-01 (changed) | D-021. | `tir_asr.text` and `tir_asr.text.step` in `REQUIRED`. | It passes. | unit | APPROVED |
+
+**Branch `c6-seamless`** (D-062 parts 2, 3, and 9; D-063).
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-MODEL-P4-01 | §2.9, D-053, D-063: the P4 adapter. | `SeamlessTextStep()` on `cuda`. `warm_up` with 2 s of zeros, then `process` on clip 1, clip 2, and clip 1 (`data/eval/c2-check{1,2}.16k.wav`). | Each HY text is not empty and has Armenian letters (U+0531 to U+0587). Each EN text is not empty and has Latin letters. Clip 1 two times gives the same two texts. `SeamlessTextStep` does not define `process` or `warm_up`. Report: the load time, the warm-up times, the `asr` and `mt` part of each call, the peak VRAM. | model | APPROVED |
+| T-MODEL-P4-02 | §2.9, §7, R10. | (a) A model id that is not in the Hugging Face cache. (b) `torch.cuda.is_available` patched to False. (c) `device="tpu"`. | (a) `TextError` that starts with `text: model not in the Hugging Face cache: ` and names the id. (b) `text: CUDA is not available`; the model does not load. (c) `text: device tpu is not cuda or cpu`. | model | APPROVED |
+| T-PERF-P4-01 | D-056 part 2.4 (the performance test of P4 alone), K1, R6, D-062 part 9. | (a) GPU: the program's VAD cuts S1–S3 with `Params()` (34 segments, as in C3); `SeamlessTextStep.process` on each segment. (b) CPU: `SeamlessTextStep(device="cpu")` on the 3 segments of the C3 probe. | (a) WER, CER, chrF, and the mean and maximum line time within the limits of D-063. Report: VRAM. (b) Report only: the line time of each segment, and the K1 check of D-062 part 9. | model | APPROVED |
+| T-IMPORT-01 (changed) | D-021. | `tir_asr.text.seamless` in `ADAPTERS`. | It passes. | unit | APPROVED |
+
+**Branch `c6-cli`** (D-062 parts 4 and 5).
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-CLI-03 | D-062 part 4: the flag. | The fake `app` of T-CLI-02. `cli.main(["--seamless"])`; `cli.main(["--seamless", "--mic", "a"])`; `cli.main(["--help"])`. | `app.main` gets `seamless=True` (with `mic=None`, `system=None`), then `seamless=True` with `mic="a"`. The help text has `--seamless`. T-CLI-02 changes: each call of `app.main` also has `seamless=False`. | unit | APPROVED |
+| T-E2E-03 | K1, F2, F3, F5, D-062 parts 4 and 5: the program with P4. | (a) As T-E2E-01, with the load function of the program for P4 (`seamless=True`). (b) As T-E2E-02, with `tir-asr --seamless`. | (a) The results of T-E2E-01. The startup log has the text step line and a Seamless load line, and no `ASR loaded` and no `MT loaded` line. (b) The results of T-E2E-02: exit code 0, no abort line, the shutdown line last. | model | APPROVED |
+| T-SIM-03 | F4, F5, K1, Q-10, D-062. | As T-SIM-02, with the P4 text step. | The results (1) to (5) of T-SIM-02. Report: the line times and the `asr` and `mt` steps. | sim, model | APPROVED |
+| L-07 | F1 to F5, K1, D-053 (revisit), D-062 (§4). | A call with 1 or more people on the call side, `./run.sh --seamless`, about 5 min. `nvidia-smi` logs the GPU power and temperature. | Lines with `Me` and `Speaker N`; each total < 5 s; the totals do not grow during the call; the startup log shows the text step; at the stop, the shutdown line, exit code 0, and no abort line. Report: the GPU power and temperature. | live | APPROVED |
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -528,3 +564,4 @@ Only the checks that a sim test cannot do. (C7)
 | L-04 | `./run.sh --list-devices` (C4, D-054). | The list shows the microphone and the output monitor; the defaults have a `*`; exit code 0; no model load. | Not run in C4. |
 | L-05 | A video call with one person, wired headphones, `./run.sh` with no flags (C4, D-054). | Lines with `Me` and `System` at the same time; Aren still hears the call; each total < 5 s (K1); the two `startup: source` lines name the correct devices. | PASSES (2026-10-26, Bluetooth buds in place of wired headphones): 84 blocks in about 6 min, totals 0.11–0.68 s, no growth; Aren heard the call (§2.6 results). |
 | L-06 | A call with 2 or more people on the call side, `./run.sh` with no flags (C5, D-058, D-059). | Each person keeps one label for the full call; no label for two people; count the extra labels from noise (Q-14); each total < 5 s (K1). The result decides `spk_threshold` and `spk_min_new_s`. | FAILS on one point (2026-10-27, D-060): 2 people, about 1 min 15 s; clean turns correct; a first cough gave person A a second label; two segments had two voices (Q-04); totals 0.57–0.70 s. Both parameters kept. C7 runs it again with the D-060 changes. |
+| L-07 | A call with 1 or more people on the call side, `./run.sh --seamless`, about 5 min (C6, D-062); `nvidia-smi` logs the GPU power and temperature. | Lines with `Me` and `Speaker N`; each total < 5 s (K1); the totals do not grow during the call; the startup log shows the text step; at the stop, the shutdown line, exit code 0, and no abort line. Report: the GPU power and temperature. | Not run. |
