@@ -1,12 +1,15 @@
-"""T-PIPE-01 to T-PIPE-08: the pipeline with fakes (C2d `c2d-pipeline`, C4 `c4-pipeline`).
+"""T-PIPE-01 to T-PIPE-10: the pipeline with fakes (C2d, C4 `c4-pipeline`, C5 `c5-pipeline`).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
-D-042, D-054. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s (TESTS.md
-2.4). Only the main thread and the worker call the fake clock. Thus the times are the same in
-each run, and a clock call that the contract does not need makes the test fail.
+D-042, D-054, D-059. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
+(TESTS.md 2.4). Only the main thread and the worker call the fake clock. Thus the times are the
+same in each run, and a clock call that the contract does not need makes the test fail.
 
 T-PIPE-06 to T-PIPE-08 have two sources (C4). A fake source can wait for an event before its
 first block, so that the sequence of the segments in the queue is always the same.
+
+T-PIPE-09 and T-PIPE-10 (C5) give the "System" source a fake labeler (D-059). With a labeler and
+a text, the worker calls the clock one more time, for the end of the speaker step.
 """
 
 import io
@@ -19,6 +22,8 @@ import pytest
 from tir_asr.config import SAMPLE_RATE, VAD_FRAME, WARMUP_AUDIO_S, WARMUP_TEXT, Params
 from tir_asr.errors import TirError
 from tir_asr.pipeline import run, warm_up
+from tir_asr.speakers.cluster import CentroidClusterer
+from tir_asr.speakers.labeler import SpeakerLabeler
 from tir_asr.types import AudioBlock
 
 FRAME_S = VAD_FRAME / SAMPLE_RATE  # 0.032 s
@@ -112,6 +117,34 @@ class FakeClock:
 
 class FakeAsrError(TirError):
     """An error with the message format of AsrError (the real class needs `torch`)."""
+
+
+class FakeSpeakerError(TirError):
+    """An error with the message format of SpeakerError."""
+
+
+class FakeEmbedder:
+    def __init__(self):
+        self.calls = []
+
+    def embed(self, audio: np.ndarray) -> np.ndarray:
+        self.calls.append(audio)
+        return np.ones(3)
+
+
+class FakeLabeler:
+    """Gives the labels in order and records the segments. `error`: raise it in `label`."""
+
+    def __init__(self, labels: list[str], error: BaseException | None = None):
+        self.labels = list(labels)
+        self.error = error
+        self.calls = []
+
+    def label(self, segment) -> str:
+        self.calls.append(segment)
+        if self.error is not None:
+            raise self.error
+        return self.labels.pop(0)
 
 
 def start(frames, regions, transcriber, translator, clock):
@@ -232,8 +265,13 @@ def test_pipe_04_shutdown_line_counts_the_segments():
 def test_pipe_05_warm_up_calls_each_model_once():
     transcriber = FakeTranscriber([""])
     translator = FakeTranslator()
+    embedder = FakeEmbedder()
+    clusterer = CentroidClusterer(threshold=0.5, min_new_s=1.0)
+    SpeakerLabeler(embedder, clusterer)  # the program labeler holds the same embedder
 
-    asr_s, mt_s = warm_up(transcriber, translator, FakeClock([10.0, 10.4, 10.5]))
+    asr_s, mt_s, spk_s = warm_up(
+        transcriber, translator, embedder, FakeClock([10.0, 10.4, 10.5, 10.53])
+    )
 
     assert len(transcriber.calls) == 1
     audio = transcriber.calls[0]
@@ -241,7 +279,10 @@ def test_pipe_05_warm_up_calls_each_model_once():
     assert audio.dtype == np.float32
     assert not audio.any()
     assert translator.calls == [WARMUP_TEXT]
-    assert (asr_s, mt_s) == (pytest.approx(0.4), pytest.approx(0.1))
+    assert len(embedder.calls) == 1
+    assert embedder.calls[0] is audio  # the same zeros as the ASR call
+    assert clusterer.count == 0  # D-059 point 5: the warm-up does not change the clusterer
+    assert (asr_s, mt_s, spk_s) == (pytest.approx(0.4), pytest.approx(0.1), pytest.approx(0.03))
 
 
 def test_pipe_06_two_sources_give_labelled_blocks_and_summed_counts():
@@ -342,4 +383,71 @@ def test_pipe_08_error_line_names_the_capture_thread_of_the_source():
     assert err.getvalue().startswith("Traceback (most recent call last):\n"), err.getvalue()
     assert err.getvalue().endswith("tir-asr: capture System: KeyError: 'x'\n"), err.getvalue()
     assert out.getvalue() == LISTENING
+    assert code == 1
+
+
+def test_pipe_09_system_lines_get_the_speaker_label_and_the_spk_step():
+    me = FakeSource(50)
+    system = FakeSource(140, label="System", after=me.ended)  # its segments come after Me
+    labeler = FakeLabeler(["Speaker 2"])
+    # Me: ASR end, MT end, write. System, text: ASR end, MT end, speaker end, write.
+    # System, empty text: ASR end, write (no MT call and no speaker step).
+    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 3.200, 3.300, 3.320, 3.330, 4.500, 4.510])
+    out, err = io.StringIO(), io.StringIO()
+
+    code = run(
+        [
+            (me, FakeVad(probabilities(50, [(5, 24)]))),
+            (system, FakeVad(probabilities(140, [(30, 36), (60, 79), (100, 119)]))),
+        ],
+        FakeTranscriber(["բարև", "բարև", ""]),
+        FakeTranslator("hi"),
+        Params(),
+        clock,
+        out,
+        err,
+        labelers={"System": labeler},
+    )
+
+    assert out.getvalue() == (
+        LISTENING + "[00:00:00] Me\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, asr 0.09s, mt 0.10s, out 0.01s | Total 0.71s]\n"
+        "\n"
+        "[00:00:01] Speaker 2\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, asr 0.13s, mt 0.10s, spk 0.02s, out 0.01s | Total 0.77s]\n"
+        "\n"
+        "[00:00:03] System\n"
+        " HY: (no text)\n"
+        " [Latency: vad 0.51s, asr 0.15s | Total 0.67s]\n"
+        "\n"
+        "Stopped. Segments: 3, short segments: 1, empty texts: 1, not processed: 0.\n"
+    )
+    assert err.getvalue() == ""
+    assert code == 0
+    assert len(labeler.calls) == 1  # only the System segment with a text
+    assert labeler.calls[0].source == "System"
+    assert labeler.calls[0].start == pytest.approx(60 * FRAME_S)
+
+
+def test_pipe_10_error_in_the_labeler():
+    labeler = FakeLabeler([], error=FakeSpeakerError("speakers: test"))
+    out, err = io.StringIO(), io.StringIO()
+
+    code = run(
+        [(FakeSource(111, label="System"), FakeVad(probabilities(111, [(5, 24)])))],
+        FakeTranscriber(["բարև"]),
+        FakeTranslator("hi"),
+        Params(),
+        FakeClock([0.0, 1.400, 1.500]),
+        out,
+        err,
+        labelers={"System": labeler},
+    )
+
+    assert err.getvalue() == "tir-asr: speakers: test\n"
+    assert out.getvalue() == LISTENING  # no block and no shutdown line
     assert code == 1

@@ -54,7 +54,11 @@ def main() -> None:
 
     SileroSpeechProbability()
     state("VAD loaded")
-    warm_up(transcriber, translator, time.monotonic)
+    from tir_asr.speakers.titanet import TitanetEmbedder  # C5: the startup loads it last
+
+    embedder = TitanetEmbedder()
+    state("speaker model loaded")
+    warm_up(transcriber, translator, embedder, time.monotonic)
     state("warm-up done")
     from tir_asr.audio.soundcard_source import SoundcardSource, default_microphone_id
 

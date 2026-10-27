@@ -1,6 +1,6 @@
 """The program: the startup log, the two sources, the model loads, the warm-up, and the pipeline.
 
-ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054. This module
+ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059. This module
 imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it only after the
 parse of the command line. Each startup line starts with "startup: ", so that it is easy to find
 between the lines that NeMo prints at its load (D-043, point 3).
@@ -15,10 +15,13 @@ from typing import TextIO
 from tir_asr.config import Params, parameter_lines
 from tir_asr.errors import TirError
 from tir_asr.pipeline import PROGRAM, run, warm_up
+from tir_asr.speakers.cluster import CentroidClusterer
+from tir_asr.speakers.labeler import SpeakerLabeler
 
 PACKAGES = ["tir-asr", "torch", "nemo-toolkit", "ctranslate2", "silero-vad", "soundcard"]
 MIB = 2**20
 SOURCE_LABELS = ("Me", "System")  # the microphone and the system audio (F1, D-054)
+SPEAKER_SOURCE = "System"  # only the system side gets speaker labels (F4, D-057, D-059)
 
 
 def log_line(log: TextIO, text: str) -> None:
@@ -59,12 +62,13 @@ def select_sources(mic: str | None, system: str | None, log: TextIO) -> list:
 
 
 def load_models(params: Params, log: TextIO, labels: list[str]):
-    """Load ASR, MT, and one VAD for each source label, in this order.
+    """Load ASR, MT, one VAD for each source label, and the speaker model, in this order.
 
     ASR loads first, so that a missing CUDA gives `asr: CUDA is not available` (D-043, point
     2a). The MT adapter loads the CUDA 12 cuBLAS before its `import ctranslate2` (D-030); no
     other module imports `ctranslate2`. Each source needs its own VAD, because the Silero model
-    keeps its state (D-036, D-054). Return (vads, transcriber, translator).
+    keeps its state (D-036, D-054). The speaker model loads last (D-057 part 6). Return
+    (vads, transcriber, translator, embedder).
     """
     import torch
 
@@ -89,7 +93,8 @@ def load_models(params: Params, log: TextIO, labels: list[str]):
     mt_used = used_mib()
     log_line(
         log,
-        f"MT loaded in {elapsed:.2f} s; GPU memory used {mt_used} MiB (+{mt_used - asr_used} MiB)",
+        f"MT loaded in {elapsed:.2f} s; "
+        f"GPU memory used {mt_used} MiB ({mt_used - asr_used:+d} MiB)",
     )
 
     from tir_asr.segment.silero import SileroSpeechProbability
@@ -102,7 +107,20 @@ def load_models(params: Params, log: TextIO, labels: list[str]):
         f"VAD loaded in {elapsed:.2f} s ({', '.join(labels)}); "
         f"torch CPU threads {torch.get_num_threads()}",
     )
-    return vads, transcriber, translator
+
+    from tir_asr.speakers.titanet import TitanetEmbedder
+
+    before = used_mib()
+    start = time.perf_counter()
+    embedder = TitanetEmbedder()
+    elapsed = time.perf_counter() - start
+    spk_used = used_mib()
+    log_line(
+        log,
+        f"speaker model loaded in {elapsed:.2f} s; "
+        f"GPU memory used {spk_used} MiB ({spk_used - before:+d} MiB)",
+    )
+    return vads, transcriber, translator, embedder
 
 
 def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
@@ -143,9 +161,10 @@ def main(
     try:
         log_versions(params, out)
         sources = select_sources(mic, system, out)
-        vads, transcriber, translator = load_models(params, out, list(SOURCE_LABELS))
-        asr_s, mt_s = warm_up(transcriber, translator, time.monotonic)
-        log_line(out, f"warm-up ASR {asr_s:.2f} s, MT {mt_s:.2f} s")
+        vads, transcriber, translator, embedder = load_models(params, out, list(SOURCE_LABELS))
+        asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+        log_line(out, f"warm-up ASR {asr_s:.2f} s, MT {mt_s:.2f} s, speaker {spk_s:.2f} s")
+        labelers = {SPEAKER_SOURCE: speaker_labeler(embedder, params)}
     except KeyboardInterrupt:
         out.write("Stopped during the startup.\n")
         out.flush()
@@ -161,4 +180,9 @@ def main(
         return 1
 
     pairs = list(zip(sources, vads, strict=True))
-    return run(pairs, transcriber, translator, params, time.monotonic, out, err)
+    return run(pairs, transcriber, translator, params, time.monotonic, out, err, labelers)
+
+
+def speaker_labeler(embedder, params: Params) -> SpeakerLabeler:
+    """The speaker step of the system side: rule A with the approved parameters (D-058)."""
+    return SpeakerLabeler(embedder, CentroidClusterer(params.spk_threshold, params.spk_min_new_s))

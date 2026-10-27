@@ -1,18 +1,19 @@
 """Pipeline: the warm-up, the threads, the segment queue, and the stop (ARCHITECTURE.md 2.6, 4).
 
-Decisions: D-022, D-029, D-031, D-037, D-042, D-054. This module is core: it gets the adapters
-as arguments, and it imports no model and no audio-device package (D-021).
+Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059. This module is core: it gets the
+adapters as arguments, and it imports no model and no audio-device package (D-021).
 
 Threads (section 4): one capture thread for each audio source reads the blocks of its source,
 calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
-worker thread does ASR, then MT (if the text is not empty), then writes the block. The main
-thread waits for "done" (the end of all sources) or for the first error, or it gets Ctrl+C.
+worker thread does ASR, then MT (if the text is not empty), then the speaker step (a source with
+a labeler, and a text that is not empty), then writes the block. The main thread waits for
+"done" (the end of all sources) or for the first error, or it gets Ctrl+C.
 """
 
 import queue
 import threading
 import traceback
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TextIO
 
 import numpy as np
@@ -21,7 +22,15 @@ from tir_asr.config import SAMPLE_RATE, WARMUP_AUDIO_S, WARMUP_TEXT, Params
 from tir_asr.errors import TirError
 from tir_asr.output import write_block
 from tir_asr.segment.endpoint import Endpointer
-from tir_asr.types import AudioSource, Line, SpeechProbability, Transcriber, Translator
+from tir_asr.types import (
+    AudioSource,
+    Labeler,
+    Line,
+    SpeakerEmbedder,
+    SpeechProbability,
+    Transcriber,
+    Translator,
+)
 
 PROGRAM = "tir-asr"
 LISTENING = "Listening. Press Ctrl+C to stop."
@@ -34,10 +43,14 @@ STOP_POLL_S = 0.5
 Clock = Callable[[], float]
 
 
-def warm_up(transcriber: Transcriber, translator: Translator, clock: Clock) -> tuple[float, float]:
-    """Call each GPU model one time with a synthetic input (D-022, D-037).
+def warm_up(
+    transcriber: Transcriber, translator: Translator, embedder: SpeakerEmbedder, clock: Clock
+) -> tuple[float, float, float]:
+    """Call each GPU model one time with a synthetic input (D-022, D-037, D-059).
 
-    Return the ASR time and the MT time in seconds. The caller prints them.
+    The speaker model gets the same zeros as the ASR model. The warm-up gets the embedder, not
+    the labeler, so it cannot change a clusterer. Return the ASR time, the MT time, and the
+    speaker time in seconds. The caller prints them.
     """
     audio = np.zeros(int(WARMUP_AUDIO_S * SAMPLE_RATE), dtype=np.float32)
     start = clock()
@@ -45,7 +58,9 @@ def warm_up(transcriber: Transcriber, translator: Translator, clock: Clock) -> t
     asr_end = clock()
     translator.translate(WARMUP_TEXT)
     mt_end = clock()
-    return asr_end - start, mt_end - asr_end
+    embedder.embed(audio)
+    spk_end = clock()
+    return asr_end - start, mt_end - asr_end, spk_end - mt_end
 
 
 def run(
@@ -56,6 +71,7 @@ def run(
     clock: Clock,
     out: TextIO,
     err: TextIO,
+    labelers: Mapping[str, Labeler] | None = None,
 ) -> int:
     """Run until Ctrl+C, the end of all sources, or the first error. Return the exit code.
 
@@ -64,7 +80,12 @@ def run(
     capture threads put their segments in one queue, and one worker takes them in that order.
     Ctrl+C or the end of all sources: the shutdown line, then 0. An error: the error line on
     `err`, no shutdown line, then 1 (D-042).
+
+    `labelers` has a labeler for each source label that needs speaker labels (the program:
+    "System"). A source with no labeler keeps its source label. A segment with an empty text
+    gets no labeler call and keeps its source label (D-059 point 3).
     """
+    labelers = dict(labelers or {})
     endpointers = [Endpointer(params, vad) for _, vad in sources]
     segments: queue.Queue = queue.Queue()  # one queue for all sources, no size limit (D-029)
     events: queue.Queue = queue.Queue()  # ("done", None) or ("error", (thread name, error))
@@ -101,11 +122,18 @@ def run(
             else:  # D-031: no MT call for an empty text
                 en = ""
                 mt_end = asr_end
+            labeler = labelers.get(segment.source)
+            if labeler is not None and hy:  # D-059 point 3: no speaker step for an empty text
+                label = labeler.label(segment)
+                spk_end = clock()
+            else:
+                label = segment.source
+                spk_end = None
             with output_lock:
                 if stopped.is_set():
                     return
                 line = Line(
-                    label=segment.source,
+                    label=label,
                     start=segment.start,
                     hy=hy,
                     en=en,
@@ -114,6 +142,7 @@ def run(
                     asr_end=asr_end,
                     mt_end=mt_end,
                     write=clock(),
+                    spk_end=spk_end,
                 )
                 write_block(line, session_start, out)
                 counts["written"] += 1
