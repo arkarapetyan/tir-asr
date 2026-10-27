@@ -19,8 +19,6 @@ FORBIDDEN = [
     "silero_vad",
     "soundcard",
     "transformers",
-    "speechbrain",
-    "pyannote",
 ]
 
 ADAPTERS = {
@@ -34,8 +32,6 @@ ADAPTERS = {
     "tir_asr.eval.buzz_whisper",
     "tir_asr.eval.seamless",
     "tir_asr.eval.spk_titanet",
-    "tir_asr.eval.spk_ecapa",
-    "tir_asr.eval.spk_wespeaker",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.

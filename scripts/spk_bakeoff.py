@@ -1,12 +1,15 @@
-"""Speaker bake-off: the threshold sweep (C5, D-057). Model level: Aren runs it on the laptop.
+"""Speaker bake-off: the threshold sweep (C5, D-057, D-058). Model level (Aren's laptop).
+
+D-058 selected TitaNet. The ECAPA and WeSpeaker candidates and their packages are removed; the
+`c5-embed` commits keep them, and docs/eval/results.md has their numbers.
 
 One run = one speaker model on the four eval streams (S1, S2, S3 call sides and stream D), with
 both clustering rules (A: centroid, B-max: nearest) and the thresholds 0.20 to 0.90. The
 segments come from the program's VAD with `Params()`. The run writes
 test-results/bakeoff/spk-<model>.json and prints a table for each rule.
 
-Example (D-030: no LD_LIBRARY_PATH; nothing downloads; no pyannote telemetry):
-  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 PYANNOTE_METRICS_ENABLED=false \
+Example (D-030: no LD_LIBRARY_PATH; nothing downloads):
+  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 \
     uv run --no-sync python scripts/spk_bakeoff.py --model titanet
 """
 
@@ -39,18 +42,10 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "eval" / "raw"
 SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
 OUT = ROOT / "test-results" / "bakeoff"
-MODELS = ("titanet", "ecapa", "wespeaker")
+MODELS = ("titanet",)
 RULES = {"centroid": CentroidClusterer, "nearest": NearestClusterer}
 MIN_NEW_S = 1.0  # s; the start value of spk_min_new_s (D-057, part 5B)
-PACKAGES = (
-    "tir-asr",
-    "torch",
-    "torchaudio",
-    "nemo-toolkit",
-    "speechbrain",
-    "pyannote-audio",
-    "silero-vad",
-)
+PACKAGES = ("tir-asr", "torch", "nemo-toolkit", "silero-vad")
 MIB = 2**20
 
 
@@ -59,14 +54,6 @@ def load_model(name: str):
         from tir_asr.eval.spk_titanet import TitanetEmbedder
 
         return TitanetEmbedder()
-    if name == "ecapa":
-        from tir_asr.eval.spk_ecapa import EcapaEmbedder
-
-        return EcapaEmbedder(savedir=ROOT / "models" / "spkrec-ecapa-voxceleb")
-    if name == "wespeaker":
-        from tir_asr.eval.spk_wespeaker import WespeakerEmbedder
-
-        return WespeakerEmbedder()
     raise SystemExit(f"spk_bakeoff: unknown model {name}")
 
 
