@@ -1,13 +1,13 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.24 · **Date:** 2026-10-27
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.25 · **Date:** 2026-10-27
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
 ## 1. Overview
 
-The program captures the microphone and the system audio (C4), cuts the audio of each source into speech segments, transcribes each segment to Armenian text, translates the text to English, and prints one block for each segment.
+The program captures the microphone and the system audio (C4), cuts the audio of each source into speech segments, transcribes each segment to Armenian text, translates the text to English, gives each system-side segment a speaker label (C5), and prints one block for each segment.
 Core modules have no model import and no audio-device import. Adapter modules hold the model and device code (D-021). Unit tests give fakes to the core modules.
 
 ```
@@ -21,6 +21,8 @@ Core modules have no model import and no audio-device import. Adapter modules ho
                                    worker thread        ▼
                                    asr: Transcriber (NeMo adapter, GPU) ──► Armenian text
                                    mt:  Translator (CTranslate2 adapter, GPU) ──► English text
+                                   speakers ("System" only, text not empty): SpeakerLabeler (core)
+                                        ◄── SpeakerEmbedder (TitaNet adapter, GPU) ──► "Speaker N"
                                    output: format_block (core) ──► terminal (one write for each block)
 ```
 
@@ -32,7 +34,7 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `segment` | core + adapter | `AudioBlock` | `Segment` | `SegmentError` | §2.2 |
 | `asr` | adapter | `Segment.audio` | Armenian text (`str`) | `AsrError` | §2.3 |
 | `mt` | adapter | Armenian text | English text (`str`) | `MtError` | §2.4 |
-| `speakers` | core (C5); the embedding adapter comes in `c5-pipeline` | a speaker embedding and the speech time of a segment | the label `"Speaker N"` | `SpeakerError` | §2.8 |
+| `speakers` | core + adapter (C5) | a system-side `Segment` | the label `"Speaker N"` | `SpeakerError` | §2.8 |
 | `output` | core | `Line` | one text block | none | §2.5 |
 | `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
 | `errors` | core | — | `TirError`, the base class of the module errors | — | §2.6 |
@@ -128,19 +130,21 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   | `vad` | `speech_end` | `closed` |
   | `asr` | `closed` | ASR end (includes the queue wait) |
   | `mt` | ASR end | MT end |
-  | `out` | MT end | the moment before the write |
+  | `spk` | MT end | speaker step end (system side only, D-059) |
+  | `out` | MT end, or the speaker step end | the moment before the write |
   | Total | `speech_end` | the moment before the write |
 
-- **Empty ASR text (D-031):** in C2 to C6, a short block with no MT call: the time, the label, `HY: (no text)`, and a latency line with `vad`, `asr`, and the total. C7 removes this block for the delivery; the shutdown line still counts the empty texts.
+- **System side (D-059):** a block of the system side with a text has the label `"Speaker N"` and the steps `vad, asr, mt, spk, out`: `[Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]`. A "Me" block does not change.
+- **Empty ASR text (D-031):** in C2 to C6, a short block with no MT call: the time, the label, `HY: (no text)`, and a latency line with `vad`, `asr`, and the total. On the system side, this block keeps the label `"System"`: it gets no speaker step (D-059 point 3). C7 removes this block for the delivery; the shutdown line still counts the empty texts.
 - **Rounding:** the program adds the raw step values. The printed steps can differ from the printed total by rounding (maximum 0.02 s for 4 steps).
 - **Limit:** `out` does not include the time that the terminal needs to show the text.
 
 ### 2.6 `pipeline`
 
-- **Core** `pipeline.py` (D-042, D-054). `run(sources, transcriber, translator, params, clock, out, err) -> int` takes a list of `(source, vad)` pairs, one for each audio source. It builds one `Endpointer` for each pair, starts the threads (§4), and returns the exit code. Each capture thread has the name `capture <label>` (the `label` of its source). All capture threads put their segments in one queue, and the worker writes the blocks in the order in which the segments close. Thus the `[hh:mm:ss]` times of two sources are not always in sequence: a long segment of one source can come after a later, short segment of the other source. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
-- **Warm-up (D-022, D-037, D-042):** `warm_up(transcriber, translator, clock) -> (asr_s, mt_s)` calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`, and returns the two times. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
+- **Core** `pipeline.py` (D-042, D-054, D-059). `run(sources, transcriber, translator, params, clock, out, err, labelers=None) -> int` takes a list of `(source, vad)` pairs, one for each audio source, and a mapping from a source label to a `Labeler` (the program: `{"System": …}`). A source with no labeler keeps its source label. It builds one `Endpointer` for each pair, starts the threads (§4), and returns the exit code. Each capture thread has the name `capture <label>` (the `label` of its source). All capture threads put their segments in one queue, and the worker writes the blocks in the order in which the segments close. Thus the `[hh:mm:ss]` times of two sources are not always in sequence: a long segment of one source can come after a later, short segment of the other source. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
+- **Warm-up (D-022, D-037, D-042, D-059):** `warm_up(transcriber, translator, embedder, clock) -> (asr_s, mt_s, spk_s)` calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`, then `embed` with the same zeros, and returns the three times. It gets the embedder, not the labeler, so it cannot change a clusterer. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
 - **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. Each source opens its stream at its first block (D-041). Thus no block time is before the session start.
-- **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then the write time from the clock, and `write_block` (§2.5).
+- **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then, if the source has a labeler and the text is not empty: `label(segment)`, then the speaker step end from the clock (D-059); else the line keeps the source label and has no speaker step. Then the write time from the clock, and `write_block` (§2.5).
 - **Stop (D-042):**
   - Ctrl+C: the shutdown line, then exit code 0. Ctrl+C takes effect within `STOP_POLL_S` (0.5 s, D-044). The open segments, the segments in the queue, and a segment in ASR or MT are not processed. "Not processed" in the shutdown line counts the segments in the queue and in ASR or MT; it does not count the open segments of the `Endpointer`s. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. T-E2E-02 (model test) and L-02 check this path; it has no unit test.
   - End of the sources (tests and the WAV source only, D-025): each capture thread puts an end mark in the queue at the end of its source. The worker continues until it has the end mark of each source (D-054, T-PIPE-07), and then the shutdown line comes, with exit code 0.
@@ -166,20 +170,23 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   | 1. Versions and parameters | `app.log_versions` | `startup: tir-asr …; torch …; nemo-toolkit …; ctranslate2 …; silero-vad …; soundcard …` (from `importlib.metadata`; no import), then one `startup: parameter <name> = <value>` line for each parameter (`config.parameter_lines`, T-CFG-02) |
   | 2. Sources (§2.1; the streams open later) | `app.select_sources` | `startup: source Me: <name> (<id>)`, then `startup: source System: <name> (<id>)`. A wrong id stops the program here, before the model load (D-054, point 6). |
   | 3. ASR load, with the CUDA check (§2.3) | `app.load_models` | `startup: GPU <name>; CUDA (torch) <version>`, then `startup: ASR loaded in <s> s; GPU memory used <MiB> MiB` |
-  | 4. MT load (the cuBLAS preload, D-030) | `app.load_models` | `startup: MT loaded in <s> s; GPU memory used <MiB> MiB (+<MiB> MiB)` |
+  | 4. MT load (the cuBLAS preload, D-030) | `app.load_models` | `startup: MT loaded in <s> s; GPU memory used <MiB> MiB (<±MiB> MiB)` |
   | 5. VAD load: one Silero instance for each source (D-054, point 7) | `app.load_models` | `startup: VAD loaded in <s> s (Me, System); torch CPU threads <n>` |
-  | 6. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s` |
-  | 7. "Listening" and the session start | `pipeline.run` (§2.6) | `Listening. Press Ctrl+C to stop.` |
+  | 6. Speaker model load (§2.8, D-057 part 6) | `app.load_models` | `startup: speaker model loaded in <s> s; GPU memory used <MiB> MiB (<±MiB> MiB)` |
+  | 7. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s, speaker <s> s` |
+  | 8. "Listening" and the session start | `pipeline.run` (§2.6) | `Listening. Press Ctrl+C to stop.` |
 
-- **Load order (D-043, point 2a):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD. `soundcard` loads before `torch` (step 2); [RUN] T-E2E-02 and T-SIM-01 pass with this order. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
-- **GPU memory:** `torch.cuda.mem_get_info()` gives the used memory of the full device, so the MT line also counts CTranslate2.
+- **Load order (D-043, point 2a, D-057 part 6):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD, then the speaker model. `load_models(params, log, labels)` returns `(vads, transcriber, translator, embedder)`. `app.speaker_labeler(embedder, params)` builds the labeler of `"System"`: `SpeakerLabeler(embedder, CentroidClusterer(params.spk_threshold, params.spk_min_new_s))` (D-058). `soundcard` loads before `torch` (step 2); [RUN] T-E2E-02 and T-SIM-01 pass with this order. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
+- **GPU memory:** `torch.cuda.mem_get_info()` gives the used memory of the full device, so the MT line also counts CTranslate2. The change in brackets has its sign (`+1664`, `-256`). [RUN] The device value can go down at a later load: in the program it goes down by 256 MiB at the speaker model load. The probe of C5 (`test-results/c5-probe-spk-load.txt`) shows that the TitaNet load takes 196 MiB from the torch cache that is already reserved (918 MiB before and after), so the device value does not grow; the cause of the −256 MiB is [UNVERIFIED] (probably CTranslate2 after its load). The TitaNet load does not change the torch CPU threads (1 before and after).
 - **NeMo lines (D-043, point 3):** NeMo prints about 185 lines at its load. M1 does not hide them (R10). C7 decides again.
 - **Errors and Ctrl+C during the startup (D-043, point 4):** a `TirError` gives `tir-asr: <message>` and exit code 1. Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>`, and exit code 1. Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
 - **Stop:** §2.6 (Ctrl+C, the shutdown line, the exit codes).
 
 ### 2.8 `speakers`
 
-- **Purpose (F4, D-057):** each line of the system side gets `"Speaker 1"`, `"Speaker 2"`, and so on. One person keeps the same label for the full session. The microphone side stays `"Me"`. The pipeline part (the embedding adapter, the call in the worker, and the `spk` step) comes in the branch `c5-pipeline`.
+- **Purpose (F4, D-057):** each line of the system side gets `"Speaker 1"`, `"Speaker 2"`, and so on. One person keeps the same label for the full session. The microphone side stays `"Me"`.
+- **Core** `speakers/labeler.py` (branch `c5-pipeline`, D-059): `SpeakerLabeler(embedder, clusterer)`. `label(segment)` calls `embedder.embed(segment.audio)`, then `clusterer.assign(embedding, segment.speech_end - segment.start)`. The pipeline calls it after MT, only for `"System"` and only for a text that is not empty (§2.6).
+- **Adapter** `speakers/titanet.py` (`TitanetEmbedder`, branch `c5-pipeline`, D-058): `nvidia/speakerverification_en_titanet_large` (TitaNet-large, SPK-3), NeMo 3.0.0 `EncDecSpeakerLabelModel`, on `cuda`. The constructor checks CUDA, then loads `speakerverification_en_titanet_large.nemo` from the Hugging Face cache with `local_files_only=True` (nothing downloads). `repo` and `filename` are model locations, not parameters (as D-037). `embed(audio)` calls `infer_segment` and returns a float32 vector. No warm-up method: the pipeline makes the warm-up call. [RUN] 200 MiB VRAM, load 3.34 s, at most 28.3 ms for each segment (C5 sweep).
 - **Core** `speakers/cluster.py` (branch `c5-cluster`):
   - `OnlineClusterer(threshold, min_new_s)` is an abstract class with the shared steps (Template Method). A subclass gives only `_add` (a new speaker), `_similarities` (the cosine similarity to each speaker), and `_update` (one more embedding for a speaker).
   - `CentroidClusterer` (rule A, D-057 part 4) is the program rule: the similarity to the centroid of each speaker. The centroid is the mean of the speaker's embeddings (each with length 1), scaled to length 1.
@@ -190,8 +197,8 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
     4. Else, if the highest similarity is `threshold` or more, the segment gets that speaker, and the speaker is updated. If not, it starts a new speaker.
   - On equal similarities, the speaker that came first wins. The labels are in the order of the first segment of each speaker. A label never changes after `assign` gives it.
   - The attribute `count` gives the number of speakers so far.
-- **Errors:** `speakers: threshold <t> is not in [-1, 1]`; `speakers: min_new_s <s> is negative`; `speakers: embedding has shape <shape>, expected one dimension`; `speakers: embedding has <n> values, expected <m>` (the size of the first embedding); `speakers: embedding has values that are not finite`; `speakers: embedding has zero length`. `SpeakerError` is in `speakers/cluster.py`.
-- **Parameters:** `threshold` and `min_new_s` are arguments in `c5-cluster`. They become the parameters `spk_threshold` and `spk_min_new_s` in `c5-pipeline`, after Aren sets the values from the sweep and from L-06 (R10). Start value of `spk_min_new_s`: 1.0 s (D-057 part 5B).
+- **Errors:** `speakers: CUDA is not available` (no CPU fallback, R10); `speakers: model file not in the Hugging Face cache: <repo>/<file>`; `speakers: threshold <t> is not in [-1, 1]`; `speakers: min_new_s <s> is negative`; `speakers: embedding has shape <shape>, expected one dimension`; `speakers: embedding has <n> values, expected <m>` (the size of the first embedding); `speakers: embedding has values that are not finite`; `speakers: embedding has zero length`. `SpeakerError` is in `speakers/cluster.py`.
+- **Parameters (§6, D-058):** `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s. Both are start values; L-06 tests them.
 - **Limits:** one embedding for each segment, so a segment with two voices gets one label (Q-04). An embedding from a noise can start a new speaker when the noise is `min_new_s` or longer (Q-14).
 
 ## 3. Data types (core, `types.py`)
@@ -209,10 +216,11 @@ All times are `time.monotonic()` values in seconds. All audio is float32, mono, 
 | | `speech_end` | `float` | True end of speech (D-023). |
 | | `closed` | `float` | Time when the `Endpointer` closed the segment. |
 | | `cut` | `bool` | True for a hard cut (§2.2 rule 5). |
-| `Line` | `label` | `str` | The source label: `"Me"` or `"System"` (C4); `"Speaker N"` on the system side (C5). |
+| `Line` | `label` | `str` | `"Me"`; on the system side `"Speaker N"` (C5), or `"System"` for an empty text (D-059). |
 | | `start` | `float` | `Segment.start`. |
 | | `hy`, `en` | `str` | Armenian text, English text. |
 | | `speech_end`, `closed`, `asr_end`, `mt_end`, `write` | `float` | The times of §2.5. |
+| | `spk_end` | `float \| None` | The end of the speaker step; `None` with no speaker step (D-059). Default `None`. |
 
 Interfaces (core, `typing.Protocol`):
 
@@ -222,7 +230,8 @@ Interfaces (core, `typing.Protocol`):
 | `SpeechProbability` | `__call__(samples) -> float` | Silero VAD | a list of numbers |
 | `Transcriber` | `transcribe(audio) -> str` | NeMo RNNT | a fixed text |
 | `Translator` | `translate(text) -> str` | CTranslate2 NLLB | a fixed text |
-| `SpeakerEmbedder` | `embed(audio) -> np.ndarray` (one dimension) | the model that D-057 selects (`c5-pipeline`) | a fixed vector |
+| `SpeakerEmbedder` | `embed(audio) -> np.ndarray` (one dimension) | TitaNet (D-058) | a fixed vector |
+| `Labeler` | `label(segment) -> str` | `SpeakerLabeler` (core, §2.8) | a list of labels |
 
 The WAV file source is test code only (D-025). It is in `tests/support/`, not in the package. It plays the clips at real-time speed and gives only whole frames; it drops the last part of a clip that is shorter than one frame. It adds no silence (D-032): a clip must end with at least 512 ms of silence, or the test fails.
 
@@ -232,13 +241,13 @@ The WAV file source is test code only (D-025). It is in `tests/support/`, not in
 |---|---|---|
 | Main | Startup (§2.7), then it waits for Ctrl+C, for "done", or for an error from a thread. | the event queue |
 | Capture (one for each source, name `capture <label>`) | Reads the blocks of its source, calls the `Endpointer.push` of its source (which calls the `SpeechProbability` of its source), puts each `Segment` in the segment queue. At the end of its source (tests only), it puts an end mark. | `record()` |
-| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then writes the block. After the end mark of each source, it puts "done" in the event queue. | the segment queue |
+| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then the speaker step (`"System"`, text not empty), then writes the block. After the end mark of each source, it puts "done" in the event queue. | the segment queue |
 
 - **Segment queue:** one `queue.Queue` for all sources, with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
 - **One worker thread** uses the GPU, so the GPU models run one at a time.
 - **Main-thread wait (D-044):** the main thread waits on the event queue with a time limit of `STOP_POLL_S` (0.5 s), in a loop. The time limit changes nothing except that the main thread wakes up. [RUN] With no time limit, Ctrl+C did nothing: the process has 75–79 native threads, and Python handles a signal only when the main thread wakes up (L-02, probe C). T-E2E-02 checks Ctrl+C on the real program.
 - **Errors:** each thread puts its exception in the event queue. The main thread stops the program (§2.6). The threads are daemon threads, so that they do not keep the program alive after the main thread returns.
-- **No parallel GPU work.** One worker runs ASR and then MT. [RUN] This takes 0.10–0.17 s for each segment, and a new segment comes at most once in 0.76 s (calc). Two GPU threads would share the GPU, so each call would be slower; the gain is only when segments wait in the queue. C4 and C5 measure the queue wait before a change (R6).
+- **No parallel GPU work.** One worker runs ASR, then MT, then the speaker model (C5). [RUN] This takes 0.10–0.17 s for each segment, and a new segment comes at most once in 0.76 s (calc). Two GPU threads would share the GPU, so each call would be slower; the gain is only when segments wait in the queue. C4 and C5 measure the queue wait before a change (R6).
 - **No `asyncio`.** `soundcard`, NeMo, and CTranslate2 have blocking APIs. With `asyncio`, they would run in threads anyway. Threads and queues are simpler.
 - **GIL:** the worker and the capture threads share the Python interpreter lock. A long Python step in the worker can delay a capture thread; PulseAudio then keeps the audio in its buffer [UNVERIFIED buffer size]. Q-10 checks it in the live run; T-SIM-01 measures the arrival gaps of two sources (C4).
 
@@ -271,13 +280,15 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | `vad_min_speech_ms` | 250 | ms | Silero default; removes clicks (D-026). | 2026-10-25 |
 | `vad_max_speech_s` | 10 | s | Limits the wait during a long speech (D-026). | 2026-10-25 |
 | `mt_beam_size` | 2 | — | CTranslate2 default. Beam sizes 1 and 2 gave the same texts and the same times (T-INSTALL-03, D-033). | 2026-10-25 |
+| `spk_threshold` | 0.50 | cosine | Start value: the middle of the zero-error range 0.40–0.60 of TitaNet with rule A in the C5 sweep (D-058). L-06 tests it. | 2026-10-27 |
+| `spk_min_new_s` | 1.0 | s | Start value: a shorter segment starts no speaker and changes no speaker (D-057 part 5B, D-058). No source and no eval segment under 2.40 s; L-06 tests it. | 2026-10-27 |
 
 ## 7. Error behaviour
 
 | Module | Message | Program |
 |---|---|---|
 | `asr` (startup) | `asr: CUDA is not available` | Stops before the MT load and before the microphone opens (exit code 1). |
-| `asr`, `mt` | model file or folder not found | Stops at startup (exit code 1). |
+| `asr`, `mt`, `speakers` | model file or folder not found | Stops at startup (exit code 1). |
 | `mt` | `libcublas.so.12 not found …` | Stops at startup (exit code 1). |
 | `audio` | cannot connect to PulseAudio; no default microphone; no default output; no monitor source for the default output; no source with the exact id | Stops at startup (exit code 1). |
 | `audio` | recording failed | Stops (exit code 1). |
@@ -383,7 +394,7 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `pairwise(items) -> Pairwise`: the lowest and the mean cosine of two segments of one speaker, the highest and the mean cosine of two segments of two speakers (None with no such pair).
   - `pass_range(points) -> (lowest, highest) | None`: the longest run of thresholds where each stream has `MAX_WRONG` (1) or fewer wrong segments; on equal runs, the first. The pass rule of D-057 part 3 also needs a width of `MIN_RANGE` (0.10) or more. `THRESHOLDS` are 0.20 to 0.90 in steps of 0.05.
 - **Speaker candidates** (branch `c5-embed`, D-017, D-057 part 3, D-058), in `ADAPTERS` of T-IMPORT-01. Each has `embed(audio) -> np.ndarray` (one dimension, float32) on `cuda`, checks CUDA and the Hugging Face cache in the constructor, and raises `SpeakerError` (`speakers: CUDA is not available`; `speakers: model not in the Hugging Face cache: <repo>`). No separate model test: the sweep run is their model-level check (D-057).
-  - `spk_titanet.py` (`TitanetEmbedder`): `nvidia/speakerverification_en_titanet_large`, NeMo `EncDecSpeakerLabelModel.restore_from` and `infer_segment`. The cache folder must have exactly one `.nemo` file. D-058 selected this model; in `c5-pipeline` the adapter moves to `speakers/` (D-057 part 3, point 3).
+  - TitaNet: D-058 selected this model. In `c5-pipeline`, its adapter moved to `speakers/titanet.py` (§2.8, D-057 part 3, point 3); `spk_bakeoff.py` imports it from there.
   - Removed after the sweep (D-058): `spk_ecapa.py` (SpeechBrain ECAPA, `speechbrain/spkrec-ecapa-voxceleb`) and `spk_wespeaker.py` (pyannote.audio WeSpeaker, `pyannote/wespeaker-voxceleb-resnet34-LM`, with the telemetry switch `PYANNOTE_METRICS_ENABLED=false`), and the dependency group `spk-eval`. The `c5-embed` commits keep them; `docs/eval/results.md` has their numbers.
 - **`scripts/spk_bakeoff.py`** (model level, branch `c5-embed`): `--model titanet` (the other two choices left with D-058). It loads the model (with one warm-up call of `WARMUP_AUDIO_S` zeros), then the VAD (D-043), and builds the four streams (S1, S2, S3 call sides, and D). For each stream: the segments of the program's `Endpointer` (`segment_file`, `Params()`), `embed_all`, `pairwise`, and `sweep` with both rules (`CentroidClusterer`, `NearestClusterer`) and `min_new_s` = 1.0 s. It prints a table for each rule and `pass_range`, and writes `test-results/bakeoff/spk-<model>.json` (versions, GPU, parameters, load time, VRAM, warm-up time, the segments, the pairwise values, the sweep, and the pass result).
   - Command: `env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/spk_bakeoff.py --model titanet`.
@@ -422,3 +433,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.22 | 2026-10-27 | C5, branch `c5-cluster` (§2, §2.8, §3, §8.2), D-057: the core module `speakers/cluster.py` (`OnlineClusterer`, `CentroidClusterer`, `SpeakerError`); the interface `SpeakerEmbedder`; `label_accuracy` in `metrics.py`; the eval rule `NearestClusterer` in `nearest.py`. |
 | 0.23 | 2026-10-27 | C5, branch `c5-embed` (§8.2), D-057: `streams.py`, `spk_run.py`, the three speaker candidates, the group `spk-eval`, and `scripts/spk_bakeoff.py`. |
 | 0.24 | 2026-10-27 | C5, branch `c5-embed` (§8.2), D-058: TitaNet selected; the ECAPA and WeSpeaker candidates and the group `spk-eval` removed; `spk_bakeoff.py` has only `--model titanet`. |
+| 0.25 | 2026-10-27 | C5, branch `c5-pipeline` (§1, §2, §2.5–§2.8, §3, §4, §6, §7, §8.2), D-058, D-059: the speaker step in the worker (`SpeakerLabeler`, `labelers` in `run()`, no step for an empty text); the `spk` latency step; `Line.spk_end`; `warm_up` with the embedder; the speaker model load; the TitaNet adapter in `speakers/titanet.py`; the parameters `spk_threshold` and `spk_min_new_s`. |
