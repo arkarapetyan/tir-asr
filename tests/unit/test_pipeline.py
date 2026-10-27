@@ -1,4 +1,4 @@
-"""T-PIPE-01 to T-PIPE-10: the pipeline with fakes (C2d, C4 `c4-pipeline`, C5 `c5-pipeline`).
+"""T-PIPE-01 to T-PIPE-13: the pipeline with fakes (C2d, C4, C5 `c5-pipeline` and `c5-stop`).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
 D-042, D-054, D-059. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
@@ -10,8 +10,15 @@ first block, so that the sequence of the segments in the queue is always the sam
 
 T-PIPE-09 and T-PIPE-10 (C5) give the "System" source a fake labeler (D-059). With a labeler and
 a text, the worker calls the clock one more time, for the end of the speaker step.
+
+T-PIPE-11 and T-PIPE-12 (C5, D-061) use a source with no end, as a live source: when `run()`
+returns, the block iterator of the source must be closed and the threads of `run()` must have
+ended. T-PIPE-11 and T-PIPE-13 stop with `_thread.interrupt_main()`, which has the effect of
+Ctrl+C on the main thread (the test thread). Thus the stop path has a unit test. T-PIPE-13 has a
+source that gives no more blocks: the stop must not wait for it with no message (R10).
 """
 
+import _thread
 import io
 import threading
 import time
@@ -32,6 +39,7 @@ SILENCE = 0.1
 LISTENING = "Listening. Press Ctrl+C to stop.\n"
 WAIT_S = 5.0  # test only: a limit for each wait, so that a failed test does not hang
 NOT_DONE_S = 0.3  # T-PIPE-07: run() must not return in this time after the end of Me
+BLOCK_SLEEP_S = 0.001  # T-PIPE-11, T-PIPE-12: the time between two blocks of an endless source
 
 
 def probabilities(count: int, regions: list[tuple[int, int]]) -> list[float]:
@@ -70,6 +78,60 @@ class FakeSource:
             samples = np.zeros(VAD_FRAME, dtype=np.float32)
             yield AudioBlock(source=self.label, samples=samples, arrival=(k + 1) * FRAME_S)
         self.ended.set()
+
+
+class EndlessSource:
+    """Blocks with no end, as a live source (D-061).
+
+    `first` is set after the first block. `closed` is set when the block iterator closes: a real
+    source closes its audio stream at that time.
+    """
+
+    def __init__(self, label: str = "Me"):
+        self.label = label
+        self.first = threading.Event()
+        self.closed = threading.Event()
+
+    def blocks(self):
+        k = 0
+        try:
+            while True:
+                samples = np.zeros(VAD_FRAME, dtype=np.float32)
+                yield AudioBlock(source=self.label, samples=samples, arrival=(k + 1) * FRAME_S)
+                self.first.set()
+                k += 1
+                time.sleep(BLOCK_SLEEP_S)
+        finally:
+            self.closed.set()
+
+
+class SilentSource:
+    """One block, then no more blocks until `release` (T-PIPE-13): a source with no data."""
+
+    def __init__(self, label: str = "Me"):
+        self.label = label
+        self.first = threading.Event()
+        self.release = threading.Event()
+        self.ended = threading.Event()
+
+    def blocks(self):
+        samples = np.zeros(VAD_FRAME, dtype=np.float32)
+        yield AudioBlock(source=self.label, samples=samples, arrival=FRAME_S)
+        self.first.set()
+        self.release.wait(timeout=WAIT_S)
+        self.ended.set()
+
+
+class EndlessVad:
+    """SPEECH in the frame regions, SILENCE for all other frames, with no end."""
+
+    def __init__(self, regions: list[tuple[int, int]] | None = None):
+        self.regions = list(regions or [])
+        self.frame = 0
+
+    def __call__(self, samples: np.ndarray) -> float:
+        k, self.frame = self.frame, self.frame + 1
+        return SPEECH if any(first <= k <= last for first, last in self.regions) else SILENCE
 
 
 class FakeVad:
@@ -451,3 +513,99 @@ def test_pipe_10_error_in_the_labeler():
     assert err.getvalue() == "tir-asr: speakers: test\n"
     assert out.getvalue() == LISTENING  # no block and no shutdown line
     assert code == 1
+
+
+def new_threads(before: set[threading.Thread]) -> list[str]:
+    """The names of the threads that run now and did not run before."""
+    return [thread.name for thread in threading.enumerate() if thread not in before]
+
+
+def test_pipe_11_ctrl_c_closes_the_sources_and_ends_the_threads():
+    source = EndlessSource()
+    out, err = io.StringIO(), io.StringIO()
+
+    def interrupt() -> None:
+        if source.first.wait(timeout=WAIT_S):  # run() is in its main loop
+            _thread.interrupt_main()  # as Ctrl+C: KeyboardInterrupt in the main thread
+
+    helper = threading.Thread(target=interrupt, name="helper", daemon=True)
+    before = set(threading.enumerate()) | {helper}
+    helper.start()
+
+    code = run(
+        [(source, EndlessVad())],
+        FakeTranscriber([]),
+        FakeTranslator(),
+        Params(),
+        FakeClock([0.0]),
+        out,
+        err,
+    )
+    closed = source.closed.is_set()
+    running = new_threads(before)
+
+    assert source.first.is_set(), "the source gave no block"
+    assert closed, "run() returned before the block iterator of the source closed"
+    assert running == [], f"threads of run() still run: {running}"
+    assert out.getvalue() == (
+        LISTENING + "Stopped. Segments: 0, short segments: 0, empty texts: 0, not processed: 0.\n"
+    )
+    assert err.getvalue() == ""
+    assert code == 0
+
+
+def test_pipe_12_an_error_closes_the_sources_and_ends_the_threads():
+    source = EndlessSource()
+    transcriber = FakeTranscriber([], error=FakeAsrError("asr: test"))
+    out, err = io.StringIO(), io.StringIO()
+    before = set(threading.enumerate())
+
+    code = run(
+        [(source, EndlessVad([(5, 24)]))],
+        transcriber,
+        FakeTranslator(),
+        Params(),
+        FakeClock([0.0]),
+        out,
+        err,
+    )
+    closed = source.closed.is_set()
+    running = new_threads(before)
+
+    assert len(transcriber.calls) == 1
+    assert closed, "run() returned before the block iterator of the source closed"
+    assert running == [], f"threads of run() still run: {running}"
+    assert err.getvalue() == "tir-asr: asr: test\n"
+    assert out.getvalue() == LISTENING  # no block and no shutdown line
+    assert code == 1
+
+
+def test_pipe_13_a_thread_that_does_not_stop_gives_an_error_line(monkeypatch):
+    monkeypatch.setattr("tir_asr.pipeline.STOP_JOIN_S", 0.1)
+    source = SilentSource()
+    out, err = io.StringIO(), io.StringIO()
+
+    def interrupt() -> None:
+        if source.first.wait(timeout=WAIT_S):  # the capture thread waits for a block now
+            _thread.interrupt_main()
+
+    threading.Thread(target=interrupt, name="helper", daemon=True).start()
+    try:
+        code = run(
+            [(source, EndlessVad())],
+            FakeTranscriber([]),
+            FakeTranslator(),
+            Params(),
+            FakeClock([0.0]),
+            out,
+            err,
+        )
+    finally:
+        source.release.set()  # the capture thread ends after the test
+    assert source.ended.wait(timeout=WAIT_S), "the source did not end after the release"
+
+    assert out.getvalue() == (
+        LISTENING + "Stopped. Segments: 0, short segments: 0, empty texts: 0, not processed: 0.\n"
+    )
+    assert err.getvalue() == "tir-asr: stop: thread capture Me did not stop in 0.1 s\n"
+    assert code == 0

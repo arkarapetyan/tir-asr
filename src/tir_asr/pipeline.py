@@ -1,17 +1,24 @@
 """Pipeline: the warm-up, the threads, the segment queue, and the stop (ARCHITECTURE.md 2.6, 4).
 
-Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059. This module is core: it gets the
-adapters as arguments, and it imports no model and no audio-device package (D-021).
+Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059, D-061. This module is core: it gets
+the adapters as arguments, and it imports no model and no audio-device package (D-021).
 
 Threads (section 4): one capture thread for each audio source reads the blocks of its source,
 calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
 worker thread does ASR, then MT (if the text is not empty), then the speaker step (a source with
 a labeler, and a text that is not empty), then writes the block. The main thread waits for
 "done" (the end of all sources) or for the first error, or it gets Ctrl+C.
+
+The stop (D-061): at each end, the main thread sets the stop event and waits for all threads
+before `run()` returns. Each capture thread stops at its next block and closes its block
+iterator, so that the audio stream closes. Thus no thread uses the audio library or a model
+while Python runs its exit functions: the exit function of `soundcard` frees the PulseAudio
+main loop, and a capture thread that still records then stops the process (L-02, exit code 134).
 """
 
 import queue
 import threading
+import time
 import traceback
 from collections.abc import Callable, Mapping, Sequence
 from typing import TextIO
@@ -39,6 +46,9 @@ END = None  # the end mark in the segment queue: one source has no more blocks
 # the main thread, so that Python can handle a waiting Ctrl+C. With no limit, Ctrl+C did nothing
 # when another thread received the signal (L-02, probe C, T-E2E-02).
 STOP_POLL_S = 0.5
+# D-061: at the end of run(), the main thread waits this time in total for all threads. A thread
+# that does not stop in this time stays a daemon thread, and `err` gets a line for it (R10).
+STOP_JOIN_S = 2.0
 
 Clock = Callable[[], float]
 
@@ -79,7 +89,8 @@ def run(
     Endpointer and its own capture thread, with the name `capture <label>` (D-054). All
     capture threads put their segments in one queue, and one worker takes them in that order.
     Ctrl+C or the end of all sources: the shutdown line, then 0. An error: the error line on
-    `err`, no shutdown line, then 1 (D-042).
+    `err`, no shutdown line, then 1 (D-042). In each case, `run()` returns only after the
+    threads have stopped, or after `STOP_JOIN_S` (D-061).
 
     `labelers` has a labeler for each source label that needs speaker labels (the program:
     "System"). A source with no labeler keeps its source label. A segment with an empty text
@@ -93,17 +104,26 @@ def run(
     stopped = threading.Event()
     queued = [0] * len(sources)  # one count for each capture thread, so no lock is necessary
     counts = {"written": 0, "empty": 0}  # the worker writes them
+    threads: list[threading.Thread] = []
 
     def capture(index: int) -> Callable[[], None]:
         source, endpointer = sources[index][0], endpointers[index]
 
         def read() -> None:
-            for block in source.blocks():
-                segment = endpointer.push(block)
-                if segment is not None:
-                    queued[index] += 1
-                    segments.put(segment)
-            segments.put(END)  # only the tests and the WAV source end (D-025)
+            blocks = source.blocks()
+            try:
+                for block in blocks:
+                    if stopped.is_set():
+                        return  # D-061: the stream closes below
+                    segment = endpointer.push(block)
+                    if segment is not None:
+                        queued[index] += 1
+                        segments.put(segment)
+                segments.put(END)  # only the tests and the WAV source end (D-025)
+            finally:
+                close = getattr(blocks, "close", None)
+                if close is not None:
+                    close()  # a generator: its `with` blocks close the audio stream (D-061)
 
         return read
 
@@ -111,6 +131,8 @@ def run(
         ends = 0
         while ends < len(sources):  # "done" only after the end mark of each source (D-054)
             segment = segments.get()
+            if stopped.is_set():
+                return  # D-061: the main thread stops the program
             if segment is END:
                 ends += 1
                 continue
@@ -157,7 +179,24 @@ def run(
             except Exception as error:  # the main thread stops the program (section 2.6)
                 events.put(("error", (name, error)))
 
-        return threading.Thread(target=body, name=name, daemon=True)
+        new = threading.Thread(target=body, name=name, daemon=True)
+        threads.append(new)
+        return new
+
+    def finish() -> None:
+        """D-061: wake the worker, then wait for all threads, with one time limit for all."""
+        segments.put(END)  # the worker can wait for a segment; it sees the stop event
+        deadline = time.monotonic() + STOP_JOIN_S
+        try:
+            for each in threads:
+                if each.is_alive():  # a thread that did not start cannot be joined
+                    each.join(timeout=max(0.0, deadline - time.monotonic()))
+        except KeyboardInterrupt:
+            return  # a second Ctrl+C: return now
+        for each in threads:
+            if each.is_alive():  # R10: the time limit is not silent
+                err.write(f"{PROGRAM}: stop: thread {each.name} did not stop in {STOP_JOIN_S} s\n")
+        err.flush()
 
     # D-042 point 5: the session start comes before the capture starts.
     session_start = clock()
@@ -177,6 +216,8 @@ def run(
         kind, detail = "stop", None
 
     if kind == "error":
+        with output_lock:
+            stopped.set()  # no block after the error line
         name, error = detail
         if not isinstance(error, TirError):
             err.write("".join(traceback.format_exception(error)))
@@ -184,6 +225,7 @@ def run(
         else:
             err.write(f"{PROGRAM}: {error}\n")
         err.flush()
+        finish()
         return 1
 
     with output_lock:
@@ -195,4 +237,5 @@ def run(
             f"empty texts: {counts['empty']}, not processed: {not_processed}.\n"
         )
         out.flush()
+    finish()
     return 0

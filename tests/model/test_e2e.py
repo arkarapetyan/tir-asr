@@ -10,7 +10,8 @@ source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips 
 T-E2E-02 is the automatic form of L-02 (D-044). It starts the installed command `tir-asr` in a
 new process, with the real models, the default microphone, and the monitor of the default
 output (no flags, D-054), waits for "Listening", and sends SIGINT, as Ctrl+C does. The time
-limits are in this test only, not in the program.
+limits are in this test only, not in the program. D-061 (C5): the output must have no abort line
+after the stop (L-02: `Aborting.` or `terminate called`, exit code 134).
 
 Run the tests with `env -u LD_LIBRARY_PATH` (D-030). The test runs on Aren's laptop only. It imports
 the program modules inside the test function, so that CI can collect this file (D-021).
@@ -152,6 +153,8 @@ def test_e2e_02_ctrl_c_stops_the_program():
     for line in program[-12:]:
         report(line)
     report(f"exit code {code}, {stopped_s:.2f} s after SIGINT")
+    aborts = [line for line in output if "Aborting" in line or "terminate called" in line]
+    assert aborts == [], f"the program aborted at the stop (D-061): {aborts}"
     assert code == 0
     # D-054: the two sources come before "Listening", one line for each label.
     before = program[: program.index(LISTENING)]
