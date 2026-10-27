@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.14 · **Date:** 2026-10-26
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time.
+**Version:** 0.15 · **Date:** 2026-10-27
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6).
 
 ---
 
@@ -159,7 +159,7 @@ Phase order: option B, skeleton first (D-002).
 | C3 | Evaluation set and bake-off | Eval scripts and metrics; numbers for the ASR and MT shortlists | — | 2.5 h |
 | C4 | Two audio sources | Device list, flags, system audio capture, virtual devices for sim tests, setup guide | M2 | 2 h |
 | C5 | Speaker labels | Speaker embeddings, online clustering, stable labels | **M3 (MVP)** | 3 h |
-| C6 | Weakest link: P4 | Seamless end to end in the program (D-053) | — | 2 h |
+| C6 | Weakest link: P4 | Seamless end to end in the program behind a flag, P1 the default; P4 optimizations; P4 performance and live tests (D-053, D-056) | — | 2 h (C6 gives a new time box, D-056) |
 | C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
@@ -299,15 +299,21 @@ ASR: automatic speech recognition. MT: machine translation.
   4. Aren sets the clustering threshold from the eval numbers (R10: parameters need Aren's approval).
   5. Sim test: a multi-speaker stream plays into the virtual call device.
   6. Aren does a live check.
+- **Order (D-056):** C5 comes before C6, because C5 does not depend on P4.
+- **Rule (D-056):** the speaker step is its own component, with its own interface and one call in the worker, separate from the text step (ASR and MT). Then C6 changes only the text step.
 - **Done when:** M3 works. All required features F1–F5 work live. **This is the MVP.**
 
 #### C6. Weakest link
 
 - **Goal (D-053):** implement P4 in the program: one Seamless model (`SeamlessM4Tv2ForSpeechToText`, float16, GPU) gives the HY line and the EN line from the audio of each segment. The P1 code stays. The C3 numbers chose this improvement: WER 10.6 → 6.8 %, chrF 51.7 → 59.0, no left-out sentences (Q-13).
-- **Order (Aren, 2026-10-26):** after M3, as planned. C4 comes next.
+- **Order (D-056):** after C5 (M3).
 - **Design (Aren, 2026-10-26):** one pipeline that is suitable for both P1 and P4, with OOP abstraction and the Template Method pattern.
-- **Open:** a CPU mode (Q16), after the answer of the Mathrix team.
-- **Open (Aren, end of C4):** "would like to see P4 in action". Aren decides at the start of the next chat: C5 first (the plan, R2: MVP first) or C6 first.
+- **Scope (D-056):**
+  1. P4 in the program, mainly for the GPU. P1 stays the default; a flag starts the program with P4 (name and form: C6, R10).
+  2. All possible optimizations of P4 for the CPU and for the GPU, for example one encoder pass for the HY line and the EN line, and INT8 if the quality drop is acceptable (measured, R6).
+  3. A separate performance test of P4 alone, and a live test of P4.
+  4. No custom ONNX implementation of P4 for now.
+- **Open for C6 (D-056, questions 1 to 5):** a CPU mode of P1; INT8 on the GPU; the reuse of the encoder output; the 36.4 s line of the CPU probe; a new time box.
 
 #### C7. Live test and reliability
 
@@ -500,7 +506,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | ID | Question | Source | Claude's notes (for the decision later) |
 |---|---|---|---|
 | Q15 | Change `vad_max_speech_s` from 10 s to a longer value? | Aren, C2 (2026-10-25) | A longer limit gives fewer cut words, but a long speech gives its line later, and the ASR and MT time grows with the length. C3 can measure the cut words and the time for each length. [RUN] C2d live run: three phrases with short pauses came in one segment, the 10 s hard cut split the word «լսել», and the MT left out a sentence (TESTS.md, Q-13). [RUN] C3: no segment of S1–S3 had a hard cut. [RUN] C4 L-05 (live, about 6 min): 2 hard cuts in 84 segments; Aren: "10s limit for speech sometimes is not enough for long sentences". |
-| Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). [RUN] C3 CPU probe (24 threads): P1 0.38–0.43 s for each line; P4 (Seamless) 9.9–36.4 s, so P4 does not meet K1 on the CPU (`docs/eval/results.md`). Aren asks the Mathrix team about the laptop (D-053). |
+| Q16 | Add a CPU-only mode and a limited-resource mode? | Aren, C2 (2026-10-25): the brief can mean < 5 s on weaker hardware | K4 says that the program runs on Aren's laptop at the interview. A mode is a new feature (T8) and needs a decision; it must be a flag, not a fallback (R10). Before a decision, C3 can measure the CPU latency of the ASR and the MT models (data only). [RUN] C3 CPU probe (24 threads): P1 0.38–0.43 s for each line; P4 (Seamless) 9.9–36.4 s, so P4 does not meet K1 on the CPU (`docs/eval/results.md`). Aren asks the Mathrix team about the laptop (D-053). **Closed (2026-10-27, D-056):** no question to the Mathrix team; the target hardware is Aren's laptop with its GPU; the README states the CPU limits of P4. |
 
 ---
 
@@ -544,3 +550,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.12 | 2026-10-26 | C2d closed: M1 reached; all four C2d branches; D-042 to D-045; the C2d time (2.92 h, with no breaks, to 12:26); the repository layout (`app.py`, `errors.py`, `tests/support/`, `scripts/`, `run.sh`); the R16 note (expected total about 23.9 h); Q15 data. |
 | 0.13 | 2026-10-26 | C3 closed: eval tools, S1–S3 eval set, bake-off, results table (`docs/eval/results.md`); D-046 to D-053; C6 is now the P4 implementation (D-053); Q15 and Q16 data. C3 time logged (2.5 h). C6: P4 after M3, with one pipeline for P1 and P4 (Template Method); C4 is next. |
 | 0.14 | 2026-10-26 | C4 closed: M2 reached; D-054 and D-055; the C4 status and the L-05 data; Q15 data; open question on the order of C5 and C6 (Aren, end of C4); C4 time logged (1.03 h). |
+| 0.15 | 2026-10-27 | D-056: Q16 closed; the C6 scope (P4 behind a flag, P1 the default, optimizations, P4 tests, no custom ONNX); C5 before C6, with the rule for the speaker step. |
