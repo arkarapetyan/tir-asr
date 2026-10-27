@@ -475,6 +475,26 @@ Eval streams (D-057 part 1): S1 call, S2 call, S3 call, and stream D (S1 call 0�
 
 **Results (D-060 changes, Aren's laptop, 2026-10-27):** no red run (D-057 part 8). `ruff check --no-cache` and `ruff format --no-cache --check` pass; 226 passed, 21 deselected (`test-results/c5-d060-unit.txt`): 223 as before, 2 new cases of T-SPK-05, and the new T-SPK-11 function.
 
+**Branch `c5-stop`** (D-061, the clean stop). Aren approved T-PIPE-11, T-PIPE-12, the change of T-E2E-02, and the live exit check on 2026-10-27 ("approved, proceed"). T-PIPE-13 is new: R10 does not allow a silent time limit, so a thread that does not stop gives an error line. Aren approved it on 2026-10-27 ("ci is green, continue").
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-PIPE-11 | §2.6 clean stop, D-061: Ctrl+C. **New.** | One `Me` source that gives silence blocks with no end (1 ms between blocks). A helper thread calls `_thread.interrupt_main()` after the first block. Clock 0.0. | Exit code 0. The output is only `Listening` and `Stopped. Segments: 0, short segments: 0, empty texts: 0, not processed: 0.`; no error output. When `run()` returns, the block iterator of the source is closed, and no thread of `run()` runs. | unit | PASSES |
+| T-PIPE-12 | §2.6 clean stop, D-061: an error. **New.** | The same endless source, with speech in frames 5–24. The transcriber raises `asr: test`. Clock 0.0. | Exit code 1. The error output is `tir-asr: asr: test`; the output is only `Listening`; one ASR call. When `run()` returns, the iterator is closed, and no thread of `run()` runs. | unit | PASSES |
+| T-PIPE-13 | §2.6 clean stop, §7, D-061, R10. **New.** | `STOP_JOIN_S` patched to 0.1 s. A `Me` source that gives one block and then no block until the test releases it. Ctrl+C as in T-PIPE-11. | Exit code 0; the shutdown line; the error output `tir-asr: stop: thread capture Me did not stop in 0.1 s`. After the release, the source ends. | unit | PASSES |
+| T-E2E-02 (changed) | L-02, D-061. | As before (SIGINT 2 s after "Listening"). | Also: the output has no line with `Aborting` and no line with `terminate called`. | model | PASSES |
+| L-02 (exit check) | D-061. | 3 runs of `./run.sh`, each with `echo "exit code ${PIPESTATUS[0]}"`: 2 runs with `pw-play` on the System side, 1 run with only the microphone; Ctrl+C one time. | Exit code 0 and no abort line in each run. | live | PASSES |
+
+**Results (branch `c5-stop`, Aren's laptop, 2026-10-27):** no red run (D-057 part 8).
+
+- **Unit:** `ruff check --no-cache` and `ruff format --no-cache --check` pass; 229 passed, 21 deselected (`test-results/c5-stop-unit.txt`).
+- **Model** (`test-results/c5-stop-model.txt`): T-E2E-01 and T-E2E-02 pass in 32.07 s. T-E2E-01: totals 0.63 s and 0.61 s. T-E2E-02: exit code 0, 1.12 s after SIGINT, no abort line.
+- **Sim** (`test-results/c5-stop-sim2.txt`): 2 passed in 280.01 s.
+  - T-SIM-01: 14 blocks (5 `Me`, 9 `System`); WER `Me` 0.068 and `System` 0.196 on their own references (c5-pipeline: 0.085 and 0.205; the segments can differ a little from run to run [UNVERIFIED]); totals at most 0.65 s; arrival gaps at most 45.6 ms.
+  - T-SIM-02: 19 of 19 labels correct, 4 labels; totals at most 0.70 s; arrival gaps at most 47.9 ms.
+  - The first sim run (`test-results/c5-stop-sim.txt`) stopped before the model load and has no result.
+- **Live exit check:** 3 runs, each with exit code 0 and no abort line. `c5-exit2.txt`: S2 call on the System side, 5 `Speaker 1` lines and 1 `Me` line. `c5-exit3.txt`: S3 call, 5 `Speaker 1` lines. `c5-exit4.txt`: only the microphone, 6 `Me` lines. Before D-061, `c5-exit1.txt` gave exit code 134.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
@@ -503,7 +523,7 @@ Only the checks that a sim test cannot do. (C7)
 | ID | Check | Expected result | Result |
 |---|---|---|---|
 | L-01 | Aren says 5 Armenian sentences into the microphone, with a pause after each. | One block for each sentence, label "Me", each total < 5 s (K1). | PASSES (2026-10-26): Script 4, s4-01 to s4-05: 5 blocks, label "Me", totals 0.61–0.64 s. |
-| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. C5, open: in L-06, `terminate called without an active exception` came after the shutdown line; the exit code is not known (exit check, D-060). **FAILS** (exit check, `test-results/c5-exit1.txt`, 2026-10-27, only `Me` lines, no speaker call): the shutdown line, then `Assertion 'pthread_mutex_lock(&m->mutex) == 0' failed at ../src/pulsecore/mutex-posix.c:92, function pa_mutex_lock(). Aborting.`, exit code 134. Cause: the `atexit` function of `soundcard` frees the PulseAudio main loop while the capture threads still record. The fix comes in branch `c5-stop` (D-061). |
+| L-02 | Aren presses Ctrl+C. | The shutdown line with the counts. Exit code 0. | Run 1 FAILED (2026-10-26): no reaction (D-044). Run 2 PASSES (2026-10-26, after D-044): the shutdown line, exit code 0. C5, open: in L-06, `terminate called without an active exception` came after the shutdown line; the exit code is not known (exit check, D-060). **FAILS** (exit check, `test-results/c5-exit1.txt`, 2026-10-27, only `Me` lines, no speaker call): the shutdown line, then `Assertion 'pthread_mutex_lock(&m->mutex) == 0' failed at ../src/pulsecore/mutex-posix.c:92, function pa_mutex_lock(). Aborting.`, exit code 134. Cause: the `atexit` function of `soundcard` frees the PulseAudio main loop while the capture threads still record. The fix comes in branch `c5-stop` (D-061). After D-061: **PASSES** (2026-10-27): 3 runs (`c5-exit2.txt` to `c5-exit4.txt`), each with the shutdown line, exit code 0, and no abort line. |
 | L-03 | Aren is silent for 60 s, then says one sentence; then he says 3 sentences with short pauses (Q-09). | The total of the first sentence is compared with the next ones. || PASSES (2026-10-26): after 76 s of silence, the total of s4-06 was 0.61 s, the same as before (Q-09). |
 | L-04 | `./run.sh --list-devices` (C4, D-054). | The list shows the microphone and the output monitor; the defaults have a `*`; exit code 0; no model load. | Not run in C4. |
 | L-05 | A video call with one person, wired headphones, `./run.sh` with no flags (C4, D-054). | Lines with `Me` and `System` at the same time; Aren still hears the call; each total < 5 s (K1); the two `startup: source` lines name the correct devices. | PASSES (2026-10-26, Bluetooth buds in place of wired headphones): 84 blocks in about 6 min, totals 0.11–0.68 s, no growth; Aren heard the call (§2.6 results). |
