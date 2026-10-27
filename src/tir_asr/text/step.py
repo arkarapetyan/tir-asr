@@ -1,13 +1,15 @@
 """The text step of one segment: Template Method for P1 and P4 (ARCHITECTURE.md section 2.9).
 
-Decisions: D-031, D-053 (addition), D-062 part 2. `TextStep.process` and `TextStep.warm_up` are
-the template methods. They fix the order of the steps, the empty-text rule (D-031), and the
-clock reads, the same for P1 and P4. A subclass gives only the hooks: `_prepare` (default: the
-audio, with no work), `_armenian`, and `_english`. A subclass does not define `process` or
-`warm_up` (T-TEXT-04).
+Decisions: D-031, D-053 (addition), D-062 part 2, D-063 part 2. `TextStep.process` and
+`TextStep.warm_up` are the template methods. They fix the order of the steps, the empty-text
+rule (D-031), and the clock reads, the same for P1 and P4. A subclass gives only the hooks:
+`_prepare` (default: the audio, with no work), `_armenian`, and `_english`. A subclass does not
+define `process` or `warm_up` (T-TEXT-04). `STEPS` gives the names of the text steps on the
+latency line: two names (P1: `asr`, `mt`), or one name when one step gives both texts (P4:
+`s2t`, D-063 part 2).
 
 This module is core: it imports no model package (D-021). `CascadeTextStep` (P1) gets its
-adapters as arguments. The P4 subclass is an adapter in its own file (branch c6-seamless).
+adapters as arguments. The P4 subclass is an adapter in its own file (`text/seamless.py`).
 """
 
 from abc import ABC, abstractmethod
@@ -17,13 +19,20 @@ from typing import Any
 import numpy as np
 
 from tir_asr.config import WARMUP_TEXT
+from tir_asr.errors import TirError
 from tir_asr.types import TextResult, Transcriber, Translator
 
 Clock = Callable[[], float]
 
 
+class TextError(TirError):
+    """An error of a text step adapter. The message is `text: <cause>`."""
+
+
 class TextStep(ABC):
     """The Armenian text, then the English text, of the audio of one segment."""
+
+    STEPS: tuple[str, ...] = ("asr", "mt")  # the names on the latency line (D-063 part 2)
 
     def process(self, audio: np.ndarray, clock: Clock) -> TextResult:
         """The texts of one segment. The clock gives the end of each of the two steps.

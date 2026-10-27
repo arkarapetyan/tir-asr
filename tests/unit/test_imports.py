@@ -32,6 +32,7 @@ ADAPTERS = {
     "tir_asr.eval.buzz_whisper",
     "tir_asr.eval.seamless",
     "tir_asr.speakers.titanet",
+    "tir_asr.text.seamless",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.

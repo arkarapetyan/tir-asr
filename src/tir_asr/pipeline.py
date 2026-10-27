@@ -151,6 +151,7 @@ def run(
                     mt_end=text.mt_end,
                     write=clock(),
                     spk_end=spk_end,
+                    steps=text_step.STEPS,  # D-063 part 2
                 )
                 write_block(line, session_start, out)
                 counts["written"] += 1

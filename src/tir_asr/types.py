@@ -47,6 +47,7 @@ class Line:
     mt_end: float
     write: float
     spk_end: float | None = None  # end of the speaker step; None: no speaker step (D-059)
+    steps: tuple[str, ...] = ("asr", "mt")  # names of the text steps; one name: P4 (D-063)
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""T-OUT-01 to T-OUT-05: the output block (ARCHITECTURE.md 2.5, D-024, D-031, D-040, D-059).
+"""T-OUT-01 to T-OUT-06: the output block (ARCHITECTURE.md 2.5, D-024, D-031, D-040, D-059, D-063).
 
 All times are `time.monotonic()` values. The session starts at SESSION_START.
 """
@@ -112,4 +112,34 @@ def test_out_05_system_line_with_the_speaker_step():
     assert block.splitlines()[0] == "[00:01:12] Speaker 1"
     assert latency_line(block) == (
         " [Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]"
+    )
+
+
+def test_out_06_one_text_step_for_p4():
+    # D-063 part 2: one step `s2t` from the segment close to the end of both texts.
+    line = make_line(steps=("s2t",))
+
+    assert latency_line(format_block(line, SESSION_START)) == (
+        " [Latency: vad 0.53s, s2t 0.59s, out 0.00s | Total 1.12s]"
+    )
+
+
+def test_out_06_one_text_step_with_the_speaker_step():
+    line = make_line(steps=("s2t",), label="Speaker 1", spk_end=1076.13, write=1076.14)
+
+    block = format_block(line, SESSION_START)
+
+    assert block.splitlines()[0] == "[00:01:12] Speaker 1"
+    assert latency_line(block) == (
+        " [Latency: vad 0.53s, s2t 0.59s, spk 0.01s, out 0.01s | Total 1.14s]"
+    )
+
+
+def test_out_06_one_text_step_with_an_empty_text():
+    line = make_line(steps=("s2t",), hy="", en="", mt_end=1075.94, write=1075.97)
+
+    block = format_block(line, SESSION_START)
+
+    assert block == (
+        "[00:01:12] Me\n HY: (no text)\n [Latency: vad 0.53s, s2t 0.41s | Total 0.97s]\n\n"
     )

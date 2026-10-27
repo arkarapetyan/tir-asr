@@ -1,10 +1,11 @@
-"""T-PIPE-01 to T-PIPE-13: the pipeline with fakes (C2d, C4, C5 `c5-pipeline` and `c5-stop`).
+"""T-PIPE-01 to T-PIPE-14: the pipeline with fakes (C2d, C4, C5, C6).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
 D-042, D-054, D-059, D-062. C6 (`c6-textstep`, D-062 part 2): `run()` and `warm_up()` get the P1
 text step (`CascadeTextStep`) with the fake transcriber and the fake translator. The inputs, the
 clock values, and the expected results did not change, so the tests show that the text step
-changes no behaviour. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
+changes no behaviour. T-PIPE-14 (`c6-seamless`, D-063 part 2) gives a text step with one latency
+step. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
 (TESTS.md 2.4). Only the main thread and the worker call the fake clock. Thus the times are the
 same in each run, and a clock call that the contract does not need makes the test fail.
 
@@ -34,7 +35,7 @@ from tir_asr.errors import TirError
 from tir_asr.pipeline import run, warm_up
 from tir_asr.speakers.cluster import CentroidClusterer
 from tir_asr.speakers.labeler import SpeakerLabeler
-from tir_asr.text.step import CascadeTextStep
+from tir_asr.text.step import CascadeTextStep, TextStep
 from tir_asr.types import AudioBlock
 
 FRAME_S = VAD_FRAME / SAMPLE_RATE  # 0.032 s
@@ -602,4 +603,40 @@ def test_pipe_13_a_thread_that_does_not_stop_gives_an_error_line(monkeypatch):
         LISTENING + "Stopped. Segments: 0, short segments: 0, empty texts: 0, not processed: 0.\n"
     )
     assert err.getvalue() == "tir-asr: stop: thread capture Me did not stop in 0.1 s\n"
+    assert code == 0
+
+
+class OneStep(TextStep):
+    """A text step with one latency step, as P4 (D-063 part 2)."""
+
+    STEPS = ("s2t",)
+
+    def _armenian(self, state) -> str:
+        return "բարև"
+
+    def _english(self, state, hy: str) -> str:
+        return "hi"
+
+
+def test_pipe_14_the_line_gets_the_step_names_of_the_text_step():
+    out, err = io.StringIO(), io.StringIO()
+
+    code = run(
+        [(FakeSource(111), FakeVad(probabilities(111, [(5, 24)])))],
+        OneStep(),
+        Params(),
+        FakeClock([0.0, 1.400, 1.500, 1.510]),
+        out,
+        err,
+    )
+
+    assert out.getvalue() == (
+        LISTENING + "[00:00:00] Me\n"
+        " HY: բարև\n"
+        " EN: hi\n"
+        " [Latency: vad 0.51s, s2t 0.19s, out 0.01s | Total 0.71s]\n"
+        "\n"
+        "Stopped. Segments: 1, short segments: 0, empty texts: 0, not processed: 0.\n"
+    )
+    assert err.getvalue() == ""
     assert code == 0

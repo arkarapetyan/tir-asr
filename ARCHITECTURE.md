@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.28 · **Date:** 2026-10-27
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.29 · **Date:** 2026-10-27
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 change (C6) applies D-063. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -35,7 +35,7 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `segment` | core + adapter | `AudioBlock` | `Segment` | `SegmentError` | §2.2 |
 | `asr` | adapter | `Segment.audio` | Armenian text (`str`) | `AsrError` | §2.3 |
 | `mt` | adapter | Armenian text | English text (`str`) | `MtError` | §2.4 |
-| `text` | core (C6) | `Segment.audio` | `TextResult`: the Armenian text, the English text, and the end of each of the two steps | the errors of its adapters, with no change | §2.9 |
+| `text` | core + adapter (C6) | `Segment.audio` | `TextResult`: the Armenian text, the English text, and the end of each of the two steps | `TextError` (P4 adapter); the errors of the P1 adapters, with no change | §2.9 |
 | `speakers` | core + adapter (C5) | a system-side `Segment` | the label `"Speaker N"` | `SpeakerError` | §2.8 |
 | `output` | core | `Line` | one text block | none | §2.5 |
 | `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
@@ -136,6 +136,8 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   | `out` | MT end, or the speaker step end | the moment before the write |
   | Total | `speech_end` | the moment before the write |
 
+- **Names of the text steps (D-063 part 2):** `Line.steps` comes from the `STEPS` of the text step (§2.9). P1 has two names, `asr` and `mt`, as in the table. P4 has one name, `s2t`: one step from `closed` to the end of both texts (the MT end), because one call gives both texts. A P4 block: `[Latency: vad 0.53s, s2t 0.59s, out 0.00s | Total 1.12s]`; with the speaker step, `vad, s2t, spk, out`. An empty text of P4 gives `vad` and `s2t` (from `closed` to the ASR end).
+
 - **System side (D-059, D-060):** a block of the system side with a text has the label `"Speaker N"` (or `"Unidentified"`, §2.8) and the steps `vad, asr, mt, spk, out`: `[Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]`. A "Me" block does not change.
 - **Empty ASR text (D-031):** in C2 to C6, a short block with no MT call: the time, the label, `HY: (no text)`, and a latency line with `vad`, `asr`, and the total. On the system side, this block keeps the label `"System"`: it gets no speaker step (D-059 point 3). C7 removes this block for the delivery; the shutdown line still counts the empty texts.
 - **Rounding:** the program adds the raw step values. The printed steps can differ from the printed total by rounding (maximum 0.02 s for 4 steps).
@@ -216,8 +218,16 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   - The hooks: `_prepare(audio)` (default: the audio, with no work), `_armenian(state) -> str` (abstract), and `_english(state, hy) -> str` (abstract). `_armenian` and `_english` get the state of the same `_prepare` call. A subclass defines only the hooks, not `process` or `warm_up` (T-TEXT-04).
   - An exception of a hook goes up with no change (R10), and the pipeline stops (§2.6).
   - `CascadeTextStep(transcriber, translator)` is P1: `_armenian` is `transcriber.transcribe(audio)` (§2.3), and `_english` is `translator.translate(hy)` (§2.4). The adapters do not change.
-- **Adapter** `text/seamless.py` (P4, `SeamlessTextStep`): branch `c6-seamless`, with the variant of D-063.
-- **Latency line (D-062 part 3, option (a)):** the steps `asr` (from `closed` to `asr_end`) and `mt` (from `asr_end` to `mt_end`), as before (§2.5).
+  - `STEPS` (class attribute) gives the names of the text steps on the latency line (§2.5, D-063 part 2): `("asr", "mt")` in `TextStep` (P1), `("s2t",)` in the P4 adapter. The pipeline puts it into `Line.steps`.
+  - `TextError(TirError)`, with the message `text: <cause>`, is in this module.
+- **Adapter** `text/seamless.py` (P4, `SeamlessTextStep`, branch `c6-seamless`, D-063): `facebook/seamless-m4t-v2-large`, `SeamlessM4Tv2ForSpeechToText`, float16, on `cuda` (D-053).
+  - **Load:** the constructor `SeamlessTextStep(repo)` checks CUDA, then checks the Hugging Face cache with `hf_hub_download(repo, "config.json", local_files_only=True)`, then loads the processor and the model with `local_files_only=True`. Nothing downloads at runtime. The default `repo` is the module constant `S2T_REPO`; it is a model location, not a parameter (as D-037). [SOURCE: huggingface_hub 2.3.0] `snapshot_download(local_files_only=True)` can raise `IncompleteSnapshotError` for a cache that `from_pretrained` can use, so the adapter does not use it.
+  - **Variant V2 (D-063 part 1):** `_prepare(audio)` makes the features, does one encoder pass, and calls the base `GenerationMixin.generate` one time with two decoder rows: the `hye` code and the `eng` code (the base `generate` adds the decoder start token). The state is `(Armenian text, English text)`; `_armenian` and `_english` give its two parts. The Seamless `generate` is not used, because with no `tgt_lang` it writes a warning at each call. Each call gets a new `BaseModelOutput`, because `generate` changes the given encoder output in place for the beams [SOURCE: transformers 5.20.2, `_expand_dict_for_generation`].
+  - **Generate values (D-063 part 6):** the defaults of the model: greedy (the model files set no `num_beams`) and `max_new_tokens` 256. The attributes `num_beams` and `max_new_tokens` give them to the startup log. No parameter (R10).
+  - **`STEPS`:** `("s2t",)` (D-063 part 2).
+  - **Errors:** `text: CUDA is not available` (no CPU fallback and no CPU mode, R10, D-063 part 4); `text: model not in the Hugging Face cache: <repo>`.
+  - **Limits:** [RUN, probe, 34 segments of S1–S3] WER 7.1 %, chrF 59.0, line time 0.337 s mean and 0.443 s maximum, 2884 MiB VRAM. The adapter calls the base `generate` directly, which is a detail of the transformers code: a transformers update can break it (T-MODEL-P4-01). In float16, the batch of two gives a small difference from one call for each language (2 of 34 Armenian texts differ by one character). Each segment is translated alone, with no context. The program does not run P4 on the CPU; the probe numbers for the CPU are in `docs/eval/results.md` (D-063 part 4).
+- **Latency line:** the names of `STEPS` (§2.5, D-063 part 2; D-062 part 3 had kept `asr` and `mt` for P4).
 - **Weak point (D-062 part 2):** the hooks of P4 share the state of `_prepare`, so the hooks have a fixed order.
 
 ## 3. Data types (core, `types.py`)
@@ -240,6 +250,7 @@ All times are `time.monotonic()` values in seconds. All audio is float32, mono, 
 | | `hy`, `en` | `str` | Armenian text, English text. |
 | | `speech_end`, `closed`, `asr_end`, `mt_end`, `write` | `float` | The times of §2.5. |
 | | `spk_end` | `float \| None` | The end of the speaker step; `None` with no speaker step (D-059). Default `None`. |
+| | `steps` | `tuple[str, ...]` | The names of the text steps: `("asr", "mt")` (default, P1) or `("s2t",)` (P4), from `TextStep.STEPS` (§2.5, D-063 part 2). |
 | `TextResult` (D-062) | `hy`, `en` | `str` | Armenian text (`""` for no text), English text (`""` when the Armenian text is empty). |
 | | `asr_end`, `mt_end` | `float` | The end of the Armenian step and of the English step; `mt_end` = `asr_end` for an empty text (D-031). |
 
@@ -312,7 +323,8 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | Module | Message | Program |
 |---|---|---|
 | `asr` (startup) | `asr: CUDA is not available` | Stops before the MT load and before the microphone opens (exit code 1). |
-| `asr`, `mt`, `speakers` | model file or folder not found | Stops at startup (exit code 1). |
+| `asr`, `mt`, `speakers`, `text` | model file or folder not found | Stops at startup (exit code 1). |
+| `text` (startup, P4) | `text: CUDA is not available` | Stops at startup (exit code 1). |
 | `mt` | `libcublas.so.12 not found …` | Stops at startup (exit code 1). |
 | `audio` | cannot connect to PulseAudio; no default microphone; no default output; no monitor source for the default output; no source with the exact id | Stops at startup (exit code 1). |
 | `audio` | recording failed | Stops (exit code 1). |
@@ -462,3 +474,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.26 | 2026-10-27 | C5, branch `c5-pipeline` (§2.5, §2.8, §3, §6, §8.2), D-060: a short first segment gets no label (`assign` gives `None`) and the labeler gives `"Unidentified"`; `label_accuracy` counts a segment with no label as an error; the L-06 limits (two voices in one segment, noise); the parameters kept after L-06. |
 | 0.27 | 2026-10-27 | C5, branch `c5-stop` (§2.6, §4, §5, §7), D-061: the clean stop: `run()` waits for all threads with the limit `STOP_JOIN_S` (2.0 s) before it returns; the capture threads close their audio streams; the error line for a thread that does not stop. |
 | 0.28 | 2026-10-27 | C6, branch `c6-textstep` (§1, §2, §2.3, §2.4, §2.6, §2.7, new §2.9, §3, §4), D-062: the text step `TextStep` (Template Method) with `CascadeTextStep` (P1); `TextResult`; `run()` and `warm_up()` get one text step; `load_models` returns `(vads, text_step, embedder)`. No change of behaviour. |
+| 0.29 | 2026-10-27 | C6, branch `c6-seamless` (§2, §2.5, §2.9, §3, §7), D-063: the P4 adapter `SeamlessTextStep` (variant V2: one encoder pass and one decode of the rows `hye` and `eng`); `TextError`; `TextStep.STEPS` and `Line.steps`; the one latency step `s2t` of P4. |
