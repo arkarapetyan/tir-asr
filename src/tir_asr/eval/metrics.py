@@ -62,13 +62,16 @@ def digit_words(texts: Sequence[str]) -> int:
     )
 
 
-def label_accuracy(truths: Sequence[str], labels: Sequence[str], weights: Sequence[float]) -> float:
+def label_accuracy(
+    truths: Sequence[str], labels: Sequence[str | None], weights: Sequence[float]
+) -> float:
     """Label accuracy after the best one-to-one mapping of labels to true speakers (D-057).
 
     Each segment has its true speaker, its label from the program, and its weight (its speech
     time in seconds, or 1 for a count of segments). The mapping gives the largest matched
     weight (Hungarian method). A label with no true speaker counts as an error, and so does a
-    true speaker with no label. The result is the matched weight divided by the total weight.
+    true speaker with no label. A segment with no label (None, D-060) is always an error. The
+    result is the matched weight divided by the total weight.
     """
     if not len(truths) == len(labels) == len(weights):
         raise MetricError(
@@ -81,12 +84,15 @@ def label_accuracy(truths: Sequence[str], labels: Sequence[str], weights: Sequen
         if not weight > 0:  # also a NaN
             raise MetricError(f"metrics: weight {weight} is not positive")
     true_ids = sorted(set(truths))
-    label_ids = sorted(set(labels))
+    label_ids = sorted({label for label in labels if label is not None})
+    if not label_ids:
+        return 0.0
     matrix = np.zeros((len(label_ids), len(true_ids)))
     for truth, label, weight in zip(truths, labels, weights, strict=True):
-        matrix[label_ids.index(label), true_ids.index(truth)] += weight
+        if label is not None:
+            matrix[label_ids.index(label), true_ids.index(truth)] += weight
     rows, cols = linear_sum_assignment(matrix, maximize=True)
-    return float(matrix[rows, cols].sum() / matrix.sum())
+    return float(matrix[rows, cols].sum() / sum(weights))
 
 
 def _check_lengths(refs: Sequence[str], hyps: Sequence[str]) -> None:

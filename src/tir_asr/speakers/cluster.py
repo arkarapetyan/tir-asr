@@ -7,7 +7,8 @@ threshold sweep can compare the two rules (D-057, part 4).
 
 The steps of `assign` (ARCHITECTURE.md section 2.8):
 1. Check the embedding, and make its length 1 (L2 norm).
-2. With no speaker yet, the embedding starts "Speaker 1", also for a short segment.
+2. With no speaker yet, a segment shorter than `min_new_s` gets no label (None) and starts no
+   speaker (D-060: a first noise must not start a speaker). A longer one starts "Speaker 1".
 3. A segment shorter than `min_new_s` gets the label of the most similar speaker. It starts no
    new speaker and changes no speaker (part 5B).
 4. Else, if the highest similarity is `threshold` or more, the segment gets that speaker, and
@@ -46,10 +47,15 @@ class OnlineClusterer(ABC):
         """The number of speakers so far."""
         return self._count
 
-    def assign(self, embedding: np.ndarray, duration_s: float) -> str:
-        """The label of one segment. `duration_s` is the speech time of the segment."""
+    def assign(self, embedding: np.ndarray, duration_s: float) -> str | None:
+        """The label of one segment. `duration_s` is the speech time of the segment.
+
+        None: no label, for a short segment when there is no speaker yet (step 2, D-060).
+        """
         unit = self._unit(embedding)
         if self._count == 0:
+            if duration_s < self._min_new_s:
+                return None
             return self._start_speaker(unit)
         similarities = self._similarities(unit)
         best = int(np.argmax(similarities))  # on equal values, the speaker that came first

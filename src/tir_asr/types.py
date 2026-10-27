@@ -37,7 +37,7 @@ class Segment:
 class Line:
     """One output block: the texts and the times of ARCHITECTURE.md section 2.5."""
 
-    label: str  # "Me"; on the system side "Speaker N" (C5), or "System" for an empty text
+    label: str  # "Me"; system side: "Speaker N" or "Unidentified" (C5); "System": empty text
     start: float  # Segment.start
     hy: str  # Armenian text
     en: str  # English text
@@ -72,4 +72,4 @@ class SpeakerEmbedder(Protocol):
 
 
 class Labeler(Protocol):
-    def label(self, segment: Segment) -> str: ...  # "Speaker N" (D-059)
+    def label(self, segment: Segment) -> str: ...  # "Speaker N" or "Unidentified" (D-059, D-060)

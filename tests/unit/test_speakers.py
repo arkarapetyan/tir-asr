@@ -1,5 +1,8 @@
 """T-SPK-01 to T-SPK-05, T-SPK-07, T-SPK-11: speaker clustering, label accuracy, labeler.
 
+D-060 changed T-SPK-03 (a short first segment gives no label), and added one case to T-SPK-05
+(a segment with no label) and to T-SPK-11 (the label "Unidentified").
+
 No model. The embeddings are small vectors at known angles, so each cosine similarity is known
 from the angle between two vectors. The expected labels come from the approved test table
 (TESTS.md section 2.7), not from the code.
@@ -14,7 +17,7 @@ import pytest
 from tir_asr.eval.metrics import MetricError, label_accuracy
 from tir_asr.eval.nearest import NearestClusterer
 from tir_asr.speakers.cluster import CentroidClusterer, SpeakerError
-from tir_asr.speakers.labeler import SpeakerLabeler
+from tir_asr.speakers.labeler import UNIDENTIFIED, SpeakerLabeler
 from tir_asr.types import Segment
 
 RULES = [CentroidClusterer, NearestClusterer]
@@ -61,8 +64,11 @@ def test_spk_02_the_centroid_moves_with_each_update():
 def test_spk_03_a_short_segment_starts_no_speaker_and_changes_no_speaker(rule):
     clusterer = rule(threshold=0.9, min_new_s=1.0)
 
-    # A short first segment starts "Speaker 1": no other label is possible.
-    assert clusterer.assign(at(0), 0.5) == "Speaker 1"
+    # A short first segment gets no label and starts no speaker (D-060).
+    assert clusterer.assign(at(0), 0.5) is None
+    assert clusterer.count == 0
+
+    assert clusterer.assign(at(0), LONG) == "Speaker 1"
     assert clusterer.assign(at(90), LONG) == "Speaker 2"
 
     # Short, no match (cos 40 = 0.77 and cos 50 = 0.64, both < 0.9): the most similar speaker.
@@ -125,6 +131,10 @@ def test_spk_04_embedding_size_changes(rule):
         (["A", "B"], ["S1", "S1"], [3.0, 1.0], 0.75),
         # More true speakers than labels: S1 -> B gives 2 of 4.
         (["A", "B", "C"], ["S1", "S1", "S1"], [1, 2, 1], 0.5),
+        # No label (D-060) is always an error: S1 -> A and S2 -> B give 2 of 3.
+        (["A", "A", "B"], [None, "S1", "S2"], [1, 1, 1], 2 / 3),
+        # Only segments with no label: 0.
+        (["A", "B"], [None, None], [1, 1], 0.0),
     ],
 )
 def test_spk_05_label_accuracy(truths, labels, weights, expected):
@@ -188,3 +198,14 @@ def test_spk_11_labeler_gives_the_audio_and_the_speech_time():
     # The third segment: 0.5 s of speech, so it is short: the most similar speaker (cos 10 deg).
     assert labels == ["Speaker 1", "Speaker 2", "Speaker 2"]
     assert [call[0] for call in embedder.calls] == [1.0, 5.0, 9.0]
+
+
+def test_spk_11_labeler_gives_unidentified_for_a_short_first_segment():
+    embedder = FakeEmbedder([at(0), at(0)])
+    labeler = SpeakerLabeler(embedder, CentroidClusterer(threshold=0.9, min_new_s=1.0))
+
+    # 0.5 s of speech and no speaker yet: "Unidentified"; then 3.0 s starts "Speaker 1" (D-060).
+    labels = [labeler.label(segment(1.0, 1.5)), labeler.label(segment(2.0, 5.0))]
+
+    assert UNIDENTIFIED == "Unidentified"
+    assert labels == ["Unidentified", "Speaker 1"]
