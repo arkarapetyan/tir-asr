@@ -57,7 +57,3 @@ laptop = [
     "torch>=2.14.1",
     "transformers>=5.20.2",
 ]
-spk-eval = [
-    "pyannote-audio>=4.0.7",
-    "speechbrain>=1.1.2",
-]
