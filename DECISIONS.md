@@ -1147,3 +1147,21 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude (R14): 0 errors in 19 segments gives an approximate 95 % upper limit of about 15 % for the error rate [calc]; the eval has no short segment and no noise (Q-14). Thus L-06 is the real test.
   - Claude (correction for C6): D-056 question 4 proposed a very long output as the cause of the 36.4 s CPU line. `docs/eval/results.md` says that the English output of that segment had a normal length (110 characters), so this cause is probably wrong.
 - **Revisit when:** L-06 shows extra labels for one person, one label for two people, or labels from noise.
+
+## D-059. Interface of the speaker step in the program (C5, `c5-pipeline`)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-057 part 6 (option A) puts the speaker step in the worker, after MT, for `"System"` only. D-056: the speaker step is its own component, separate from the text step. The contracts of `run()`, `warm_up()`, `Line`, the output, the adapter, the startup, and T-SIM-02 needed details.
+- **Points, options, and Claude's preference:**
+  1. **Labeler.** A core class `SpeakerLabeler(embedder, clusterer)` in `speakers/labeler.py`; `label(segment)` calls `clusterer.assign(embedder.embed(segment.audio), segment.speech_end - segment.start)`. An interface `Labeler` in `types.py`, so that unit tests use fakes.
+  2. **`run()`.** **A.** A new argument `labelers: Mapping[str, Labeler] | None = None`, keyed by the source label; a source with no labeler keeps its label. **B.** Triples `(source, vad, labeler)`; weak point: all T-PIPE tests change. Preference: A.
+  3. **Empty ASR text on the system side.** **A.** No labeler call: the block keeps `System` and has no `spk` step; this also keeps noise (Q-14) out of the centroids. **B.** Always call the labeler; weak point: noise can start new speakers. Preference: A. Fact that can show A is wrong: in L-06, real speech gets no text and so no label.
+  4. **`Line` and the output.** A new field `spk_end: float | None = None`. A system line with a text shows `vad, asr, mt, spk, out`; `out` counts from `spk_end` when it exists, else from `mt_end`. "Me" lines and empty-text blocks do not change.
+  5. **Warm-up.** `warm_up(transcriber, translator, embedder, clock)` returns three times; one embedding call with the same 2 s of zeros; it gets the embedder, not the labeler, so it cannot change a clusterer.
+  6. **Adapter.** `eval/spk_titanet.py` moves to `speakers/titanet.py` (D-057 part 3, point 3). `hf_hub_download(repo, "speakerverification_en_titanet_large.nemo", local_files_only=True)`, as the ASR adapter ([RUN] the file name is in the TitaNet load log); the error text agrees with T-MODEL-SPK-02.
+  7. **Startup.** `Params` gets `spk_threshold = 0.50` and `spk_min_new_s = 1.0` (D-058). Load order: sources, ASR, MT, VAD, speaker model, with a `startup: speaker model loaded in …` line. The shutdown line does not change.
+  8. **T-SIM-02.** "Me" plays `s1.mic.wav`; "System" plays stream D, written to a temporary 16-bit WAV file. A wrapper on the labeler records the time and the label of each call; the test maps the times to the turns of stream D, with the start of the System player as time 0. Expected: at most 1 wrong segment, 4 speakers, "Me" blocks `Me`, each total < 5 s.
+- **Decision:** A in points 2 and 3; points 1 and 4 to 8 as proposed. `ARCHITECTURE.md` v0.25. Tests: `TESTS.md` §2.7 (T-SPK-11 is new; T-SIM-01 changes only for the new signatures).
+- **Reason (Aren's words):** "1. agree", "2. A", "3. A", "4. agree", "5. agree", "6. agree", "7. agree", "8. agree".
+- **Questions raised:** Claude (R14): with point 3A, a system segment with no text has the label `System` in C2 to C6. C7 removes the empty-text blocks for the delivery (D-031), so the delivered program shows only `Speaker N` on the system side.
+- **Revisit when:** L-06 (point 3), or C6 (the Template Method design for P1 and P4 must keep the speaker step separate, D-056).
