@@ -59,6 +59,8 @@ REQUIRED = {
     "tir_asr.eval.streams",
     "tir_asr.eval.spk_run",
     "tir_asr.speakers.labeler",
+    "tir_asr.text",
+    "tir_asr.text.step",
 }
 
 CHECK = """

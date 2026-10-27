@@ -49,6 +49,16 @@ class Line:
     spk_end: float | None = None  # end of the speaker step; None: no speaker step (D-059)
 
 
+@dataclass(frozen=True)
+class TextResult:
+    """The texts of one segment and the end times of the two text steps (D-062 part 2)."""
+
+    hy: str  # Armenian text; "" for no text (D-031)
+    en: str  # English text; "" when the Armenian text is empty
+    asr_end: float  # end of the Armenian step
+    mt_end: float  # end of the English step; asr_end when the Armenian text is empty
+
+
 class AudioSource(Protocol):
     label: str  # the source label of its blocks; the name of its capture thread (D-054)
 

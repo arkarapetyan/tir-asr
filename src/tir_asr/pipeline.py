@@ -1,12 +1,13 @@
 """Pipeline: the warm-up, the threads, the segment queue, and the stop (ARCHITECTURE.md 2.6, 4).
 
-Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059, D-061. This module is core: it gets
-the adapters as arguments, and it imports no model and no audio-device package (D-021).
+Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059, D-061, D-062. This module is core:
+it gets the adapters as arguments, and it imports no model and no audio-device package (D-021).
 
 Threads (section 4): one capture thread for each audio source reads the blocks of its source,
 calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
-worker thread does ASR, then MT (if the text is not empty), then the speaker step (a source with
-a labeler, and a text that is not empty), then writes the block. The main thread waits for
+worker thread does the text step (the Armenian text, then the English text if the Armenian text
+is not empty; P1 or P4, D-062), then the speaker step (a source with a labeler, and a text that
+is not empty), then writes the block. The main thread waits for
 "done" (the end of all sources) or for the first error, or it gets Ctrl+C.
 
 The stop (D-061): at each end, the main thread sets the stop event and waits for all threads
@@ -25,19 +26,12 @@ from typing import TextIO
 
 import numpy as np
 
-from tir_asr.config import SAMPLE_RATE, WARMUP_AUDIO_S, WARMUP_TEXT, Params
+from tir_asr.config import SAMPLE_RATE, WARMUP_AUDIO_S, Params
 from tir_asr.errors import TirError
 from tir_asr.output import write_block
 from tir_asr.segment.endpoint import Endpointer
-from tir_asr.types import (
-    AudioSource,
-    Labeler,
-    Line,
-    SpeakerEmbedder,
-    SpeechProbability,
-    Transcriber,
-    Translator,
-)
+from tir_asr.text.step import TextStep
+from tir_asr.types import AudioSource, Labeler, Line, SpeakerEmbedder, SpeechProbability
 
 PROGRAM = "tir-asr"
 LISTENING = "Listening. Press Ctrl+C to stop."
@@ -54,29 +48,26 @@ Clock = Callable[[], float]
 
 
 def warm_up(
-    transcriber: Transcriber, translator: Translator, embedder: SpeakerEmbedder, clock: Clock
+    text_step: TextStep, embedder: SpeakerEmbedder, clock: Clock
 ) -> tuple[float, float, float]:
-    """Call each GPU model one time with a synthetic input (D-022, D-037, D-059).
+    """Call each GPU model one time with a synthetic input (D-022, D-037, D-059, D-062).
 
-    The speaker model gets the same zeros as the ASR model. The warm-up gets the embedder, not
-    the labeler, so it cannot change a clusterer. Return the ASR time, the MT time, and the
-    speaker time in seconds. The caller prints them.
+    The text step gets `WARMUP_AUDIO_S` of zeros (`TextStep.warm_up`: P1 also translates
+    `WARMUP_TEXT`). The speaker model gets the same zeros. The warm-up gets the embedder, not
+    the labeler, so it cannot change a clusterer. Return the time of the Armenian step, of the
+    English step, and of the speaker model in seconds. The caller prints them.
     """
     audio = np.zeros(int(WARMUP_AUDIO_S * SAMPLE_RATE), dtype=np.float32)
     start = clock()
-    transcriber.transcribe(audio)
-    asr_end = clock()
-    translator.translate(WARMUP_TEXT)
-    mt_end = clock()
+    text = text_step.warm_up(audio, clock)
     embedder.embed(audio)
     spk_end = clock()
-    return asr_end - start, mt_end - asr_end, spk_end - mt_end
+    return text.asr_end - start, text.mt_end - text.asr_end, spk_end - text.mt_end
 
 
 def run(
     sources: Sequence[tuple[AudioSource, SpeechProbability]],
-    transcriber: Transcriber,
-    translator: Translator,
+    text_step: TextStep,
     params: Params,
     clock: Clock,
     out: TextIO,
@@ -88,6 +79,7 @@ def run(
     `sources` has one (source, VAD) pair for each audio source. Each pair gets its own
     Endpointer and its own capture thread, with the name `capture <label>` (D-054). All
     capture threads put their segments in one queue, and one worker takes them in that order.
+    The worker gives the audio of each segment to `text_step` (P1 or P4, D-062).
     Ctrl+C or the end of all sources: the shutdown line, then 0. An error: the error line on
     `err`, no shutdown line, then 1 (D-042). In each case, `run()` returns only after the
     threads have stopped, or after `STOP_JOIN_S` (D-061).
@@ -136,14 +128,8 @@ def run(
             if segment is END:
                 ends += 1
                 continue
-            hy = transcriber.transcribe(segment.audio)
-            asr_end = clock()
-            if hy:
-                en = translator.translate(hy)
-                mt_end = clock()
-            else:  # D-031: no MT call for an empty text
-                en = ""
-                mt_end = asr_end
+            text = text_step.process(segment.audio, clock)  # D-031 is in the text step
+            hy = text.hy
             labeler = labelers.get(segment.source)
             if labeler is not None and hy:  # D-059 point 3: no speaker step for an empty text
                 label = labeler.label(segment)
@@ -158,11 +144,11 @@ def run(
                     label=label,
                     start=segment.start,
                     hy=hy,
-                    en=en,
+                    en=text.en,
                     speech_end=segment.speech_end,
                     closed=segment.closed,
-                    asr_end=asr_end,
-                    mt_end=mt_end,
+                    asr_end=text.asr_end,
+                    mt_end=text.mt_end,
                     write=clock(),
                     spk_end=spk_end,
                 )
@@ -230,7 +216,7 @@ def run(
 
     with output_lock:
         stopped.set()
-        not_processed = sum(queued) - counts["written"]  # in the queue, in ASR, or in MT
+        not_processed = sum(queued) - counts["written"]  # in the queue or in the worker
         short = sum(endpointer.short_segments for endpointer in endpointers)
         out.write(
             f"Stopped. Segments: {counts['written']}, short segments: {short}, "

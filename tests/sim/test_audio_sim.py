@@ -469,10 +469,10 @@ def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
     log = io.StringIO()
     log_versions(params, log)
     sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
-    vads, transcriber, translator, embedder = load_models(params, log, list(SIM_SINKS))
+    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS))
     for line in log.getvalue().splitlines():
         report(line)
-    asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+    asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
     report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
 
     recorded = [Recorded(source, count) for source in sources]
@@ -483,8 +483,7 @@ def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
     try:
         code = run(
             list(zip(recorded, vads, strict=True)),
-            transcriber,
-            translator,
+            text_step,
             params,
             time.monotonic,
             out,
@@ -601,10 +600,10 @@ def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
     log = io.StringIO()
     log_versions(params, log)
     sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
-    vads, transcriber, translator, embedder = load_models(params, log, list(SIM_SINKS))
+    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS))
     for line in log.getvalue().splitlines():
         report(line)
-    asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+    asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
     report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
     labeler = RecordedLabeler(speaker_labeler(embedder, params))
 
@@ -616,8 +615,7 @@ def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
     try:
         code = run(
             list(zip(recorded, vads, strict=True)),
-            transcriber,
-            translator,
+            text_step,
             params,
             time.monotonic,
             out,

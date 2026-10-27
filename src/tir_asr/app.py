@@ -1,9 +1,9 @@
 """The program: the startup log, the two sources, the model loads, the warm-up, and the pipeline.
 
-ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059. This module
-imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it only after the
-parse of the command line. Each startup line starts with "startup: ", so that it is easy to find
-between the lines that NeMo prints at its load (D-043, point 3).
+ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059, D-062.
+This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it only
+after the parse of the command line. Each startup line starts with "startup: ", so that it is
+easy to find between the lines that NeMo prints at its load (D-043, point 3).
 """
 
 import importlib.metadata
@@ -17,6 +17,7 @@ from tir_asr.errors import TirError
 from tir_asr.pipeline import PROGRAM, run, warm_up
 from tir_asr.speakers.cluster import CentroidClusterer
 from tir_asr.speakers.labeler import SpeakerLabeler
+from tir_asr.text.step import CascadeTextStep, TextStep
 
 PACKAGES = ["tir-asr", "torch", "nemo-toolkit", "ctranslate2", "silero-vad", "soundcard"]
 MIB = 2**20
@@ -64,11 +65,13 @@ def select_sources(mic: str | None, system: str | None, log: TextIO) -> list:
 def load_models(params: Params, log: TextIO, labels: list[str]):
     """Load ASR, MT, one VAD for each source label, and the speaker model, in this order.
 
+    ASR and MT make the P1 text step (`CascadeTextStep`, D-062).
+
     ASR loads first, so that a missing CUDA gives `asr: CUDA is not available` (D-043, point
     2a). The MT adapter loads the CUDA 12 cuBLAS before its `import ctranslate2` (D-030); no
     other module imports `ctranslate2`. Each source needs its own VAD, because the Silero model
     keeps its state (D-036, D-054). The speaker model loads last (D-057 part 6). Return
-    (vads, transcriber, translator, embedder).
+    (vads, text_step, embedder).
     """
     import torch
 
@@ -120,7 +123,8 @@ def load_models(params: Params, log: TextIO, labels: list[str]):
         f"speaker model loaded in {elapsed:.2f} s; "
         f"GPU memory used {spk_used} MiB ({spk_used - before:+d} MiB)",
     )
-    return vads, transcriber, translator, embedder
+    text_step: TextStep = CascadeTextStep(transcriber, translator)
+    return vads, text_step, embedder
 
 
 def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
@@ -161,8 +165,8 @@ def main(
     try:
         log_versions(params, out)
         sources = select_sources(mic, system, out)
-        vads, transcriber, translator, embedder = load_models(params, out, list(SOURCE_LABELS))
-        asr_s, mt_s, spk_s = warm_up(transcriber, translator, embedder, time.monotonic)
+        vads, text_step, embedder = load_models(params, out, list(SOURCE_LABELS))
+        asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
         log_line(out, f"warm-up ASR {asr_s:.2f} s, MT {mt_s:.2f} s, speaker {spk_s:.2f} s")
         labelers = {SPEAKER_SOURCE: speaker_labeler(embedder, params)}
     except KeyboardInterrupt:
@@ -180,7 +184,7 @@ def main(
         return 1
 
     pairs = list(zip(sources, vads, strict=True))
-    return run(pairs, transcriber, translator, params, time.monotonic, out, err, labelers)
+    return run(pairs, text_step, params, time.monotonic, out, err, labelers)
 
 
 def speaker_labeler(embedder, params: Params) -> SpeakerLabeler:

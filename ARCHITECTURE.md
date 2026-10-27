@@ -1,13 +1,13 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.27 · **Date:** 2026-10-27
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.28 · **Date:** 2026-10-27
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
 ## 1. Overview
 
-The program captures the microphone and the system audio (C4), cuts the audio of each source into speech segments, transcribes each segment to Armenian text, translates the text to English, gives each system-side segment a speaker label (C5), and prints one block for each segment.
+The program captures the microphone and the system audio (C4), cuts the audio of each source into speech segments, gives the Armenian text and the English text of each segment (the text step, §2.9: P1 transcribes, then translates), gives each system-side segment a speaker label (C5), and prints one block for each segment.
 Core modules have no model import and no audio-device import. Adapter modules hold the model and device code (D-021). Unit tests give fakes to the core modules.
 
 ```
@@ -19,8 +19,9 @@ Core modules have no model import and no audio-device import. Adapter modules ho
                                                  segment queue (unbounded)
                                                         │
                                    worker thread        ▼
-                                   asr: Transcriber (NeMo adapter, GPU) ──► Armenian text
-                                   mt:  Translator (CTranslate2 adapter, GPU) ──► English text
+                                   text: TextStep (core, §2.9); P1: CascadeTextStep
+                                     asr: Transcriber (NeMo adapter, GPU) ──► Armenian text
+                                     mt:  Translator (CTranslate2 adapter, GPU) ──► English text
                                    speakers ("System" only, text not empty): SpeakerLabeler (core)
                                         ◄── SpeakerEmbedder (TitaNet adapter, GPU) ──► "Speaker N"
                                    output: format_block (core) ──► terminal (one write for each block)
@@ -34,6 +35,7 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `segment` | core + adapter | `AudioBlock` | `Segment` | `SegmentError` | §2.2 |
 | `asr` | adapter | `Segment.audio` | Armenian text (`str`) | `AsrError` | §2.3 |
 | `mt` | adapter | Armenian text | English text (`str`) | `MtError` | §2.4 |
+| `text` | core (C6) | `Segment.audio` | `TextResult`: the Armenian text, the English text, and the end of each of the two steps | the errors of its adapters, with no change | §2.9 |
 | `speakers` | core + adapter (C5) | a system-side `Segment` | the label `"Speaker N"` | `SpeakerError` | §2.8 |
 | `output` | core | `Line` | one text block | none | §2.5 |
 | `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
@@ -93,7 +95,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 
 - **Adapter** `asr/nemo_rnnt.py` (`NemoRnntTranscriber`, D-037): `nvidia/stt_hy_fastconformer_hybrid_large_pc`, NeMo 3.0.0, RNNT decoder (`change_decoding_strategy(decoder_type="rnnt")`), on `cuda` (D-014).
 - **Load:** the constructor `NemoRnntTranscriber(repo, filename)` checks CUDA, then loads the `.nemo` file from the Hugging Face cache, with `local_files_only=True`. Nothing downloads at runtime. The defaults are the module constants `ASR_REPO` and `ASR_FILE`. They are model locations, not parameters (D-037).
-- **Warm-up (D-022, D-037):** the adapter has no warm-up method. The pipeline calls `transcribe` with `WARMUP_AUDIO_S` of zeros at startup (§2.6).
+- **Warm-up (D-022, D-037, D-062):** the adapter has no warm-up method. At startup, the text step calls `transcribe` with `WARMUP_AUDIO_S` of zeros (§2.6, §2.9).
 - **Contract:** `transcribe(audio)` takes float32, mono, 16 kHz audio and returns the Armenian text. The text can be empty. NeMo shows no progress bar (`verbose=False`).
 - **Errors:** `asr: CUDA is not available` (no CPU fallback, R10); `asr: model file not in the Hugging Face cache: <name>`; `asr: unexpected output type <type>`.
 - **Limits:** one segment for each call (batch size 1). [RUN] 0.027–0.036 s for each call after the warm-up, 987 MiB VRAM (T-INSTALL-02). The model writes commas where a person writes "։" (Q-06).
@@ -103,7 +105,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 - **Adapter** `mt/ct2_nllb.py` (`Ct2NllbTranslator`, D-037): `facebook/nllb-200-distilled-600M`, converted to CTranslate2 in `models/nllb-200-distilled-600M-ct2-float16`, on `cuda`, `compute_type = mt_compute_type` (D-015). Tokenizer: Transformers `AutoTokenizer` from the Hugging Face cache, source `hye_Armn`, target `eng_Latn`.
 - **CUDA 12 cuBLAS (D-030):** before `import ctranslate2`, the adapter loads `libcublasLt.so.12` and then `libcublas.so.12` from the package `nvidia-cublas-cu12` (`ctypes`, `RTLD_GLOBAL`). The file paths come from `importlib.metadata`. The program needs no `LD_LIBRARY_PATH`.
 - **Load:** the constructor `Ct2NllbTranslator(params, model_dir)` loads the model and the tokenizer. It reads `mt_compute_type` and `mt_beam_size` from `Params`. The default of `model_dir` is a module constant. It is a model location, not a parameter (D-037). The default is relative to the current folder, so the program must start in the project folder. The adapter checks for `model_dir/model.bin` before the load.
-- **Warm-up (D-022, D-037):** the adapter has no warm-up method. The pipeline calls `translate(WARMUP_TEXT)` at startup (§2.6).
+- **Warm-up (D-022, D-037, D-062):** the adapter has no warm-up method. At startup, the text step calls `translate(WARMUP_TEXT)` (§2.6, §2.9).
 - **Contract:** `translate(text)` takes a non-empty Armenian text and returns the English text.
 - **Errors:** `mt: CTranslate2 model not found: <path>` (the message gives the conversion command of C2: `HF_HUB_OFFLINE=1 uv run --no-sync ct2-transformers-converter --model facebook/nllb-200-distilled-600M --output_dir models/nllb-200-distilled-600M-ct2-float16 --quantization float16`); `mt: <file> not found in the package nvidia-cublas-cu12` (`<file>` is `libcublasLt.so.12` or `libcublas.so.12`); `mt: empty input text`.
 - **Limits:** each segment is translated alone, with no context (known limit: «նա» = he or she). [RUN] 0.066–0.132 s for each call after the warm-up (T-INSTALL-03). CTranslate2 limits the output to 256 tokens (library default) [UNVERIFIED].
@@ -141,10 +143,10 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 
 ### 2.6 `pipeline`
 
-- **Core** `pipeline.py` (D-042, D-054, D-059). `run(sources, transcriber, translator, params, clock, out, err, labelers=None) -> int` takes a list of `(source, vad)` pairs, one for each audio source, and a mapping from a source label to a `Labeler` (the program: `{"System": …}`). A source with no labeler keeps its source label. It builds one `Endpointer` for each pair, starts the threads (§4), and returns the exit code. Each capture thread has the name `capture <label>` (the `label` of its source). All capture threads put their segments in one queue, and the worker writes the blocks in the order in which the segments close. Thus the `[hh:mm:ss]` times of two sources are not always in sequence: a long segment of one source can come after a later, short segment of the other source. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
-- **Warm-up (D-022, D-037, D-042, D-059):** `warm_up(transcriber, translator, embedder, clock) -> (asr_s, mt_s, spk_s)` calls `transcribe` with `WARMUP_AUDIO_S` of zeros, then `translate(WARMUP_TEXT)`, then `embed` with the same zeros, and returns the three times. It gets the embedder, not the labeler, so it cannot change a clusterer. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
+- **Core** `pipeline.py` (D-042, D-054, D-059, D-062). `run(sources, text_step, params, clock, out, err, labelers=None) -> int` takes a list of `(source, vad)` pairs, one for each audio source, the text step (§2.9; the program: P1, `CascadeTextStep`), and a mapping from a source label to a `Labeler` (the program: `{"System": …}`). A source with no labeler keeps its source label. It builds one `Endpointer` for each pair, starts the threads (§4), and returns the exit code. Each capture thread has the name `capture <label>` (the `label` of its source). All capture threads put their segments in one queue, and the worker writes the blocks in the order in which the segments close. Thus the `[hh:mm:ss]` times of two sources are not always in sequence: a long segment of one source can come after a later, short segment of the other source. The clock is `time.monotonic` in the program and a fake clock in unit tests. `out` gets the blocks and the shutdown line; `err` gets the error line.
+- **Warm-up (D-022, D-037, D-042, D-059, D-062):** `warm_up(text_step, embedder, clock) -> (asr_s, mt_s, spk_s)` calls `text_step.warm_up` with `WARMUP_AUDIO_S` of zeros (P1: `transcribe` with the zeros, then `translate(WARMUP_TEXT)`, §2.9), then `embed` with the same zeros, and returns the three times. It gets the embedder, not the labeler, so it cannot change a clusterer. The caller prints them. It is separate from `run()`, so that the counts of the model calls in T-PIPE-03 stay correct.
 - **Session start (D-042):** `run()` takes the session start from the clock, prints "Listening. Press Ctrl+C to stop.", and only then starts the threads. Each source opens its stream at its first block (D-041). Thus no block time is before the session start.
-- **Worker:** for each segment, `transcribe`, then the ASR end from the clock. If the text is not empty: `translate`, then the MT end from the clock. If the text is empty: no MT call, and the MT end is the ASR end (D-031). Then, if the source has a labeler and the text is not empty: `label(segment)`, then the speaker step end from the clock (D-059); else the line keeps the source label and has no speaker step. Then the write time from the clock, and `write_block` (§2.5).
+- **Worker:** for each segment, `text_step.process(segment.audio, clock)` gives the Armenian text, the English text, the ASR end, and the MT end (§2.9). The text step reads the clock: after the Armenian step, and after the English step if the text is not empty. An empty text gets no English step, and the MT end is the ASR end (D-031). Then, if the source has a labeler and the text is not empty: `label(segment)`, then the speaker step end from the clock (D-059); else the line keeps the source label and has no speaker step. Then the write time from the clock, and `write_block` (§2.5).
 - **Stop (D-042):**
   - Ctrl+C: the shutdown line, then exit code 0. Ctrl+C takes effect within `STOP_POLL_S` (0.5 s, D-044). The open segments, the segments in the queue, and a segment in ASR or MT are not processed. "Not processed" in the shutdown line counts the segments in the queue and in ASR or MT; it does not count the open segments of the `Endpointer`s. Aren accepted this risk: a Ctrl+C right after the last phrase can lose that line. T-PIPE-11 (unit test), T-E2E-02 (model test), and L-02 check this path.
   - End of the sources (tests and the WAV source only, D-025): each capture thread puts an end mark in the queue at the end of its source. The worker continues until it has the end mark of each source (D-054, T-PIPE-07), and then the shutdown line comes, with exit code 0.
@@ -178,7 +180,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   | 7. Warm-up (§2.6) | `pipeline.warm_up`, called by `app.main` | `startup: warm-up ASR <s> s, MT <s> s, speaker <s> s` |
   | 8. "Listening" and the session start | `pipeline.run` (§2.6) | `Listening. Press Ctrl+C to stop.` |
 
-- **Load order (D-043, point 2a, D-057 part 6):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD, then the speaker model. `load_models(params, log, labels)` returns `(vads, transcriber, translator, embedder)`. `app.speaker_labeler(embedder, params)` builds the labeler of `"System"`: `SpeakerLabeler(embedder, CentroidClusterer(params.spk_threshold, params.spk_min_new_s))` (D-058). `soundcard` loads before `torch` (step 2); [RUN] T-E2E-02 and T-SIM-01 pass with this order. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
+- **Load order (D-043, point 2a, D-057 part 6):** ASR first, so that a missing CUDA gives `asr: CUDA is not available` before any other GPU call. Then MT, then VAD, then the speaker model. `load_models(params, log, labels)` returns `(vads, text_step, embedder)`; the text step is `CascadeTextStep(transcriber, translator)` (P1, §2.9, D-062). `app.speaker_labeler(embedder, params)` builds the labeler of `"System"`: `SpeakerLabeler(embedder, CentroidClusterer(params.spk_threshold, params.spk_min_new_s))` (D-058). `soundcard` loads before `torch` (step 2); [RUN] T-E2E-02 and T-SIM-01 pass with this order. The MT adapter loads the CUDA 12 cuBLAS before its own `import ctranslate2`; no other module imports `ctranslate2`. [RUN] torch and NeMo before the MT adapter in one process: T-MODEL-MT-01 passes with no `LD_LIBRARY_PATH` (c2d-pipeline model run).
 - **GPU memory:** `torch.cuda.mem_get_info()` gives the used memory of the full device, so the MT line also counts CTranslate2. The change in brackets has its sign (`+1664`, `-256`). [RUN] The device value can go down at a later load: in the program it goes down by 256 MiB at the speaker model load. The probe of C5 (`test-results/c5-probe-spk-load.txt`) shows that the TitaNet load takes 196 MiB from the torch cache that is already reserved (918 MiB before and after), so the device value does not grow; the cause of the −256 MiB is [UNVERIFIED] (probably CTranslate2 after its load). The TitaNet load does not change the torch CPU threads (1 before and after).
 - **NeMo lines (D-043, point 3):** NeMo prints about 185 lines at its load. M1 does not hide them (R10). C7 decides again.
 - **Errors and Ctrl+C during the startup (D-043, point 4):** a `TirError` gives `tir-asr: <message>` and exit code 1. Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>`, and exit code 1. Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
@@ -205,6 +207,19 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   - One embedding for each segment, so a segment with two voices gets one label: the label of the voice with more speech. The VAD cuts only after `vad_min_silence_ms` (500 ms) of silence, so a fast change of speaker or an interruption gives such a segment. Its embedding also updates the centroid of that speaker. [RUN] L-06 (Q-04). C7 measures a shorter `vad_min_silence_ms` (D-060).
   - An embedding from a noise can start a new speaker when the noise is `min_new_s` or longer, after the first speaker (Q-14). C7 measures the VAD options for noises (D-060).
 
+### 2.9 `text`
+
+- **Purpose (D-053, D-062):** the text step gives the Armenian text and the English text of one segment. P1 (the default) and P4 (the flag `--seamless`, branch `c6-cli`) are two subclasses of one abstract class, so that the pipeline is the same for both.
+- **Core** `text/step.py` (branch `c6-textstep`, D-062 part 2): the abstract class `TextStep`, with the Template Method pattern.
+  - `process(audio, clock) -> TextResult` is a template method: `state = _prepare(audio)`; `hy = _armenian(state)`; then the clock gives `asr_end`. If `hy` is empty, there is no `_english` call: `en` is `""` and `mt_end` is `asr_end` (D-031). Else `en = _english(state, hy)`, and then the clock gives `mt_end`. Thus a text gives two clock reads, and an empty text gives one.
+  - `warm_up(audio, clock) -> TextResult` is a template method (D-022, D-037): the same steps, but `_english(state, WARMUP_TEXT)` always runs, also when `hy` is empty (zeros normally give no text). P1 translates `WARMUP_TEXT`; P4 does not use it.
+  - The hooks: `_prepare(audio)` (default: the audio, with no work), `_armenian(state) -> str` (abstract), and `_english(state, hy) -> str` (abstract). `_armenian` and `_english` get the state of the same `_prepare` call. A subclass defines only the hooks, not `process` or `warm_up` (T-TEXT-04).
+  - An exception of a hook goes up with no change (R10), and the pipeline stops (§2.6).
+  - `CascadeTextStep(transcriber, translator)` is P1: `_armenian` is `transcriber.transcribe(audio)` (§2.3), and `_english` is `translator.translate(hy)` (§2.4). The adapters do not change.
+- **Adapter** `text/seamless.py` (P4, `SeamlessTextStep`): branch `c6-seamless`, with the variant of D-063.
+- **Latency line (D-062 part 3, option (a)):** the steps `asr` (from `closed` to `asr_end`) and `mt` (from `asr_end` to `mt_end`), as before (§2.5).
+- **Weak point (D-062 part 2):** the hooks of P4 share the state of `_prepare`, so the hooks have a fixed order.
+
 ## 3. Data types (core, `types.py`)
 
 All times are `time.monotonic()` values in seconds. All audio is float32, mono, 16 kHz, normally in [−1, 1]. A loud input can give values a little outside (probe B: −1.0496, D-041).
@@ -225,6 +240,8 @@ All times are `time.monotonic()` values in seconds. All audio is float32, mono, 
 | | `hy`, `en` | `str` | Armenian text, English text. |
 | | `speech_end`, `closed`, `asr_end`, `mt_end`, `write` | `float` | The times of §2.5. |
 | | `spk_end` | `float \| None` | The end of the speaker step; `None` with no speaker step (D-059). Default `None`. |
+| `TextResult` (D-062) | `hy`, `en` | `str` | Armenian text (`""` for no text), English text (`""` when the Armenian text is empty). |
+| | `asr_end`, `mt_end` | `float` | The end of the Armenian step and of the English step; `mt_end` = `asr_end` for an empty text (D-031). |
 
 Interfaces (core, `typing.Protocol`):
 
@@ -237,6 +254,8 @@ Interfaces (core, `typing.Protocol`):
 | `SpeakerEmbedder` | `embed(audio) -> np.ndarray` (one dimension) | TitaNet (D-058) | a fixed vector |
 | `Labeler` | `label(segment) -> str` (`"Speaker N"` or `"Unidentified"`) | `SpeakerLabeler` (core, §2.8) | a list of labels |
 
+The text step is an abstract class, not a Protocol, because it holds the template methods: `TextStep` in `text/step.py` (§2.9). The unit tests use `CascadeTextStep` with the fake transcriber and the fake translator, or a recorder subclass.
+
 The WAV file source is test code only (D-025). It is in `tests/support/`, not in the package. It plays the clips at real-time speed and gives only whole frames; it drops the last part of a clip that is shorter than one frame. It adds no silence (D-032): a clip must end with at least 512 ms of silence, or the test fails.
 
 ## 4. Data flow, threads, and queues
@@ -245,7 +264,7 @@ The WAV file source is test code only (D-025). It is in `tests/support/`, not in
 |---|---|---|
 | Main | Startup (§2.7), then it waits for Ctrl+C, for "done", or for an error from a thread. | the event queue |
 | Capture (one for each source, name `capture <label>`) | Reads the blocks of its source, calls the `Endpointer.push` of its source (which calls the `SpeechProbability` of its source), puts each `Segment` in the segment queue. At the end of its source (tests only), it puts an end mark. | `record()` |
-| Worker (one) | Gets a `Segment`, calls ASR, then MT (if the text is not empty), then the speaker step (`"System"`, text not empty), then writes the block. After the end mark of each source, it puts "done" in the event queue. | the segment queue |
+| Worker (one) | Gets a `Segment`, calls the text step (§2.9; P1: ASR, then MT if the text is not empty), then the speaker step (`"System"`, text not empty), then writes the block. After the end mark of each source, it puts "done" in the event queue. | the segment queue |
 
 - **Segment queue:** one `queue.Queue` for all sources, with no size limit (D-029). A slow worker shows as a larger `asr` step on each line.
 - **One worker thread** uses the GPU, so the GPU models run one at a time.
@@ -442,3 +461,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.25 | 2026-10-27 | C5, branch `c5-pipeline` (§1, §2, §2.5–§2.8, §3, §4, §6, §7, §8.2), D-058, D-059: the speaker step in the worker (`SpeakerLabeler`, `labelers` in `run()`, no step for an empty text); the `spk` latency step; `Line.spk_end`; `warm_up` with the embedder; the speaker model load; the TitaNet adapter in `speakers/titanet.py`; the parameters `spk_threshold` and `spk_min_new_s`. |
 | 0.26 | 2026-10-27 | C5, branch `c5-pipeline` (§2.5, §2.8, §3, §6, §8.2), D-060: a short first segment gets no label (`assign` gives `None`) and the labeler gives `"Unidentified"`; `label_accuracy` counts a segment with no label as an error; the L-06 limits (two voices in one segment, noise); the parameters kept after L-06. |
 | 0.27 | 2026-10-27 | C5, branch `c5-stop` (§2.6, §4, §5, §7), D-061: the clean stop: `run()` waits for all threads with the limit `STOP_JOIN_S` (2.0 s) before it returns; the capture threads close their audio streams; the error line for a thread that does not stop. |
+| 0.28 | 2026-10-27 | C6, branch `c6-textstep` (§1, §2, §2.3, §2.4, §2.6, §2.7, new §2.9, §3, §4), D-062: the text step `TextStep` (Template Method) with `CascadeTextStep` (P1); `TextResult`; `run()` and `warm_up()` get one text step; `load_models` returns `(vads, text_step, embedder)`. No change of behaviour. |

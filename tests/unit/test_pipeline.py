@@ -1,7 +1,10 @@
 """T-PIPE-01 to T-PIPE-13: the pipeline with fakes (C2d, C4, C5 `c5-pipeline` and `c5-stop`).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
-D-042, D-054, D-059. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
+D-042, D-054, D-059, D-062. C6 (`c6-textstep`, D-062 part 2): `run()` and `warm_up()` get the P1
+text step (`CascadeTextStep`) with the fake transcriber and the fake translator. The inputs, the
+clock values, and the expected results did not change, so the tests show that the text step
+changes no behaviour. Frame k arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s
 (TESTS.md 2.4). Only the main thread and the worker call the fake clock. Thus the times are the
 same in each run, and a clock call that the contract does not need makes the test fail.
 
@@ -31,6 +34,7 @@ from tir_asr.errors import TirError
 from tir_asr.pipeline import run, warm_up
 from tir_asr.speakers.cluster import CentroidClusterer
 from tir_asr.speakers.labeler import SpeakerLabeler
+from tir_asr.text.step import CascadeTextStep
 from tir_asr.types import AudioBlock
 
 FRAME_S = VAD_FRAME / SAMPLE_RATE  # 0.032 s
@@ -214,8 +218,7 @@ def start(frames, regions, transcriber, translator, clock):
     out, err = io.StringIO(), io.StringIO()
     code = run(
         [(FakeSource(frames), FakeVad(probabilities(frames, regions)))],
-        transcriber,
-        translator,
+        CascadeTextStep(transcriber, translator),
         Params(),
         clock,
         out,
@@ -277,8 +280,7 @@ def test_pipe_02_error_in_the_capture_thread():
 
     code = run(
         [(FakeSource(10), FakeVad([1.2] * 10))],
-        FakeTranscriber([]),
-        FakeTranslator(),
+        CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
         Params(),
         FakeClock([0.0]),
         out,
@@ -332,7 +334,7 @@ def test_pipe_05_warm_up_calls_each_model_once():
     SpeakerLabeler(embedder, clusterer)  # the program labeler holds the same embedder
 
     asr_s, mt_s, spk_s = warm_up(
-        transcriber, translator, embedder, FakeClock([10.0, 10.4, 10.5, 10.53])
+        CascadeTextStep(transcriber, translator), embedder, FakeClock([10.0, 10.4, 10.5, 10.53])
     )
 
     assert len(transcriber.calls) == 1
@@ -359,8 +361,7 @@ def test_pipe_06_two_sources_give_labelled_blocks_and_summed_counts():
             (me, FakeVad(probabilities(50, [(5, 24)]))),
             (system, FakeVad(probabilities(100, [(30, 36), (60, 79)]))),  # 30-36: short
         ],
-        FakeTranscriber(["բարև", "բարև"]),
-        translator,
+        CascadeTextStep(FakeTranscriber(["բարև", "բարև"]), translator),
         Params(),
         clock,
         out,
@@ -398,8 +399,7 @@ def test_pipe_07_done_only_after_the_end_of_each_source():
                 (me, FakeVad([SILENCE] * 20)),
                 (system, FakeVad(probabilities(50, [(5, 24)]))),
             ],
-            FakeTranscriber(["բարև"]),
-            FakeTranslator("hi"),
+            CascadeTextStep(FakeTranscriber(["բարև"]), FakeTranslator("hi")),
             Params(),
             FakeClock([0.0, 1.400, 1.500, 1.510]),
             out,
@@ -434,8 +434,7 @@ def test_pipe_08_error_line_names_the_capture_thread_of_the_source():
 
     code = run(
         [(FakeSource(10), FakeVad([SILENCE] * 10)), (system, FakeVad([]))],
-        FakeTranscriber([]),
-        FakeTranslator(),
+        CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
         Params(),
         FakeClock([0.0]),
         out,
@@ -462,8 +461,7 @@ def test_pipe_09_system_lines_get_the_speaker_label_and_the_spk_step():
             (me, FakeVad(probabilities(50, [(5, 24)]))),
             (system, FakeVad(probabilities(140, [(30, 36), (60, 79), (100, 119)]))),
         ],
-        FakeTranscriber(["բարև", "բարև", ""]),
-        FakeTranslator("hi"),
+        CascadeTextStep(FakeTranscriber(["բարև", "բարև", ""]), FakeTranslator("hi")),
         Params(),
         clock,
         out,
@@ -501,8 +499,7 @@ def test_pipe_10_error_in_the_labeler():
 
     code = run(
         [(FakeSource(111, label="System"), FakeVad(probabilities(111, [(5, 24)])))],
-        FakeTranscriber(["բարև"]),
-        FakeTranslator("hi"),
+        CascadeTextStep(FakeTranscriber(["բարև"]), FakeTranslator("hi")),
         Params(),
         FakeClock([0.0, 1.400, 1.500]),
         out,
@@ -534,8 +531,7 @@ def test_pipe_11_ctrl_c_closes_the_sources_and_ends_the_threads():
 
     code = run(
         [(source, EndlessVad())],
-        FakeTranscriber([]),
-        FakeTranslator(),
+        CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
         Params(),
         FakeClock([0.0]),
         out,
@@ -562,8 +558,7 @@ def test_pipe_12_an_error_closes_the_sources_and_ends_the_threads():
 
     code = run(
         [(source, EndlessVad([(5, 24)]))],
-        transcriber,
-        FakeTranslator(),
+        CascadeTextStep(transcriber, FakeTranslator()),
         Params(),
         FakeClock([0.0]),
         out,
@@ -593,8 +588,7 @@ def test_pipe_13_a_thread_that_does_not_stop_gives_an_error_line(monkeypatch):
     try:
         code = run(
             [(source, EndlessVad())],
-            FakeTranscriber([]),
-            FakeTranslator(),
+            CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
             Params(),
             FakeClock([0.0]),
             out,
