@@ -45,6 +45,9 @@ REQUIRED = {
     "tir_asr.eval.metrics",
     "tir_asr.eval.data",
     "tir_asr.eval.run",
+    "tir_asr.speakers",
+    "tir_asr.speakers.cluster",
+    "tir_asr.eval.nearest",
 }
 
 CHECK = """

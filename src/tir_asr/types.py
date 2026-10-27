@@ -64,3 +64,7 @@ class Transcriber(Protocol):
 
 class Translator(Protocol):
     def translate(self, text: str) -> str: ...
+
+
+class SpeakerEmbedder(Protocol):
+    def embed(self, audio: np.ndarray) -> np.ndarray: ...  # one speaker embedding, one dimension

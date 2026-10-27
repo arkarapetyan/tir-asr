@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.21 · **Date:** 2026-10-26
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.22 · **Date:** 2026-10-27
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 change (C5) applies D-057. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -32,7 +32,7 @@ Core modules have no model import and no audio-device import. Adapter modules ho
 | `segment` | core + adapter | `AudioBlock` | `Segment` | `SegmentError` | §2.2 |
 | `asr` | adapter | `Segment.audio` | Armenian text (`str`) | `AsrError` | §2.3 |
 | `mt` | adapter | Armenian text | English text (`str`) | `MtError` | §2.4 |
-| `speakers` | (C5) | | | | |
+| `speakers` | core (C5); the embedding adapter comes in `c5-pipeline` | a speaker embedding and the speech time of a segment | the label `"Speaker N"` | `SpeakerError` | §2.8 |
 | `output` | core | `Line` | one text block | none | §2.5 |
 | `pipeline` | core | the modules above | threads, queue, stop, exit code | the first error of a thread | §2.6 |
 | `errors` | core | — | `TirError`, the base class of the module errors | — | §2.6 |
@@ -177,6 +177,23 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 - **Errors and Ctrl+C during the startup (D-043, point 4):** a `TirError` gives `tir-asr: <message>` and exit code 1. Any other exception gives its traceback, then `tir-asr: startup: <type>: <message>`, and exit code 1. Ctrl+C before "Listening" gives `Stopped during the startup.` and exit code 0.
 - **Stop:** §2.6 (Ctrl+C, the shutdown line, the exit codes).
 
+### 2.8 `speakers`
+
+- **Purpose (F4, D-057):** each line of the system side gets `"Speaker 1"`, `"Speaker 2"`, and so on. One person keeps the same label for the full session. The microphone side stays `"Me"`. The pipeline part (the embedding adapter, the call in the worker, and the `spk` step) comes in the branch `c5-pipeline`.
+- **Core** `speakers/cluster.py` (branch `c5-cluster`):
+  - `OnlineClusterer(threshold, min_new_s)` is an abstract class with the shared steps (Template Method). A subclass gives only `_add` (a new speaker), `_similarities` (the cosine similarity to each speaker), and `_update` (one more embedding for a speaker).
+  - `CentroidClusterer` (rule A, D-057 part 4) is the program rule: the similarity to the centroid of each speaker. The centroid is the mean of the speaker's embeddings (each with length 1), scaled to length 1.
+  - `assign(embedding, duration_s) -> str` gives the label of one segment. `duration_s` is the speech time of the segment. The steps:
+    1. Check the embedding, and make its length 1 (L2 norm).
+    2. With no speaker yet, the embedding starts `"Speaker 1"`, also for a short segment.
+    3. A segment with `duration_s < min_new_s` gets the label of the most similar speaker. It starts no new speaker and changes no speaker (D-057 part 5B).
+    4. Else, if the highest similarity is `threshold` or more, the segment gets that speaker, and the speaker is updated. If not, it starts a new speaker.
+  - On equal similarities, the speaker that came first wins. The labels are in the order of the first segment of each speaker. A label never changes after `assign` gives it.
+  - The attribute `count` gives the number of speakers so far.
+- **Errors:** `speakers: threshold <t> is not in [-1, 1]`; `speakers: min_new_s <s> is negative`; `speakers: embedding has shape <shape>, expected one dimension`; `speakers: embedding has <n> values, expected <m>` (the size of the first embedding); `speakers: embedding has values that are not finite`; `speakers: embedding has zero length`. `SpeakerError` is in `speakers/cluster.py`.
+- **Parameters:** `threshold` and `min_new_s` are arguments in `c5-cluster`. They become the parameters `spk_threshold` and `spk_min_new_s` in `c5-pipeline`, after Aren sets the values from the sweep and from L-06 (R10). Start value of `spk_min_new_s`: 1.0 s (D-057 part 5B).
+- **Limits:** one embedding for each segment, so a segment with two voices gets one label (Q-04). An embedding from a noise can start a new speaker when the noise is `min_new_s` or longer (Q-14).
+
 ## 3. Data types (core, `types.py`)
 
 All times are `time.monotonic()` values in seconds. All audio is float32, mono, 16 kHz, normally in [−1, 1]. A loud input can give values a little outside (probe B: −1.0496, D-041).
@@ -205,6 +222,7 @@ Interfaces (core, `typing.Protocol`):
 | `SpeechProbability` | `__call__(samples) -> float` | Silero VAD | a list of numbers |
 | `Transcriber` | `transcribe(audio) -> str` | NeMo RNNT | a fixed text |
 | `Translator` | `translate(text) -> str` | CTranslate2 NLLB | a fixed text |
+| `SpeakerEmbedder` | `embed(audio) -> np.ndarray` (one dimension) | the model that D-057 selects (`c5-pipeline`) | a fixed vector |
 
 The WAV file source is test code only (D-025). It is in `tests/support/`, not in the package. It plays the clips at real-time speed and gives only whole frames; it drops the last part of a clip that is shorter than one frame. It adds no silence (D-032): a clip must end with at least 512 ms of silence, or the test fails.
 
@@ -326,6 +344,8 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `wer(refs, hyps)` and `cer(refs, hyps) -> float`: `normalize_hy` on each text, then words (WER) or characters with the spaces (CER). The result is the total edits divided by the total reference length, for the full list.
   - `chrf(refs, hyps) -> float`: `sacrebleu` `CHRF()` with its default values (character order 6, word order 0, beta 2), for the full list, 0 to 100. The English text gets no normalization.
   - `digit_words(texts) -> int`: the number of normalized words with a digit (D-047, N1).
+  - `label_accuracy(truths, labels, weights) -> float` (branch `c5-cluster`, D-057 part 2): the label accuracy after the best one-to-one mapping of the labels to the true speakers (`scipy.optimize.linear_sum_assignment`, maximum matched weight). The weight of a segment is its speech time, or 1 for a count. A label with no true speaker, and a true speaker with no label, count as errors. The result is the matched weight divided by the total weight.
+  - Errors of `label_accuracy`: `metrics: <n> true speakers, <m> labels, and <k> weights`; `metrics: no segments`; `metrics: weight <w> is not positive`.
   - Errors: `MetricError(TirError)`: `metrics: <n> references and <m> hypotheses`; `metrics: the references have no words`.
   - Dependency: `sacrebleu` in the dev group (CI installs it).
 - **`data.py`** (branch `c3-data`, D-046, D-048, D-049):
@@ -350,7 +370,8 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `opus-ct2` (`opus_ct2.py`, `OpusCt2Translator`): `Helsinki-NLP/opus-mt-hy-en`, converted to CTranslate2 in `models/opus-mt-hy-en-ct2-float16` (float16), on `cuda`, with `mt_compute_type` and `mt_beam_size`. Its `ctranslate2` import comes after the cuBLAS preload of `tir_asr.mt.ct2_nllb` (D-030).
   - `buzz-whisper` (`buzz_whisper.py`, `BuzzWhisperTranscriber`): `BuzzASR/armenian` (Whisper-large-v3, full fine-tune) on Transformers, float16, `cuda`. `generate(num_beams=1, no_repeat_ngram_size=3, repetition_penalty=1.2)`, from the model card.
   - `seamless` (`seamless.py`): `facebook/seamless-m4t-v2-large` on Transformers, float16, `cuda`, with the default generate values. `SeamlessSpeech` (`SeamlessM4Tv2ForSpeechToText`) gives the ASR (`tgt_lang="hye"`) and the end-to-end English (`"eng"`, runner name `seamless-s2tt`, with `--asr seamless` and no second load). `SeamlessText` (`SeamlessM4Tv2ForTextToText`) gives the MT (`src_lang="hye"`, `tgt_lang="eng"`).
-- The next C3 branches add their contracts here.
+- **`nearest.py`** (branch `c5-cluster`, D-057 part 4): `NearestClusterer(threshold, min_new_s)`, rule B-max, for the threshold sweep only. It subclasses `OnlineClusterer` (§2.8) and keeps all embeddings of each speaker. The similarity to a speaker is the highest cosine similarity to one of its embeddings. The program keeps only one rule (D-057).
+- The next branches add their contracts here.
 
 ## 9. Open points for Aren (C2)
 
@@ -382,3 +403,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.19 | 2026-10-26 | C4, branch `c4-audio` (§2.1, §3, §7), D-054: `SoundcardSource(label, device)` in `audio/soundcard_source.py` replaces `SoundcardMicrophone`; the device id is required; the adapter functions `list_sources`, `default_microphone_id`, and `default_system_id`; the core module `audio/devices.py` (`SourceInfo`, `format_source_list`); the source label `"System"`; new errors. |
 | 0.20 | 2026-10-26 | C4, branch `c4-pipeline` (§1, §2.6, §3, §4), D-054: `run(sources, …)` with one `(source, vad)` pair, one `Endpointer`, and one capture thread `capture <label>` for each source; one queue and one worker; "done" after the end mark of each source; the sums in the shutdown line; the attribute `label` of `AudioSource`; the text of "not processed" agrees with the code. |
 | 0.21 | 2026-10-26 | C4, branch `c4-cli` (§2.7), D-054: the flags `--mic`, `--system`, and `--list-devices`; `app.log_versions`, `app.select_sources`, and `app.list_devices`; the sources before the model load; one VAD for each source; the new startup sequence. |
+| 0.22 | 2026-10-27 | C5, branch `c5-cluster` (§2, §2.8, §3, §8.2), D-057: the core module `speakers/cluster.py` (`OnlineClusterer`, `CentroidClusterer`, `SpeakerError`); the interface `SpeakerEmbedder`; `label_accuracy` in `metrics.py`; the eval rule `NearestClusterer` in `nearest.py`. |
