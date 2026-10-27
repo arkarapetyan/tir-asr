@@ -1280,3 +1280,46 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** part 2: "1. A"; part 3: "2. A"; part 4: "3. b"; part 5: "4. AGREE"; part 6: "5. Agree"; part 7: "6. Agree"; part 8: "7. B"; part 9: "8. B"; tests: "agree on the tests"; part 11: "agree on the time box"; the goal of C6: "agree on the goal"; part 1: "proceed". Aren gave no other reason.
 - **Questions raised:** Claude (R16, one time): C0 to C5 took about 19.35 h; with C7 and C8 (2.5 h), the total is about 21.9 h before C6, over the 20 h of the brief. Aren keeps C6 (D-056) with the time box of part 11.
 - **Revisit when:** the probe shows that V2 is much faster than V1 (parts 2 and 3); V2 costs about 2 times V1 for each decode step (part 8); or the CPU numbers meet K1 (part 9).
+
+## D-063. P4 settings from the probe, the P4 latency step, and no CPU mode (C6)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-062 part 1: the probe `scripts/probe_p4.py` measures the P4 variants, and D-063 selects one. The probe also gives the facts for the revisit conditions of D-062 parts 2, 3, 8, and 9.
+- **Facts [RUN, Aren's laptop, 2026-10-27; `test-results/c6-probe-gpu.txt`, `test-results/c6-probe-cpu.txt`, `test-results/bakeoff/p4-probe-*.json`; table in `docs/eval/results.md`, "P4 variants (C6)"]:**
+  - GPU, float16, the 34 segments of S1–S3:
+
+    | Variant | WER | CER | chrF | Line mean / max | Texts as V0 | Decode steps (mean) |
+    |---|---|---|---|---|---|---|
+    | V0: two full calls (C3) | 6.8 % | 2.3 % | 59.0 | 0.661 / 0.829 s | 34 of 34 | 45.9 |
+    | V1: one encoder pass, two decodes | 6.8 % | 2.3 % | 59.0 | 0.586 / 0.744 s | 34 of 34 | 45.9 |
+    | V2: one call for both lines | 7.1 % | 2.3 % | 59.0 | 0.337 / 0.443 s | 32 of 34 | 24.8 |
+
+  - V0 gives the C3 numbers again (WER 6.8 %, chrF 59.0, maximum 0.83 s).
+  - The model sets no `num_beams`, so `generate` is greedy (1 beam); `max_new_tokens` = 256. Thus V1g and V2g did not run.
+  - V2: the English text is the same as V0 on all 34 segments. Two Armenian texts differ by one character: «:» became «։» (no WER change after the normalization), and «պատշգամբում» became «պատճգամբում» (1 word of 397, the +0.3 point of WER).
+  - One decode step with a batch of two takes 1.02 times the step with a batch of one (12.3 ms against 12.1 ms).
+  - VRAM: 2884 MiB after the load; the peak torch memory is 2955 MiB for each variant.
+  - CPU: 8 fast cores (2 at 5.4 GHz, 6 at 5.3 GHz) and 16 slow cores (4.7 GHz). The 3 segments of the C3 probe, line time for each segment: float32 with 24 threads V0 5.2–50.5 s, V2 15.3–29.5 s; float32 with 8 threads V0 4.1–6.1 s, V1 3.4–4.7 s, V2 2.7–3.9 s; INT8 (`quantize_dynamic`, `nn.Linear`) with 8 threads, V2: 1.18–1.76 s.
+  - The decode steps do not explain the CPU times: s3-01 has 23 + 22 steps and took 50.5 s with 24 threads and 4.1 s with 8 threads.
+  - INT8 on the CPU: the Armenian texts are the same as float32, except one first letter that is not a capital. The English texts differ in some words; chrF 61.5 against 59.7 (3 segments only). torch 2.14.1 prints "torch.ao.quantization is deprecated and will be removed in 2.10", but the function works.
+- **Parts, options, Claude's preference, and decision:**
+  1. **P4 variant on the GPU.** **A.** V2. **B.** V1. **C.** V0.
+     - Claude's preference: A. Weak points: the adapter calls the base `GenerationMixin.generate` (a detail of the transformers code, because the Seamless `generate` with no `tgt_lang` writes a warning at each call); a transformers update can break it, and T-MODEL-P4-01 then shows it. In float16, the batch of two gives a small difference in 2 of 34 Armenian texts. Fact that can show A is wrong: T-PERF-P4-01 gives a WER above 7.6 %.
+     - **Decision:** A.
+  2. **Latency line (D-062 parts 2 and 3, revisit: V2 is 42 % faster than V1).** **(a)** Keep `asr` and `mt`: a P4 line then shows `mt 0.00s`. **(b)** The text step gives its step names: P1 keeps `asr` and `mt`, and P4 shows one step, `s2t`, from the segment close to the end of both texts.
+     - Claude's preference: (b), because an interviewer can read `mt 0.00s` as a measurement error, and the brief asks for the latency of each step. Weak points: one more field in `Line` and one more branch in `format_block`; the P4 lines have a different format from the P1 lines. New tests: T-OUT-06 (the output) and T-PIPE-14 (the pipeline gives the step names of the text step to the line).
+     - **Decision:** (b). The Template Method of D-062 part 2 stays.
+  3. **INT8 on the GPU (D-062 part 8):** not measured. A batch of two costs 1.02 times a batch of one, so the decode waits for the CPU, and INT8 cannot make it faster. **Decision:** no INT8 on the GPU.
+  4. **CPU mode (D-062 part 9).** The condition of the rule occurred on 3 segments: with INT8 and 8 threads, the longest P4 line is 1.76 s, and with the VAD wait of 0.5 s about 2.3 s, under K1 [calc].
+     - **A.** Follow the rule now: `--device cpu` for P1 and P4. It needs a device argument in four adapters, new parameters (`cpu_threads` = 8 for this laptop; INT8 for Seamless and CTranslate2), the threads set after the Silero import (Silero sets 1 thread for the process), and CPU model tests. About 1–1.5 h more [UNVERIFIED estimate], over the C6 time box.
+     - **B.** Change the rule: no CPU mode in C6. The README gives the CPU numbers as a limit and as a possible next step.
+     - **C.** A CPU mode for P4 only (about 0.75 h).
+     - Claude's preference: B, because of K4 (the interview laptop has its GPU, D-056) and the time budget. Weak point: the program needs an NVIDIA GPU, although P4 with INT8 can meet K1 on this CPU. Claude (R14): B changes the rule that Aren set in D-062 part 9.
+     - **Decision:** B. Also: T-PERF-P4-01 part (b) and T-MODEL-P4-02 part (c) leave the tests; the P4 adapter is CUDA only, as the other GPU adapters (`text: CUDA is not available`, R10). The CPU numbers in the README come from the probe.
+  5. **T-PERF-P4-01 limits** (GPU, V2, 34 segments): WER ≤ 7.6 %, chrF ≥ 58.5, line mean ≤ 0.40 s, line maximum ≤ 0.55 s. Reason: the V2 values with a margin of 0.5 point for the quality and about 25 % for the times. Weak point: one run only. **Decision:** as proposed.
+  6. **Generate values:** greedy and `max_new_tokens` 256 are the defaults of the model. No new parameter (R10); the startup line of P4 shows the two values.
+  7. **Adapter `SeamlessTextStep`** (`text/seamless.py`): `_prepare` makes the features, does one encoder pass, and calls the base `generate` one time with the rows `hye` and `eng`, with a new `BaseModelOutput` (the base `generate` changes the given encoder output in place for the beams [SOURCE: transformers 5.20.2, `_expand_dict_for_generation`]). `_armenian` and `_english` give the two texts of the state. `TextError` is in `text/step.py`.
+- **Tests:** `TESTS.md` §2.8.
+- **Reason (Aren's words):** "1. A", "2. B", "3. No need for INT8 on GPU", "4. B", "5. Agree". Parts 6 and 7 follow from part 1; Aren gave no separate answer.
+- **Questions raised:** D-056 question 4 (the 36.4 s CPU line) is answered: the cause is the thread count on cores of different speed, not the beam search (the model is greedy) and not a long output.
+- **Revisit when:** T-PERF-P4-01 fails its limits; a transformers update breaks the base `generate` call; or a run with no NVIDIA GPU becomes necessary (part 4).
