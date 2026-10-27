@@ -1202,3 +1202,26 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "1. Let's decrease min silence for VAD, even to 250ms, it is better to have separated same speech than not separated different speeches"; "2. let's increase vad threshold for speech very slightly so minor coughs are not registered"; "3. I actually noticed that longer coughs are not registered as speech at all so A is a go, I think we wont even need it if we are to increase the vad threshold, also please write "Unidentified" or something like that instead of "System""; "4. ok I see your point. my proposals (1, 2) go to C7"; "5. yeah let's keep the spk parameters"; "6. yes let's add the diagnostic line"; "7. Yup"; "proceed".
 - **Questions raised:** Claude (R14): with 3A, the delivered program has a known limit for interruptions; the README states it ("A solution that is honest about its limits beats one that hides them"). The abort at the stop is open: see L-02 in `TESTS.md` §4.
 - **Revisit when:** the C7 measurements (parts 3 and 4), the diagnostic line (part 5), or the exit check shows a repeated abort.
+
+## D-061. The clean stop: run() waits for its threads (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-060 part 7: M3 comes after the exit check. In L-06, `terminate called without an active exception` came after the shutdown line. The pipe hid the exit code.
+- **Facts:**
+  - Exit check (`test-results/c5-exit1.txt`, 2026-10-27) [RUN]: only `Me` lines, no speaker call. After the shutdown line: `Assertion 'pthread_mutex_lock(&m->mutex) == 0' failed at ../src/pulsecore/mutex-posix.c:92, function pa_mutex_lock(). Aborting.`, exit code 134. Thus the cause is not the speaker step.
+  - `soundcard` 0.4.6 registers `atexit.register(_pulse._shutdown)`. `_shutdown` stops and frees the PulseAudio main loop. Each `record()` call locks that main loop [SOURCE: `soundcard/pulseaudio.py`, lines 125–132 and 291].
+  - Python runs the `atexit` functions while daemon threads still run [RUN: workspace test with Python 3.13: a daemon thread ran 20 times during a 0.2 s `atexit` function]. The same order in Python 3.12 is [UNVERIFIED].
+  - Before D-061, `run()` returned while the capture threads (daemon threads) were still in `record()`. Thus a capture thread could lock a freed mutex. The worker can also be in a model call at the exit; this is a possible cause of the L-06 line [UNVERIFIED].
+  - The race was in the code since C2d. T-E2E-02 passed in C2d, C4, and C5. Why it shows more often now is [UNVERIFIED].
+- **Options:**
+  - **A.** A clean stop in `run()`: at each end, set the stop event; each capture thread stops at its next block and closes its block iterator (the adapter closes the stream); a wake-up mark lets the worker stop; the main thread waits for all threads with one limit of 2 s; then return.
+  - **B.** `os._exit(code)` after a flush of the output, in a separate entry function. No `atexit` function runs. Weak points: it hides the cause; no library cleanup.
+  - **C.** Record it now and fix it in C7 (error behaviour).
+- **Claude's preference:** A, on the branch `c5-stop`, because the program now exits with code 134 at each stop, and an interviewer sees it. Weak points: the stop takes about 0.1 s longer; a source that gives no blocks does not stop in 2 s, and the race can stay for it [UNVERIFIED]. Fact that can show A is wrong: the live exit check still shows an abort.
+- **Decision:** A (Aren: "approved, proceed"). Details:
+  1. The constant `STOP_JOIN_S` = 2.0 s in `pipeline.py` (§5): one time limit for all threads. It is a program constant, not a tuning parameter.
+  2. R10 (Claude): a time limit must not be silent. A thread that does not stop in `STOP_JOIN_S` gives `tir-asr: stop: thread <name> did not stop in <s> s` on `err`; the exit code does not change. Test T-PIPE-13 (Aren: "ci is green, continue").
+  3. A second Ctrl+C during the wait makes `run()` return at once: that is the user's own request, not a hidden error.
+- **Tests:** `TESTS.md` §2.7, branch `c5-stop`: T-PIPE-11, T-PIPE-12, the change of T-E2E-02, and the live exit check (Aren: "approved, proceed"); T-PIPE-13.
+- **Reason (Aren's words):** "approved, proceed"; for point 2 and T-PIPE-13: "ci is green, continue".
+- **Revisit when:** the live exit check or T-E2E-02 shows an abort, or the error line of point 2 comes in a live run.
