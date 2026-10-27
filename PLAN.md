@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.15 · **Date:** 2026-10-27
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6).
+**Version:** 0.16 · **Date:** 2026-10-27
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time.
 
 ---
 
@@ -160,7 +160,7 @@ Phase order: option B, skeleton first (D-002).
 | C4 | Two audio sources | Device list, flags, system audio capture, virtual devices for sim tests, setup guide | M2 | 2 h |
 | C5 | Speaker labels | Speaker embeddings, online clustering, stable labels | **M3 (MVP)** | 3 h |
 | C6 | Weakest link: P4 | Seamless end to end in the program behind a flag, P1 the default; P4 optimizations; P4 performance and live tests (D-053, D-056) | — | 2 h (C6 gives a new time box, D-056) |
-| C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report | M4 | 1.5 h |
+| C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report; the D-060 measurements (VAD for fast changes and noises) and the speaker diagnostic line | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
 | — | Buffer | — | — | 1 h |
@@ -169,6 +169,8 @@ Phase order: option B, skeleton first (D-002).
 ASR: automatic speech recognition. MT: machine translation.
 
 **Note (C2 to C2d, R16):** D-035 adds 3.5 h. With the actual times of C0 to C2d, the expected total is about 23.9 h, or 24.6 h with the buffer (calc: C2c 0.97 h and C2d 2.92 h, against 1.0 h and 1.5 h), which is more than the "about 20 hours" of the brief. R16: we cut the scope back to the MVP. C6 (weakest link, after the MVP) is the first item to cut. Aren decides.
+
+**Note (after C5, R16):** C5 took about 4.4 h, 1.4 h over its time box (§11). C0 to C5 took about 19.4 h (calc: 14.95 + 4.4). With the time boxes of C6 to C8 (4.5 h), the expected total is about 23.9 h, more than the "about 20 hours" of the brief. C6 is still the first item to cut. Aren decides.
 
 ### 5.2 Details for each chat
 
@@ -302,6 +304,15 @@ ASR: automatic speech recognition. MT: machine translation.
 - **Order (D-056):** C5 comes before C6, because C5 does not depend on P4.
 - **Rule (D-056):** the speaker step is its own component, with its own interface and one call in the worker, separate from the text step (ASR and MT). Then C6 changes only the text step.
 - **Done when:** M3 works. All required features F1–F5 work live. **This is the MVP.**
+- **Status (2026-10-27): done, M3 reached** (D-060 part 7). Branches `c5-d056`, `c5-cluster`, `c5-embed`, `c5-pipeline`, `c5-stop` (D-056 to D-061; no red run, D-057 part 8).
+  - Speaker model and rule (D-058): TitaNet-large with online centroids (rule A); `spk_threshold` = 0.50, `spk_min_new_s` = 1.0 s. The sweep on S1, S2, S3, and stream D: 0 wrong labels from 0.40 to 0.60. ECAPA and WeSpeaker also passed; their packages left the project.
+  - Program (D-059, D-060): the speaker step in the worker after MT, only for `System` lines with a text; the latency step `spk`; a short first segment gets `Unidentified`.
+  - Tests: T-SIM-02 (stream D with 4 people) 19 of 19 labels correct. L-06 (a call with 2 people, about 1 min 15 s) fails on one point: a first cough gave a person a second label (fixed by D-060). Clean turns were correct; totals 0.57–0.70 s.
+  - Stop (D-061): the exit check found an abort at the stop (exit code 134, PulseAudio). Cause: the `atexit` function of `soundcard` and the capture threads that still recorded. Fix: the clean stop in `run()`.
+- **Data from C5 for later chats:**
+  - A fast change of speaker or an interruption (less than 0.5 s of silence) gives one line with two voices and the label of the voice with more speech (Q-04). C7 measures a shorter `vad_min_silence_ms` (D-060 part 3).
+  - Noises: 3 of 9 `System` lines in L-06 (Q-14). C7 measures the VAD options with a new recording (D-060 part 4).
+  - The speaker step stays its own component (D-056 rule): C6 changes only the text step. The clean stop waits `STOP_JOIN_S` (2.0 s) for the worker: C6 checks this limit against the P4 call times.
 
 #### C6. Weakest link
 
@@ -323,6 +334,11 @@ ASR: automatic speech recognition. MT: machine translation.
   2. Write the latency report.
   3. Check the error behaviour: a missing device and a missing model must give a clear error.
   4. Fix the problems that we find.
+  5. The work from D-060 (C5), with numbers (R6):
+     - the speaker diagnostic line (a flag; one line on stderr for each `System` segment: the speech length, the similarities, the decision), before the live test;
+     - `vad_min_silence_ms` from 250 to 500 ms on S1–S3 (WER, chrF, segment count and lengths), and the speaker sweep on a new stream with fast changes (made from the S1–S3 turns); a separate value for the System side is possible;
+     - `vad_threshold`, `vad_min_speech_ms`, and a rule for texts with one or two letters, with a new recording of noises and short words;
+     - L-06 again with 2 or more people, about 5 min; `spk_threshold` and `spk_min_new_s` again.
 - **Done when:** M4 works.
 
 #### S1. Side chat: export format
@@ -522,13 +538,13 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C2d | 1.5 h | 2.92 h | 2026-10-25, 17:44–18:35 (51 min); 19:27–19:40 (about 13 min: recording setup for the eval set, C3 preparation); 2026-10-26, 10:04–10:15 (11 min); 10:46–12:26 (100 min, to the end of the chat). The breaks are not counted (Aren). 1.42 h over the time box: the sim test for T-AUDIO-01 and its two probes (D-041), and the Ctrl+C fix with probe C (D-044). |
 | C3 | 2.5 h | 2.5 h | 2026-10-26, 15:14–17:44 (2 h 30 min, from the chat times). On the time box, with the full shortlists (D-049). The P4 implementation moved to C6 (D-053). |
 | C4 | 2 h | 1.03 h | 2026-10-26, 20:41–21:28 (47 min, the three branches); 21:53–22:03 (10 min, live test L-05); 22:03–22:08 (5 min, closing). The time 21:28–21:53 is not counted (Aren). Aren adds the time of his last commits if necessary. 0.97 h under the time box; Aren decides if it goes to the buffer. |
-| C5 | 3 h | | |
+| C5 | 3 h | about 4.4 h | 2026-10-26, about 22:32–22:50 (the ONNX question; estimate); 2026-10-27, 13:57–15:56 (D-056 to D-059, three branches); 17:14–17:55 (L-06 and its report); 19:21 to the end of the chat (D-060, D-061, `c5-stop`, the chat end). The breaks are not counted. About 1.4 h over the time box: the L-06 follow-up (D-060) and the abort at the stop (D-061). Estimate from the chat times; Aren confirms or corrects it. |
 | C6 | 2 h | | |
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **24.0 h** | 14.95 h | C0 to C4. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23 h, with C4 under its time box (R16 note in §5.1). |
+| **Total** | **24.0 h** | about 19.35 h | C0 to C5. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h after C5 (R16 notes in §5.1). |
 
 ---
 
@@ -551,3 +567,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.13 | 2026-10-26 | C3 closed: eval tools, S1–S3 eval set, bake-off, results table (`docs/eval/results.md`); D-046 to D-053; C6 is now the P4 implementation (D-053); Q15 and Q16 data. C3 time logged (2.5 h). C6: P4 after M3, with one pipeline for P1 and P4 (Template Method); C4 is next. |
 | 0.14 | 2026-10-26 | C4 closed: M2 reached; D-054 and D-055; the C4 status and the L-05 data; Q15 data; open question on the order of C5 and C6 (Aren, end of C4); C4 time logged (1.03 h). |
 | 0.15 | 2026-10-27 | D-056: Q16 closed; the C6 scope (P4 behind a flag, P1 the default, optimizations, P4 tests, no custom ONNX); C5 before C6, with the rule for the speaker step. |
+| 0.16 | 2026-10-27 | C5 closed: M3 reached; D-057 to D-061; the C5 status and data; the C7 work from D-060 (step 5); the R16 note after C5; C5 time logged (about 4.4 h, Aren confirms). |
