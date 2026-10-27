@@ -1076,3 +1076,47 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   4. The CPU probe line of 36.4 s can come from a very long output (a repeat loop) [UNVERIFIED]. C6 reads `scripts/probe_cpu.py` and `test-results/c3-probe-cpu.txt`, after Aren approves (R4).
   5. R16: the C6 scope is now larger than the time box of 2 h [UNVERIFIED estimate]. C6 gives a new time box.
 - **Revisit when:** C6 starts, or C5 needs a change to the text step.
+
+## D-057. Speaker labels: design and process (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** F4: lines from the system side get "Speaker 1", "Speaker 2", and so on, and each person keeps the same label for the full session. The C5 shortlist is D-017. D-056: the speaker step is its own component, separate from the text step.
+- **Facts (chat C5, 2026-10-27):**
+  - Eval data, call side [RUN, label files and `docs/eval/scripts.md`]: 4 voices (S1 Speaker 1 and S1 Speaker 2 on Google Meet; S2 Speaker 1 and S3 Speaker 1 on Telegram), all different people (Aren). 19 lines, 87.1 s of speech. The shortest line is 2.52 s.
+  - TitaNet-large: NeMo `EncDecSpeakerLabelModel.infer_segment(segment)` takes a 16 kHz numpy array and gives the embedding [SOURCE: NeMo 3.0.0 `label_models.py`]. About 23M parameters, CC-BY-4.0, "several thousand hours of English speech" [SOURCE: model card].
+  - NeMo `verify_speakers` uses the score (cos + 1) / 2 with the threshold 0.7, that is cosine 0.4 [SOURCE: `label_models.py`].
+  - `torchaudio` is not on the laptop; the newest `torchaudio` on PyPI is 2.11.0; the laptop has torch 2.14.1 [RUN].
+  - Lock-only check in the workspace with uv 0.12.21 [RUN]: `speechbrain` adds 5 packages, `pyannote.audio` adds 27, both add 31; no package of the 177 in the current lock changes its version; the resolver selects `torchaudio` 2.11.0 and `torchcodec` 0.17.0. That they work with torch 2.14.1 is [UNVERIFIED].
+  - diart (online diarization on pyannote) uses centroids: a new centroid when the distance to all centroids is larger than `delta_new`; a centroid update only when the speech ratio is larger than `rho_update` [SOURCE: diart docs].
+- **Parts, options, Claude's preference, and decision:**
+  1. **Eval streams.**
+     - **A.** Four streams, each a new session: S1 call, S2 call, S3 call, and stream D (S1 call 0–34.0 s, then S2 call, then S1 call 34.0 s to the end, then S3 call; 4 voices, 192.5 s; the cut is in a 7.3 s silence of the call side). **B.** S1 call only. **C.** New recordings with 3 or more people on the call side.
+     - Claude's preference: A. Weak points: 19 lines (one error = 5 %); from S1 to S2 the call app changes with the speaker, which can make the result look better (S2 and S3 are both Telegram). Fact that can show A is wrong: L-06 gives many more errors than stream D.
+     - **Decision:** A.
+  2. **Metric.** Label accuracy after the best one-to-one mapping of the labels to the true speakers (`scipy` `linear_sum_assignment`), weighted by the speech time of each segment; an extra label is an error. The true speaker of a segment comes from `assign_segments` (D-046). Also reported: the accuracy with each segment counted equally, the speaker count, the segments with two voices (Q-04), and the time of each embedding call.
+     - **Decision:** as proposed.
+  3. **Speaker models.**
+     - **A.** All three of D-017 now. **B.** TitaNet-large first (no new package); ECAPA and WeSpeaker only if TitaNet fails. **C.** TitaNet-large with NeMo's `titanet_small` and `ecapa_tdnn` (no new package; NGC download).
+     - Claude's preference: B. Weak point: no comparison if TitaNet passes. Fact that can show B is wrong: TitaNet passes the eval but fails L-06.
+     - **Decision:** A, with three points:
+       1. `speechbrain` and `pyannote.audio` go into a new dependency group `spk-eval`, which is not in `default-groups`. Thus a plain `uv sync` and CI do not install them, and the program stays as it is. At the end of C5, the packages of the models that lose leave the project.
+       2. **Selection rule:** a model passes when, at one threshold, at most one segment on each stream has a wrong label, and the passing thresholds cover a range of 0.10 or more in cosine. Among the passing models, the widest range wins. If two models are equal, the model with fewer new packages wins.
+       3. **Adapters:** the three candidate adapters go in `tir_asr/eval/`, one commit for each (as D-051). In `c5-pipeline`, the adapter of the winning model moves to `speakers/`; T-MODEL-SPK-01 and T-MODEL-SPK-02 test it there. The sweep run is the model-level check of the candidates.
+     - Risk (Claude, R14, one time): `torchaudio` 2.11.0 and `torchcodec` 0.17.0 have compiled parts and can fail with torch 2.14.1 at import or at the first call [UNVERIFIED]; pyannote telemetry is on by default (D-017), and the eval adapter must turn it off; the WeSpeaker model can need a Hugging Face token (RK6) [UNVERIFIED]. A candidate that fails gets a recorded result, with a maximum of three tries (R12).
+  4. **Clustering rule.**
+     - **A.** Online centroids: cosine similarity of the L2-normalized embedding to the centroid of each speaker; the highest similarity `spk_threshold` or more gives that speaker and an update of its centroid; else a new speaker. **B.** The similarity to all stored embeddings of each speaker. **C.** Cluster all embeddings again from time to time (against F4).
+     - Claude's answer to Aren's question ("in what ways is B not better?"): B-mean (the mean similarity) is A multiplied by the length of the mean vector, which is 1 or less [calc], so it gives no new information. B-max (the nearest stored embedding) is better for one person with two voice groups. It is weaker when one wrong segment (two voices, or a noise) is stored, because later segments of a different person can match it; weaker in long sessions, because a speaker with more stored embeddings has more chances to be near a different person [calc]; and its threshold gets easier to pass as the session grows. Memory and time are equal in practice (about 0.8 MB for 1000 segments [calc]). Our eval has only 4–5 segments for each speaker, so it can give the same result for both rules.
+     - **Decision:** measure both. `c5-cluster` gets an abstract `OnlineClusterer` with the shared steps (Template Method), the program rule `CentroidClusterer` (A) in `speakers/cluster.py`, and `NearestClusterer` (B-max) in `tir_asr.eval.nearest` for the sweep only. The program keeps one rule. B-max wins only if it passes the rule with a wider threshold range on stream D; else A stays.
+  5. **Short segments.**
+     - **A.** No special rule (weak point: in L-05, about 11 of 84 blocks were noises, Q-14). **B.** A new parameter `spk_min_new_s`: a shorter segment starts no new speaker and changes no speaker; it gets the label of the most similar speaker. If no speaker exists yet, it starts "Speaker 1".
+     - **Decision:** B. Start value of `spk_min_new_s`: 1.0 s [UNVERIFIED]: no source gives a value, and the eval has no segment under 2.5 s. L-06 sets the value (R10).
+  6. **Place in the program.**
+     - **A.** A core component `SpeakerLabeler` (embedder and clusterer) with `label(segment) -> str`. The worker calls it after MT, only for `"System"`. The system line shows `vad, asr, mt, spk, out`; `"Me"` lines do not change. The model runs on the GPU in the worker (no new thread). Load order: sources, ASR, MT, VAD, speaker model; one warm-up call. **B.** The speaker step before ASR (the queue wait moves into `spk`). **C.** A separate speaker thread (two GPU threads).
+     - Claude's preference: A. Fact that can show A is wrong: in T-SIM-02, `spk` adds more than 0.1 s to a line.
+     - **Decision:** A.
+  7. **Branches:** `c5-cluster` (the clusterer, the metric, the embedder interface); `c5-embed` (the candidate adapters, the stream builder, `scripts/spk_bakeoff.py` with a threshold sweep from 0.20 to 0.90 in steps of 0.05; then Aren sets `spk_threshold`); `c5-pipeline` (the labeler in the program, the sim test, and the live test).
+     - **Decision:** as proposed.
+  8. **Process:** no separate red run in C5 (as D-055). Claude (R14) named the risk one time: a test that cannot fail stays hidden. Mitigation: the tests come from the approved table.
+- **Tests:** `TESTS.md` §2.7. Aren approved them on 2026-10-27, and also the new tests T-SPK-07 (from part 4) and T-SPK-08 to T-SPK-10 (the sweep core in `c5-embed`): "agree".
+- **Reason (Aren's words):** "1. A approved", "2. agree", "3. A", "5. full agree", "6. A", "7. agree on branches", "agree on the tests". "no red runs for C5 as well". "Lets measure both rules". "risk of Part3. A noted and proposed point 1 as the decision". For part 3, Aren gave no other reason. Part 3, points 2 and 3, and T-SPK-07: "1. approve", "2. agree", "3. agree".
+- **Revisit when:** a candidate does not install or does not run in `c5-embed`; the sweep shows no passing threshold; or L-06 shows extra labels or merged speakers.
