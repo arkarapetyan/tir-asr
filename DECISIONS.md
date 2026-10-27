@@ -1120,3 +1120,30 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Tests:** `TESTS.md` §2.7. Aren approved them on 2026-10-27, and also the new tests T-SPK-07 (from part 4) and T-SPK-08 to T-SPK-10 (the sweep core in `c5-embed`): "agree".
 - **Reason (Aren's words):** "1. A approved", "2. agree", "3. A", "5. full agree", "6. A", "7. agree on branches", "agree on the tests". "no red runs for C5 as well". "Lets measure both rules". "risk of Part3. A noted and proposed point 1 as the decision". For part 3, Aren gave no other reason. Part 3, points 2 and 3, and T-SPK-07: "1. approve", "2. agree", "3. agree".
 - **Revisit when:** a candidate does not install or does not run in `c5-embed`; the sweep shows no passing threshold; or L-06 shows extra labels or merged speakers.
+
+## D-058. Speaker model, clustering rule, and start values (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-057 parts 3 and 4: the sweep and the selection rule decide the model and the rule; Aren sets `spk_threshold` (R10). D-057 part 3, point 1: the packages of the models that lose leave the project.
+- **Facts [RUN, Aren's laptop, 2026-10-27]:** `docs/eval/results.md`, "Speaker labels (C5)"; `TESTS.md` §2.7.
+  - All three models ran on the GPU and pass the rule. Passing ranges, rule A / rule B-max: TitaNet 0.40–0.65 / 0.40–0.65 (width 0.25 / 0.25); ECAPA 0.35–0.55 / 0.35–0.60 (0.20 / 0.25); WeSpeaker 0.50–0.65 / 0.50–0.65 (0.15 / 0.15).
+  - Zero errors on all four streams: TitaNet 0.40–0.60; ECAPA 0.35–0.45; WeSpeaker 0.50–0.60. Below the range, two S1 voices get one label; above it, one voice gets two or more labels.
+  - Stream D margin (lowest same-speaker cosine − highest different-speaker cosine) [calc]: TitaNet +0.170, ECAPA −0.017, WeSpeaker +0.124.
+  - TitaNet: 200 MiB VRAM, load 3.34 s, embedding at most 28.3 ms; no new package.
+- **Options and Claude's proposal:**
+  1. **Model and rule:** from the D-057 rules, TitaNet-large with rule A. The widest range (0.25) is shared by TitaNet with rule A and ECAPA with rule B-max; the tie-break (fewer new packages) selects TitaNet; for TitaNet, B-max is not wider than A. The margin also is the largest for TitaNet.
+  2. **`spk_threshold`:** 0.45 (fewer split labels, nearer to the merge edge), **0.50** (the middle of the zero-error range 0.40–0.60), or 0.55 (fewer merges, nearer to the split edge). Weak point of 0.50: 4 voices only. Fact that can show it is wrong: L-06 shows extra labels for one person (lower the value) or one label for two people (raise the value).
+  3. **`spk_min_new_s`:** 1.0 s stays the start value (D-057 part 5B). No eval segment was shorter than 2.40 s, so the sweep did not test it.
+  4. **The losing packages:** remove them now, as the last commits of `c5-embed`, not at the end of C5. Weak point: a new comparison needs the files back; `git revert` of the removal commits restores them with the same lock.
+- **Decision:**
+  1. TitaNet-large (`nvidia/speakerverification_en_titanet_large`, SPK-3) with rule A (`CentroidClusterer`).
+  2. New parameter `spk_threshold = 0.50` (approved 2026-10-27, R10), a start value. L-06 tests it.
+  3. New parameter `spk_min_new_s = 1.0` s (approved 2026-10-27, R10), a start value. L-06 tests it.
+  4. The test was done, and its results are recorded (`docs/eval/results.md`, `TESTS.md` §2.7; the local files `test-results/bakeoff/spk-*.json`). The ECAPA and WeSpeaker adapters and the dependency group `spk-eval` (`speechbrain`, `pyannote.audio`, and their 29 other new packages) are removed. The `c5-embed` commits in git keep them.
+  - The two parameters go into `Params` and `ARCHITECTURE.md` §6 in `c5-pipeline`, with the code that uses them.
+- **Reason (Aren's words):** "agree on TitaNet and Centroid"; "let's decide on 0.50 and test it against L-06"; "same for spk min threshold"; "yes we remove the adapters and their packages and record that the test was conducted, results obtained, packages removed".
+- **Questions raised:**
+  - Aren asked how the evaluation works and what the accuracy is in percent. Claude: each stream is cut by the program's VAD; each segment gets one embedding and its true speaker from the labels; the clusterer gets the segments in time order; the labels are matched to the people by the best one-to-one mapping. TitaNet with rule A at 0.50 gives 100 % on all four streams (9/9, 5/5, 5/5, 19/19), by count and by speech time. Stream D by count: 52.6 % at 0.20, 78.9 % at 0.30, 100 % from 0.40 to 0.60, 94.7 % at 0.65, 26.3 % at 0.90.
+  - Claude (R14): 0 errors in 19 segments gives an approximate 95 % upper limit of about 15 % for the error rate [calc]; the eval has no short segment and no noise (Q-14). Thus L-06 is the real test.
+  - Claude (correction for C6): D-056 question 4 proposed a very long output as the cause of the 36.4 s CPU line. `docs/eval/results.md` says that the English output of that segment had a normal length (110 characters), so this cause is probably wrong.
+- **Revisit when:** L-06 shows extra labels for one person, one label for two people, or labels from noise.
