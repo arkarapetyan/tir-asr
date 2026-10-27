@@ -1,6 +1,6 @@
 # TESTS.md
 
-**Project:** tir-asr · **Date:** 2026-10-26
+**Project:** tir-asr · **Date:** 2026-10-27
 **Rules:** RULES.md R5 (test-driven development) and D-006 (test runs).
 
 Each test comes from a requirement in the brief (F, K, D in `PLAN.md` §1) or from a module contract in `ARCHITECTURE.md`.
@@ -381,6 +381,45 @@ No test: `audio: no default microphone`, `audio: no default output`, `audio: no 
   - One warning: `scipy` `WavFileWarning: Chunk (non-data) not understood` for an S1 file. `scipy` skips that chunk; the audio is read.
 - **L-04:** not run in C4 (no result file).
 - **L-05** (`test-results/c4-l05.txt`, about 6 min, video call with one person): PASSES. The `System` source was the monitor of Bluetooth buds (`bluez_output.E0:08:71:6B:2A:A2.monitor`, "Redmi Buds 3 Lite"), the `Me` source the laptop microphone. 84 blocks (38 `Me`, 46 `System`); totals 0.11–0.68 s, mean 0.57 s; mean of the first 10 blocks 0.589 s, of the last 10 blocks 0.583 s; 2 hard cuts at `vad_max_speech_s`; 10 short segments; no empty text; no error. Aren's words: "The system and mic listening works superb. every interruption caught"; "latency is very small and does not increase over time"; "voice activation detects small coughs or sounds between intervals as speech" (Q-14); "10s limit for speech sometimes is not enough for long sentences" (Q15); "Overall P1 isnt bad, but it fails frequently, especially on translation".
+
+### 2.7 Speaker labels (C5)
+
+Contracts: `ARCHITECTURE.md` §2.8, §3, §8.2. Decisions: D-057. Aren approved the tests on 2026-10-27 ("agree on the tests"). D-057 part 8: no separate red run; Claude writes the tests and the code in one step, and Aren does only the green run. T-SPK-07 is new: it comes from Aren's decision to measure both rules (D-057 part 4), and Aren approves it.
+
+Eval streams (D-057 part 1): S1 call, S2 call, S3 call, and stream D (S1 call 0–34.0 s, S2 call, S1 call 34.0 s to the end, S3 call; 4 voices, 192.5 s). Metric (part 2): label accuracy after the best mapping, weighted by the speech time; the count of segments too.
+
+**Branch `c5-cluster`** (2-D test vectors at an angle a: the cosine of two vectors is cos(a1 − a2); "long" = 3.0 s):
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-01 | F4, §2.8 steps 2 and 4. Both rules. | Threshold 0.5. Vectors (1, 0, 0), (0.9, 0.1, 0), (0, 1, 0), (0.05, 1, 0), (0, 0, 1), all long. | `Speaker 1`, `Speaker 1`, `Speaker 2`, `Speaker 2`, `Speaker 3`; `count` = 3. | unit | WRITTEN |
+| T-SPK-02 | §2.8, rule A: the centroid moves. | Threshold 0.7. `CentroidClusterer`: 0°, 40°, 60°. Control: a new clusterer with 0°, 60°. | `Speaker 1` three times (the centroid of 0° and 40° is at 20°; cos 40° = 0.77). Control: `Speaker 1`, `Speaker 2` (cos 60° = 0.5). | unit | WRITTEN |
+| T-SPK-03 | §2.8 step 3, D-057 part 5B. Both rules. | Threshold 0.9, `min_new_s` 1.0. 0° (0.5 s), 90° (long), 40° (0.5 s), 35° (long), 180° (1.0 s). | `Speaker 1` (a short first segment starts a speaker); `Speaker 2`; `Speaker 1` (short: the most similar, no new speaker, `count` = 2); `Speaker 3` (Speaker 1 did not change: cos 35° = 0.82 < 0.9); `Speaker 4` (1.0 s counts as long); `count` = 4. | unit | WRITTEN |
+| T-SPK-04 | §2.8 errors. Both rules. | (a) Threshold 1.5; `min_new_s` −0.1. (b) An embedding of shape (1, 3); one with NaN; one with inf; zeros. (c) (1, 0, 0), then (1, 0). | (a) `speakers: threshold 1.5 is not in [-1, 1]`; `speakers: min_new_s -0.1 is negative`. (b) `speakers: embedding has shape (1, 3), expected one dimension`; `speakers: embedding has values that are not finite` (two times); `speakers: embedding has zero length`; `count` stays 0. (c) `speakers: embedding has 2 values, expected 3`. | unit | WRITTEN |
+| T-SPK-05 | D-057 part 2, §8.2: `label_accuracy`. | (a) Truths A A B B, labels S2 S2 S1 S1, weights 1. (b) A A A B; S1 S1 S2 S3; 1. (c) A B; S1 S1; 3.0, 1.0. (d) A B C; S1 S1 S1; 1, 2, 1. (e) 3 truths and 2 labels; no segments; weight 0.0; weight NaN. | (a) 1.0. (b) 0.75 (the extra label is an error). (c) 0.75. (d) 0.5. (e) `metrics: 3 true speakers, 2 labels, and 3 weights`; `metrics: no segments`; `metrics: weight 0.0 is not positive`; `metrics: weight nan is not positive`. | unit | WRITTEN |
+| T-SPK-07 | D-057 part 4: the two rules differ. **New.** | Threshold 0.7. 0°, 40°, 80°, all long, for each rule. | Rule A: `Speaker 1`, `Speaker 1`, `Speaker 2` (centroid at 20°; cos 60° = 0.5). Rule B-max: `Speaker 1` three times (nearest stored vector 40°; cos 40° = 0.77). | unit | WRITTEN |
+| T-IMPORT-01 | D-021. | `tir_asr.speakers`, `tir_asr.speakers.cluster`, and `tir_asr.eval.nearest` in `REQUIRED`. | It passes. | unit | WRITTEN |
+
+**Branch `c5-embed`** (after D-057 part 3, proposals 2 and 3):
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SPK-06 | D-057 part 1: the stream builder. | Fake arrays for S1, S2, S3 and their labels. | Stream D: the cut at 34.0 s, the order S1a, S2, S1b, S3, and the label times shifted by the start of each part. | unit | APPROVED |
+| Sweep | D-057 parts 1–4. | Each candidate model, both rules, thresholds 0.20–0.90 in steps of 0.05, the four streams. | Report (not pass or fail): the accuracy of each stream (time and count), the speaker count, the pairwise similarities, and the time of each embedding call. Aren sets `spk_threshold`. | model | APPROVED |
+
+**Branch `c5-pipeline`:**
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-MODEL-SPK-01 | §2.8, the selected adapter. | A real segment. | The embedding is 1-D, float32, finite, with norm > 0; the same audio two times gives cos ≥ 0.999. | model | APPROVED |
+| T-MODEL-SPK-02 | §2.8, §7. | No CUDA; a missing model file. | `speakers: CUDA is not available`; `speakers: model file not in the Hugging Face cache: <name>`. | model | APPROVED |
+| T-PIPE-05 (changed) | §2.6, D-022. | `warm_up` with a fake embedder. | One embedding call; the clusterer state does not change. | unit | APPROVED |
+| T-PIPE-09 | F4, F5, D-057 part 6. | Two sources; a fake labeler for `"System"`. | System lines get `Speaker N` and `spk` in the latency line; `"Me"` lines do not change. | unit | APPROVED |
+| T-PIPE-10 | §2.6, R10. | The labeler raises an error. | `tir-asr: speakers: …` and exit code 1. | unit | APPROVED |
+| T-OUT-05 | D-024, D-057 part 6. | A system line with a `spk` step. | `[Latency: vad …, asr …, mt …, spk …, out … \| Total …]`. | unit | APPROVED |
+| T-CFG-01/02, T-IMPORT-01, T-E2E-01 (changed) | R10, D-021, K1. | The new parameters and modules; the speaker model load. | They pass. | unit, model | APPROVED |
+| T-SIM-02 | F4, F5, K1, D-057. | Stream D into the system null sink. | The pass rule of D-057 part 3; 4 speakers; `"Me"` lines stay `"Me"`; each total < 5 s. | sim | APPROVED |
+| L-06 | F4, K1 (§4). | A call with 2 or more people on the call side. | Each person keeps one label; the count of extra labels from noise; each total < 5 s. | live | APPROVED |
 
 ## 3. QA questions
 
