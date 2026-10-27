@@ -1,9 +1,9 @@
 """The program: the startup log, the two sources, the model loads, the warm-up, and the pipeline.
 
-ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059, D-062.
-This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it only
-after the parse of the command line. Each startup line starts with "startup: ", so that it is
-easy to find between the lines that NeMo prints at its load (D-043, point 3).
+ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059, D-062,
+D-063. This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it
+only after the parse of the command line. Each startup line starts with "startup: ", so that it
+is easy to find between the lines that NeMo prints at its load (D-043, point 3).
 """
 
 import importlib.metadata
@@ -19,7 +19,15 @@ from tir_asr.speakers.cluster import CentroidClusterer
 from tir_asr.speakers.labeler import SpeakerLabeler
 from tir_asr.text.step import CascadeTextStep, TextStep
 
-PACKAGES = ["tir-asr", "torch", "nemo-toolkit", "ctranslate2", "silero-vad", "soundcard"]
+PACKAGES = [
+    "tir-asr",
+    "torch",
+    "nemo-toolkit",
+    "ctranslate2",
+    "transformers",
+    "silero-vad",
+    "soundcard",
+]
 MIB = 2**20
 SOURCE_LABELS = ("Me", "System")  # the microphone and the system audio (F1, D-054)
 SPEAKER_SOURCE = "System"  # only the system side gets speaker labels (F4, D-057, D-059)
@@ -62,16 +70,16 @@ def select_sources(mic: str | None, system: str | None, log: TextIO) -> list:
     return sources
 
 
-def load_models(params: Params, log: TextIO, labels: list[str]):
-    """Load ASR, MT, one VAD for each source label, and the speaker model, in this order.
+def load_models(params: Params, log: TextIO, labels: list[str], seamless: bool = False):
+    """Load the text step, one VAD for each source label, and the speaker model, in this order.
 
-    ASR and MT make the P1 text step (`CascadeTextStep`, D-062).
-
-    ASR loads first, so that a missing CUDA gives `asr: CUDA is not available` (D-043, point
-    2a). The MT adapter loads the CUDA 12 cuBLAS before its `import ctranslate2` (D-030); no
-    other module imports `ctranslate2`. Each source needs its own VAD, because the Silero model
-    keeps its state (D-036, D-054). The speaker model loads last (D-057 part 6). Return
-    (vads, text_step, embedder).
+    P1 (the default): ASR, then MT; they make `CascadeTextStep` (D-062). ASR loads first, so
+    that a missing CUDA gives `asr: CUDA is not available` (D-043, point 2a). The MT adapter
+    loads the CUDA 12 cuBLAS before its `import ctranslate2` (D-030); no other module imports
+    `ctranslate2`. P4 (`seamless`): the Seamless adapter is the text step, and it checks CUDA
+    first (`text: CUDA is not available`); NeMo ASR and NLLB do not load (D-062 part 5). Each
+    source needs its own VAD, because the Silero model keeps its state (D-036, D-054). The
+    speaker model loads last (D-057 part 6). Return (vads, text_step, embedder).
     """
     import torch
 
@@ -79,26 +87,10 @@ def load_models(params: Params, log: TextIO, labels: list[str]):
         free, total = torch.cuda.mem_get_info()  # the full device: CTranslate2 is included
         return (total - free) // MIB
 
-    from tir_asr.asr.nemo_rnnt import NemoRnntTranscriber
-
-    start = time.perf_counter()
-    transcriber = NemoRnntTranscriber()  # checks CUDA first (section 2.3)
-    elapsed = time.perf_counter() - start
-    log_line(log, f"GPU {torch.cuda.get_device_name(0)}; CUDA (torch) {torch.version.cuda}")
-    asr_used = used_mib()
-    log_line(log, f"ASR loaded in {elapsed:.2f} s; GPU memory used {asr_used} MiB")
-
-    from tir_asr.mt.ct2_nllb import Ct2NllbTranslator
-
-    start = time.perf_counter()
-    translator = Ct2NllbTranslator(params)
-    elapsed = time.perf_counter() - start
-    mt_used = used_mib()
-    log_line(
-        log,
-        f"MT loaded in {elapsed:.2f} s; "
-        f"GPU memory used {mt_used} MiB ({mt_used - asr_used:+d} MiB)",
-    )
+    if seamless:
+        text_step = load_seamless(log, used_mib)
+    else:
+        text_step = load_cascade(params, log, used_mib)
 
     from tir_asr.segment.silero import SileroSpeechProbability
 
@@ -123,8 +115,54 @@ def load_models(params: Params, log: TextIO, labels: list[str]):
         f"speaker model loaded in {elapsed:.2f} s; "
         f"GPU memory used {spk_used} MiB ({spk_used - before:+d} MiB)",
     )
-    text_step: TextStep = CascadeTextStep(transcriber, translator)
     return vads, text_step, embedder
+
+
+def load_cascade(params: Params, log: TextIO, used_mib) -> TextStep:
+    """P1: the NeMo ASR adapter, then the CTranslate2 MT adapter (D-014, D-015, D-043)."""
+    import torch
+
+    from tir_asr.asr.nemo_rnnt import NemoRnntTranscriber
+
+    log_line(log, "text step cascade (P1): NeMo RNNT ASR, then NLLB MT")
+    start = time.perf_counter()
+    transcriber = NemoRnntTranscriber()  # checks CUDA first (section 2.3)
+    elapsed = time.perf_counter() - start
+    log_line(log, f"GPU {torch.cuda.get_device_name(0)}; CUDA (torch) {torch.version.cuda}")
+    asr_used = used_mib()
+    log_line(log, f"ASR loaded in {elapsed:.2f} s; GPU memory used {asr_used} MiB")
+
+    from tir_asr.mt.ct2_nllb import Ct2NllbTranslator
+
+    start = time.perf_counter()
+    translator = Ct2NllbTranslator(params)
+    elapsed = time.perf_counter() - start
+    mt_used = used_mib()
+    log_line(
+        log,
+        f"MT loaded in {elapsed:.2f} s; "
+        f"GPU memory used {mt_used} MiB ({mt_used - asr_used:+d} MiB)",
+    )
+    return CascadeTextStep(transcriber, translator)
+
+
+def load_seamless(log: TextIO, used_mib) -> TextStep:
+    """P4: one Seamless model gives both texts (D-053, D-063)."""
+    import torch
+
+    from tir_asr.text.seamless import SeamlessTextStep
+
+    log_line(log, "text step seamless (P4): Seamless end to end, one call for both texts")
+    start = time.perf_counter()
+    text_step = SeamlessTextStep()  # checks CUDA first (section 2.9)
+    elapsed = time.perf_counter() - start
+    log_line(log, f"GPU {torch.cuda.get_device_name(0)}; CUDA (torch) {torch.version.cuda}")
+    log_line(
+        log,
+        f"Seamless loaded in {elapsed:.2f} s; GPU memory used {used_mib()} MiB; "
+        f"generate num_beams {text_step.num_beams}, max_new_tokens {text_step.max_new_tokens}",
+    )
+    return text_step
 
 
 def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
@@ -155,19 +193,23 @@ def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
 def main(
     mic: str | None = None,
     system: str | None = None,
+    seamless: bool = False,
     out: TextIO | None = None,
     err: TextIO | None = None,
 ) -> int:
-    """Run the startup, then the pipeline. Return the exit code (D-042, D-043, D-054)."""
+    """Run the startup, then the pipeline. Return the exit code (D-042, D-043, D-054, D-062).
+
+    `seamless` selects the P4 text step; the default is P1 (D-062 part 4).
+    """
     out = out or sys.stdout
     err = err or sys.stderr
     params = Params()
     try:
         log_versions(params, out)
         sources = select_sources(mic, system, out)
-        vads, text_step, embedder = load_models(params, out, list(SOURCE_LABELS))
+        vads, text_step, embedder = load_models(params, out, list(SOURCE_LABELS), seamless)
         asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
-        log_line(out, f"warm-up ASR {asr_s:.2f} s, MT {mt_s:.2f} s, speaker {spk_s:.2f} s")
+        log_line(out, warm_up_line(text_step, asr_s, mt_s, spk_s))
         labelers = {SPEAKER_SOURCE: speaker_labeler(embedder, params)}
     except KeyboardInterrupt:
         out.write("Stopped during the startup.\n")
@@ -185,6 +227,15 @@ def main(
 
     pairs = list(zip(sources, vads, strict=True))
     return run(pairs, text_step, params, time.monotonic, out, err, labelers)
+
+
+def warm_up_line(text_step: TextStep, asr_s: float, mt_s: float, spk_s: float) -> str:
+    """The warm-up times with the names of the text steps (D-063 part 2): P4 has one step."""
+    if len(text_step.STEPS) == 1:
+        text = f"{text_step.STEPS[0]} {asr_s + mt_s:.2f} s"
+    else:
+        text = f"ASR {asr_s:.2f} s, MT {mt_s:.2f} s"
+    return f"warm-up {text}, speaker {spk_s:.2f} s"
 
 
 def speaker_labeler(embedder, params: Params) -> SpeakerLabeler:

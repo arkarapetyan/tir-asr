@@ -1,4 +1,4 @@
-"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01, T-SIM-02: the audio sources and the speaker labels.
+"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01 to T-SIM-03: the audio sources and the speaker labels.
 
 Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041, D-054. The limits come
 from probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
@@ -18,6 +18,9 @@ side, and "System" plays eval stream D (four people; the two S1 people come back
 person). A test wrapper on the program labeler records the times and the label of each speaker
 call. The test maps these times to the turns of stream D, with the start of the System player
 as time 0, and computes the label accuracy after the best mapping (D-057 part 2).
+
+T-SIM-03 (C6, D-062, D-063) is T-SIM-02 with the P4 text step (`load_models(…, seamless=True)`).
+Its latency lines have the step `s2t` (D-063 part 2).
 
 Caution: the tests change the audio server for a few seconds. Do not run them during a call.
 If a test stops and the sink stays, run `pactl list short modules | grep null-sink`, then
@@ -567,6 +570,16 @@ class RecordedLabeler:
 
 @pytest.mark.model
 def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
+    speaker_labels_run(tmp_path, seamless=False)
+
+
+@pytest.mark.model
+def test_sim_03_speaker_labels_with_p4(two_null_sinks, tmp_path):
+    speaker_labels_run(tmp_path, seamless=True)
+
+
+def speaker_labels_run(tmp_path, seamless: bool) -> None:
+    """T-SIM-02 (P1) and T-SIM-03 (P4): the two null sinks come from the fixture of the test."""
     from tir_asr.app import load_models, log_versions, speaker_labeler
     from tir_asr.audio.soundcard_source import SoundcardSource
     from tir_asr.config import Params
@@ -600,7 +613,7 @@ def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
     log = io.StringIO()
     log_versions(params, log)
     sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
-    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS))
+    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS), seamless=seamless)
     for line in log.getvalue().splitlines():
         report(line)
     asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
@@ -653,6 +666,10 @@ def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
     report(f"blocks: {len(me_blocks)} Me, {len(speaker_blocks)} Speaker N, {len(blocks)} in all")
     assert me_blocks, "no Me block"
     assert len(speaker_blocks) == len(labeler.calls)
+    # The names of the text steps (D-063 part 2): P1 `asr` and `mt`, P4 one step `s2t`.
+    latency = [line for line in out.getvalue().splitlines() if line.startswith(" [Latency: ")]
+    steps = " s2t " if seamless else " asr "
+    assert all(steps in line for line in latency), f"a latency line with no {steps!r}: {latency}"
 
     # (3) Label accuracy after the best mapping (D-057 part 2), with the System player start as
     # time 0 of stream D. The segment times include the player start-up and the stream latency.

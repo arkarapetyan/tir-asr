@@ -2,7 +2,7 @@
 
 `cli.py` has no other work. It imports `app` only after the parse, so that `--help` imports no
 model and no audio-device package (D-021, T-CLI-01). The device flags take exact source ids;
-`--list-devices` prints them (F1, D-054).
+`--list-devices` prints them (F1, D-054). `--seamless` selects the P4 text step (D-062 part 4).
 """
 
 import argparse
@@ -25,6 +25,12 @@ def main(argv: list[str] | None = None) -> int:
         "default: the monitor of the default output",
     )
     parser.add_argument(
+        "--seamless",
+        action="store_true",
+        help="P4: one Seamless model gives the Armenian text and the English text; "
+        "default: P1, NeMo ASR, then NLLB MT",
+    )
+    parser.add_argument(
         "--list-devices",
         action="store_true",
         help="print the sources with their exact ids and the defaults, then stop",
@@ -37,4 +43,4 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list_devices:
         return app.list_devices()
-    return app.main(mic=args.mic, system=args.system)
+    return app.main(mic=args.mic, system=args.system, seamless=args.seamless)
