@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.25 · **Date:** 2026-10-27
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.26 · **Date:** 2026-10-27
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -134,7 +134,7 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
   | `out` | MT end, or the speaker step end | the moment before the write |
   | Total | `speech_end` | the moment before the write |
 
-- **System side (D-059):** a block of the system side with a text has the label `"Speaker N"` and the steps `vad, asr, mt, spk, out`: `[Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]`. A "Me" block does not change.
+- **System side (D-059, D-060):** a block of the system side with a text has the label `"Speaker N"` (or `"Unidentified"`, §2.8) and the steps `vad, asr, mt, spk, out`: `[Latency: vad 0.53s, asr 0.41s, mt 0.18s, spk 0.01s, out 0.01s | Total 1.14s]`. A "Me" block does not change.
 - **Empty ASR text (D-031):** in C2 to C6, a short block with no MT call: the time, the label, `HY: (no text)`, and a latency line with `vad`, `asr`, and the total. On the system side, this block keeps the label `"System"`: it gets no speaker step (D-059 point 3). C7 removes this block for the delivery; the shutdown line still counts the empty texts.
 - **Rounding:** the program adds the raw step values. The printed steps can differ from the printed total by rounding (maximum 0.02 s for 4 steps).
 - **Limit:** `out` does not include the time that the terminal needs to show the text.
@@ -184,22 +184,24 @@ Each error class has the module name in its message: `<module>: <cause>`. Each e
 
 ### 2.8 `speakers`
 
-- **Purpose (F4, D-057):** each line of the system side gets `"Speaker 1"`, `"Speaker 2"`, and so on. One person keeps the same label for the full session. The microphone side stays `"Me"`.
-- **Core** `speakers/labeler.py` (branch `c5-pipeline`, D-059): `SpeakerLabeler(embedder, clusterer)`. `label(segment)` calls `embedder.embed(segment.audio)`, then `clusterer.assign(embedding, segment.speech_end - segment.start)`. The pipeline calls it after MT, only for `"System"` and only for a text that is not empty (§2.6).
+- **Purpose (F4, D-057):** each line of the system side gets `"Speaker 1"`, `"Speaker 2"`, and so on. One person keeps the same label for the full session. The microphone side stays `"Me"`. A short segment before the first speaker gets `"Unidentified"` (D-060).
+- **Core** `speakers/labeler.py` (branch `c5-pipeline`, D-059, D-060): `SpeakerLabeler(embedder, clusterer)`. `label(segment)` calls `embedder.embed(segment.audio)`, then `clusterer.assign(embedding, segment.speech_end - segment.start)`. When `assign` gives `None`, `label` gives `UNIDENTIFIED` (`"Unidentified"`). Thus `label` always gives a text, and the pipeline and the output do not change. The pipeline calls it after MT, only for `"System"` and only for a text that is not empty (§2.6).
 - **Adapter** `speakers/titanet.py` (`TitanetEmbedder`, branch `c5-pipeline`, D-058): `nvidia/speakerverification_en_titanet_large` (TitaNet-large, SPK-3), NeMo 3.0.0 `EncDecSpeakerLabelModel`, on `cuda`. The constructor checks CUDA, then loads `speakerverification_en_titanet_large.nemo` from the Hugging Face cache with `local_files_only=True` (nothing downloads). `repo` and `filename` are model locations, not parameters (as D-037). `embed(audio)` calls `infer_segment` and returns a float32 vector. No warm-up method: the pipeline makes the warm-up call. [RUN] 200 MiB VRAM, load 3.34 s, at most 28.3 ms for each segment (C5 sweep).
 - **Core** `speakers/cluster.py` (branch `c5-cluster`):
   - `OnlineClusterer(threshold, min_new_s)` is an abstract class with the shared steps (Template Method). A subclass gives only `_add` (a new speaker), `_similarities` (the cosine similarity to each speaker), and `_update` (one more embedding for a speaker).
   - `CentroidClusterer` (rule A, D-057 part 4) is the program rule: the similarity to the centroid of each speaker. The centroid is the mean of the speaker's embeddings (each with length 1), scaled to length 1.
-  - `assign(embedding, duration_s) -> str` gives the label of one segment. `duration_s` is the speech time of the segment. The steps:
+  - `assign(embedding, duration_s) -> str | None` gives the label of one segment. `duration_s` is the speech time of the segment. The steps:
     1. Check the embedding, and make its length 1 (L2 norm).
-    2. With no speaker yet, the embedding starts `"Speaker 1"`, also for a short segment.
+    2. With no speaker yet, a segment with `duration_s < min_new_s` gets `None` (no label) and starts no speaker (D-060: in L-06, a cough as the first segment started "Speaker 1"). A longer segment starts `"Speaker 1"`.
     3. A segment with `duration_s < min_new_s` gets the label of the most similar speaker. It starts no new speaker and changes no speaker (D-057 part 5B).
     4. Else, if the highest similarity is `threshold` or more, the segment gets that speaker, and the speaker is updated. If not, it starts a new speaker.
   - On equal similarities, the speaker that came first wins. The labels are in the order of the first segment of each speaker. A label never changes after `assign` gives it.
   - The attribute `count` gives the number of speakers so far.
 - **Errors:** `speakers: CUDA is not available` (no CPU fallback, R10); `speakers: model file not in the Hugging Face cache: <repo>/<file>`; `speakers: threshold <t> is not in [-1, 1]`; `speakers: min_new_s <s> is negative`; `speakers: embedding has shape <shape>, expected one dimension`; `speakers: embedding has <n> values, expected <m>` (the size of the first embedding); `speakers: embedding has values that are not finite`; `speakers: embedding has zero length`. `SpeakerError` is in `speakers/cluster.py`.
-- **Parameters (§6, D-058):** `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s. Both are start values; L-06 tests them.
-- **Limits:** one embedding for each segment, so a segment with two voices gets one label (Q-04). An embedding from a noise can start a new speaker when the noise is `min_new_s` or longer (Q-14).
+- **Parameters (§6, D-058, D-060):** `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s. L-06 kept both: 0.50 gave no wrong label on clean turns, and L-06 gave no fact for `spk_min_new_s` (the output shows no segment length). C7 checks them again with a diagnostic line (D-060).
+- **Limits:**
+  - One embedding for each segment, so a segment with two voices gets one label: the label of the voice with more speech. The VAD cuts only after `vad_min_silence_ms` (500 ms) of silence, so a fast change of speaker or an interruption gives such a segment. Its embedding also updates the centroid of that speaker. [RUN] L-06 (Q-04). C7 measures a shorter `vad_min_silence_ms` (D-060).
+  - An embedding from a noise can start a new speaker when the noise is `min_new_s` or longer, after the first speaker (Q-14). C7 measures the VAD options for noises (D-060).
 
 ## 3. Data types (core, `types.py`)
 
@@ -216,7 +218,7 @@ All times are `time.monotonic()` values in seconds. All audio is float32, mono, 
 | | `speech_end` | `float` | True end of speech (D-023). |
 | | `closed` | `float` | Time when the `Endpointer` closed the segment. |
 | | `cut` | `bool` | True for a hard cut (§2.2 rule 5). |
-| `Line` | `label` | `str` | `"Me"`; on the system side `"Speaker N"` (C5), or `"System"` for an empty text (D-059). |
+| `Line` | `label` | `str` | `"Me"`; on the system side `"Speaker N"` or `"Unidentified"` (C5, D-060), or `"System"` for an empty text (D-059). |
 | | `start` | `float` | `Segment.start`. |
 | | `hy`, `en` | `str` | Armenian text, English text. |
 | | `speech_end`, `closed`, `asr_end`, `mt_end`, `write` | `float` | The times of §2.5. |
@@ -231,7 +233,7 @@ Interfaces (core, `typing.Protocol`):
 | `Transcriber` | `transcribe(audio) -> str` | NeMo RNNT | a fixed text |
 | `Translator` | `translate(text) -> str` | CTranslate2 NLLB | a fixed text |
 | `SpeakerEmbedder` | `embed(audio) -> np.ndarray` (one dimension) | TitaNet (D-058) | a fixed vector |
-| `Labeler` | `label(segment) -> str` | `SpeakerLabeler` (core, §2.8) | a list of labels |
+| `Labeler` | `label(segment) -> str` (`"Speaker N"` or `"Unidentified"`) | `SpeakerLabeler` (core, §2.8) | a list of labels |
 
 The WAV file source is test code only (D-025). It is in `tests/support/`, not in the package. It plays the clips at real-time speed and gives only whole frames; it drops the last part of a clip that is shorter than one frame. It adds no silence (D-032): a clip must end with at least 512 ms of silence, or the test fails.
 
@@ -280,8 +282,8 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | `vad_min_speech_ms` | 250 | ms | Silero default; removes clicks (D-026). | 2026-10-25 |
 | `vad_max_speech_s` | 10 | s | Limits the wait during a long speech (D-026). | 2026-10-25 |
 | `mt_beam_size` | 2 | — | CTranslate2 default. Beam sizes 1 and 2 gave the same texts and the same times (T-INSTALL-03, D-033). | 2026-10-25 |
-| `spk_threshold` | 0.50 | cosine | Start value: the middle of the zero-error range 0.40–0.60 of TitaNet with rule A in the C5 sweep (D-058). L-06 tests it. | 2026-10-27 |
-| `spk_min_new_s` | 1.0 | s | Start value: a shorter segment starts no speaker and changes no speaker (D-057 part 5B, D-058). No source and no eval segment under 2.40 s; L-06 tests it. | 2026-10-27 |
+| `spk_threshold` | 0.50 | cosine | The middle of the zero-error range 0.40–0.60 of TitaNet with rule A in the C5 sweep (D-058). [RUN] L-06: no wrong label on clean turns; kept (D-060). C7 checks it again. | 2026-10-27 |
+| `spk_min_new_s` | 1.0 | s | Start value: a shorter segment starts no speaker and changes no speaker (D-057 part 5B, D-058); before the first speaker, it gets `Unidentified` (D-060). No source and no eval segment under 2.40 s; L-06 gave no fact (no segment length in the output); kept. C7 sets it with the diagnostic line (D-060). | 2026-10-27 |
 
 ## 7. Error behaviour
 
@@ -355,7 +357,7 @@ The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outsid
   - `wer(refs, hyps)` and `cer(refs, hyps) -> float`: `normalize_hy` on each text, then words (WER) or characters with the spaces (CER). The result is the total edits divided by the total reference length, for the full list.
   - `chrf(refs, hyps) -> float`: `sacrebleu` `CHRF()` with its default values (character order 6, word order 0, beta 2), for the full list, 0 to 100. The English text gets no normalization.
   - `digit_words(texts) -> int`: the number of normalized words with a digit (D-047, N1).
-  - `label_accuracy(truths, labels, weights) -> float` (branch `c5-cluster`, D-057 part 2): the label accuracy after the best one-to-one mapping of the labels to the true speakers (`scipy.optimize.linear_sum_assignment`, maximum matched weight). The weight of a segment is its speech time, or 1 for a count. A label with no true speaker, and a true speaker with no label, count as errors. The result is the matched weight divided by the total weight.
+  - `label_accuracy(truths, labels, weights) -> float` (branch `c5-cluster`, D-057 part 2): the label accuracy after the best one-to-one mapping of the labels to the true speakers (`scipy.optimize.linear_sum_assignment`, maximum matched weight). The weight of a segment is its speech time, or 1 for a count. A label with no true speaker, and a true speaker with no label, count as errors. A segment with no label (`None`, D-060) is always an error. The result is the matched weight divided by the total weight.
   - Errors of `label_accuracy`: `metrics: <n> true speakers, <m> labels, and <k> weights`; `metrics: no segments`; `metrics: weight <w> is not positive`.
   - Errors: `MetricError(TirError)`: `metrics: <n> references and <m> hypotheses`; `metrics: the references have no words`.
   - Dependency: `sacrebleu` in the dev group (CI installs it).
@@ -434,3 +436,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.23 | 2026-10-27 | C5, branch `c5-embed` (§8.2), D-057: `streams.py`, `spk_run.py`, the three speaker candidates, the group `spk-eval`, and `scripts/spk_bakeoff.py`. |
 | 0.24 | 2026-10-27 | C5, branch `c5-embed` (§8.2), D-058: TitaNet selected; the ECAPA and WeSpeaker candidates and the group `spk-eval` removed; `spk_bakeoff.py` has only `--model titanet`. |
 | 0.25 | 2026-10-27 | C5, branch `c5-pipeline` (§1, §2, §2.5–§2.8, §3, §4, §6, §7, §8.2), D-058, D-059: the speaker step in the worker (`SpeakerLabeler`, `labelers` in `run()`, no step for an empty text); the `spk` latency step; `Line.spk_end`; `warm_up` with the embedder; the speaker model load; the TitaNet adapter in `speakers/titanet.py`; the parameters `spk_threshold` and `spk_min_new_s`. |
+| 0.26 | 2026-10-27 | C5, branch `c5-pipeline` (§2.5, §2.8, §3, §6, §8.2), D-060: a short first segment gets no label (`assign` gives `None`) and the labeler gives `"Unidentified"`; `label_accuracy` counts a segment with no label as an error; the L-06 limits (two voices in one segment, noise); the parameters kept after L-06. |
