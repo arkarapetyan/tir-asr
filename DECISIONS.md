@@ -1165,3 +1165,40 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "1. agree", "2. A", "3. A", "4. agree", "5. agree", "6. agree", "7. agree", "8. agree".
 - **Questions raised:** Claude (R14): with point 3A, a system segment with no text has the label `System` in C2 to C6. C7 removes the empty-text blocks for the delivery (D-031), so the delivered program shows only `Speaker N` on the system side.
 - **Revisit when:** L-06 (point 3), or C6 (the Template Method design for P1 and P4 must keep the speaker step separate, D-056).
+
+## D-060. L-06 result: a first noise, two voices in one segment, and the next steps (C5)
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** L-06 (`TESTS.md` §4) is the first live test of F4. D-057 part 5B and D-058 said that L-06 checks `spk_threshold` and `spk_min_new_s`.
+- **Facts (L-06, 2026-10-27, `test-results/c5-l06.txt`) [RUN]:**
+  - A call with 2 people on the call side (person A, person B), about 1 min 15 s; 9 `System` lines and 8 `Me` lines. The protocol asked for 5 min, so the sample is small.
+  - Totals 0.57–0.70 s; the `spk` step 0.01–0.02 s (K1 passes).
+  - On clean turns, each person kept one label (A: `Speaker 2`; B: `Speaker 3`), and no two people got one label.
+  - The first segment of the session was a cough of A («Լա։» → "What is it?"). It started `Speaker 1`, because the first segment always started a speaker (D-057 part 5B). A's speech then got `Speaker 2`. Thus A had two labels.
+  - Two segments had two voices (00:00:40 and 00:00:55, Aren confirmed the times). The VAD cuts only after 500 ms of silence, so a fast change or an interruption stays in one segment. The segment got the label of the voice with more speech (Q-04).
+  - Three of the 9 `System` lines were noises with one letter or a fragment (Q-14).
+  - After `Stopped.`, the output had `terminate called without an active exception` (a C++ abort at the stop). L-05 and T-E2E-02 did not have it.
+- **Aren's observations (his words):** "on the other end of the line there were two people"; "The first cough was identified but then it wasnt attributed to the Speaker 2 rightfully"; "No interruptions were correctly registered. In some cases even the speech of Speaker 3, if spoken shortly after Speaker 2, were not registered as theirs"; "In one case, Speaker 2 spoke for a bit, then Speakerr three for some more and it was attributed to Speaker 3"; "If they spoke with enough pauses, identification was correct, no other speaker was registered throughout (except initial cough part)".
+- **Parts, options, preferences, and decision:**
+  1. **L-06 status.** By the approved expected result ("each person keeps one label"), L-06 fails on one point (A had two labels). The clean turns pass.
+     - **Decision:** as stated.
+  2. **A noise as the first segment.** **A.** A short first segment (`duration_s < spk_min_new_s`, no speaker yet) gets no label and starts no speaker. **B.** All short segments get no label. **C.** No change.
+     - Claude's preference: A. Weak point: if the cough was 1.0 s or longer, A does not help [UNVERIFIED], because the output shows no segment length. Fact that can show A is wrong: a later live run again gives a first noise line with a speaker label.
+     - **Decision:** A. The label is `Unidentified` (Aren), not `System`. Design (Claude): `OnlineClusterer.assign` gives `None`, and `SpeakerLabeler.label` gives `UNIDENTIFIED`; the pipeline and the output do not change. `label_accuracy` counts a segment with no label as an error.
+  3. **Two voices in one segment.** **A.** Record the limit now (README, Q-04, ARCHITECTURE §2.8). **B.** A shorter `vad_min_silence_ms`, measured in C7. **C.** Find a speaker change inside a segment (embeddings on short windows), and cut the audio before ASR.
+     - Claude's preference: A now, B in C7, and C after C7 if mixed lines are still frequent.
+     - Aren's proposal: `vad_min_silence_ms` down to 250 ms, because "it is better to have separated same speech than not separated different speeches".
+     - Claude (R14): this is correct for the speaker step, but it has a cost in the text step. T-INSTALL-04 had pauses of 64–448 ms at sentence ends; slower speakers can pause 250–500 ms inside a sentence [UNVERIFIED]; a half sentence gives worse ASR and MT, and NLLB invents text for fragments (Q-14). More segments under `spk_min_new_s` get the nearest label, which is a guess. A gap under 250 ms and two people who speak at the same time stay in one segment. The latency gets about 0.25 s lower. C7 measures 250, 300, 400, and 500 ms on S1–S3 (WER, chrF, segment count and lengths), and the speaker sweep on a new stream with fast changes (made from the S1–S3 turns). A separate value for the System side is possible.
+     - **Decision:** A now; Aren's proposal (B, from 250 ms) goes to C7 with the measurement; C stays open for after C7.
+  4. **Noises (Q-14).** Aren's proposal: a slightly higher `vad_threshold`, so that minor coughs do not pass; Aren saw that longer coughs do not pass the VAD.
+     - Claude (R14): a higher threshold can also remove quiet speech, word starts, and short words such as «Այո» [UNVERIFIED]; `vad_end_threshold` (0.35) must stay lower. Other options: a higher `vad_min_speech_ms`, or a rule that removes texts with one or two letters (the L-06 noise lines: «Լա։», «Հովհ.», «Հ։»). The eval set has no noises: C7 needs a short recording with coughs, laughs, and short words («Այո», «Հա», «Լավ»).
+     - **Decision:** C7 measures `vad_threshold`, `vad_min_speech_ms`, and the short-text rule with the new recording (R6). 2A stays also with a higher threshold.
+  5. **Speaker parameters.** **Decision:** `spk_threshold` = 0.50 and `spk_min_new_s` = 1.0 s stay (D-058). C7 checks them again.
+  6. **Diagnostic line.** A flag (for example `--debug-speakers`) writes one line to stderr for each System segment: the speech length, the similarities, and the decision (new, update, short, or no label). Then C7 can set `spk_min_new_s` from facts (R10).
+     - Claude's preference: add it in C7, before its live test, because C7 uses it and the C5 time box has little time left.
+     - **Decision:** add the line (Aren: "yes let's add the diagnostic line"). Aren did not give the chat; after "proceed", Claude's preference (C7) applies. Aren can change this.
+  7. **M3.** **Decision:** M3 is reached after 2A and the exit check, with the limits in the README.
+- **Tests:** `TESTS.md` §2.7 (T-SPK-03 changed; T-SPK-05 and T-SPK-11 have one more case each). Aren: "proceed".
+- **Reason (Aren's words):** "1. Let's decrease min silence for VAD, even to 250ms, it is better to have separated same speech than not separated different speeches"; "2. let's increase vad threshold for speech very slightly so minor coughs are not registered"; "3. I actually noticed that longer coughs are not registered as speech at all so A is a go, I think we wont even need it if we are to increase the vad threshold, also please write "Unidentified" or something like that instead of "System""; "4. ok I see your point. my proposals (1, 2) go to C7"; "5. yeah let's keep the spk parameters"; "6. yes let's add the diagnostic line"; "7. Yup"; "proceed".
+- **Questions raised:** Claude (R14): with 3A, the delivered program has a known limit for interruptions; the README states it ("A solution that is honest about its limits beats one that hides them"). The abort at the stop is open: see L-02 in `TESTS.md` §4.
+- **Revisit when:** the C7 measurements (parts 3 and 4), the diagnostic line (part 5), or the exit check shows a repeated abort.
