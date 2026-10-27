@@ -1225,3 +1225,58 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Tests:** `TESTS.md` §2.7, branch `c5-stop`: T-PIPE-11, T-PIPE-12, the change of T-E2E-02, and the live exit check (Aren: "approved, proceed"); T-PIPE-13.
 - **Reason (Aren's words):** "approved, proceed"; for point 2 and T-PIPE-13: "ci is green, continue".
 - **Revisit when:** the live exit check or T-E2E-02 shows an abort, or the error line of point 2 comes in a live run.
+
+## D-062. C6: the text step for P1 and P4, the flag, the order, and the tests
+
+- **Status:** ACCEPTED (2026-10-27)
+- **Context:** D-053 puts P4 in C6, with one pipeline for P1 and P4 and the Template Method pattern. D-056 gives the C6 scope and five open questions. The handover 05 asked for the design of the text step, the flag, the branches, and the tests, with the R7 steps.
+- **Facts (chat C6, 2026-10-27):**
+  - [RUN] The laptop is on `main` at `cd4dfe8` (the merge of `c5-stop`). CI is green (Aren).
+  - [SOURCE: transformers 5.20.2, `generation/utils.py`] `generate` runs the encoder only when `encoder_outputs` is not given.
+  - [SOURCE: transformers 5.20.2, `modeling_seamless_m4t_v2.py`] `SeamlessM4Tv2ForSpeechToText.forward` uses a given `encoder_outputs` and makes the encoder mask from `attention_mask`. With no `tgt_lang`, its `generate` takes `decoder_input_ids` and writes a warning at each call (`logger.warning`); the base `generate` adds the decoder start token. Thus one `generate` call with two rows (the `hye` code and the `eng` code) can give both lines.
+  - [SOURCE: `configuration_seamless_m4t_v2.py`] `max_new_tokens` = 256. The `num_beams` of the model file `generation_config.json` is not known: the file is in the Hugging Face cache, outside the project folder.
+  - [calc, weak] C3 power log: the GPU load was 50 % or more for 11.2 s, but the P4 calls took about 21 s (0.133 GPU s for each audio s × 161 s). A possible cause is that the decode waits for the CPU, which starts each GPU kernel [UNVERIFIED].
+  - INT8 on the GPU: VRAM is not a limit (2.9 of 8 GB) [RUN, D-053]. bitsandbytes LLM.int8() needs a Turing or newer GPU and CUDA 11.8–13.0; its page gives no speed comparison with float16 [SOURCE: Transformers docs, bitsandbytes]. vLLM gives "Int8 not supported for this architecture" on SM120 [SOURCE: vLLM forum]. CTranslate2 disables INT8 on sm120 (D-016). bitsandbytes on sm_120: [UNVERIFIED].
+  - INT8 on the CPU: `torch.ao.quantization.quantize_dynamic` needs no new package. PyTorch plans a "phase out" of `torch.ao.quantization`, with no removal version [SOURCE: PyTorch dev-discuss, "torch.ao.quantization migration plan"]. That it works with torch 2.14.1: [UNVERIFIED].
+  - The 36.4 s CPU line (D-056 question 4) [RUN, `test-results/c3-probe-cpu.txt`]: s3-05 S2TT 32.52 s with an output of normal length (110 characters); s3-01 S2TT 2.10 s; s3-01 ASR 7.76 s (5.4 s of audio); s3-05 ASR 3.91 s (7.8 s of audio). Thus the time does not follow the audio length or the output length. Possible causes [UNVERIFIED]: the beam search does many more decode steps than the output shows; 24 threads on cores of different speed wait for the slowest core.
+- **Parts, options, Claude's preference, and decision:**
+  1. **Order: measure first (R6), then build.** Branches, one after the other: `c6-d062` (this entry and the tests); `c6-probe` (`scripts/probe_p4.py`, research only; then D-063 selects the P4 variant and its parameters, R10); `c6-textstep`; `c6-seamless`; `c6-cli`.
+     - Probe variants on the GPU, on the 34 segments of S1–S3 (C3): V0, two full calls, as in C3 (the reference); V1, one encoder pass and two decodes; V2, one `generate` call for both lines (a batch of two); V1 and V2 with `num_beams=1`, if the default is larger. Report: WER, CER, chrF, the mean and maximum line time, VRAM, the decode steps, and the default generate values.
+     - Probe on the CPU, on the 3 segments of the C3 probe: V0, the best GPU variant, 8 and 24 threads, INT8 (`quantize_dynamic`).
+     - **Decision:** as proposed (Aren: "proceed").
+  2. **Pattern.**
+     - **A.** Template Method. An abstract core class `TextStep` has the template methods `process(audio, clock)` and `warm_up(audio, clock)`, which give a `TextResult(hy, en, asr_end, mt_end)`, and the hooks `_prepare`, `_armenian`, and `_english`. The empty-text rule (D-031) and the clock reads are only in the template. Subclasses: `CascadeTextStep` (P1, core: the `Transcriber` and the `Translator`, which do not change) and `SeamlessTextStep` (P4, adapter). `run()` and `warm_up()` of the pipeline get one text step in place of the transcriber and the translator.
+     - **B.** Strategy: one interface and two classes with no shared steps. Weak point: each class repeats D-031 and the clock reads, and the tests must check each class.
+     - Claude's preference: A. Weak points: the P4 hooks share the state of `_prepare` (the encoder output), so the hooks have a fixed order; V2 does not fit two hooks well, because the EN text comes in `_armenian`. Fact that can show A is wrong: the probe shows that V2 is much faster than V1.
+     - **Decision:** A.
+  3. **Latency line for P4.**
+     - **(a)** The same steps `asr` and `mt`. For P4, `asr` is the encoder pass and the HY decode, and `mt` is the EN decode.
+     - **(b)** The text step gives the step names (for V2, one step, for example `s2t`).
+     - Claude's preference: (a) if V1 wins, because the output and its tests do not change; (b) if V2 wins.
+     - **Decision:** (a). Claude (R14, one time): if D-063 selects V2, the `mt` step of a P4 line is about 0.00 s, because both texts come in the `asr` step. Then `ARCHITECTURE.md` states this.
+  4. **Flag.**
+     - **A.** `--pipeline p1|p4`. Weak point: a user does not know the eval names P1 and P4.
+     - **B.** `--seamless`. Weak point: a third choice needs a second flag, and two flags can conflict.
+     - **C.** `--text-step cascade|seamless`, default `cascade`. Weak point: a long name.
+     - Claude's preference: C.
+     - **Decision:** B. `--seamless` (`store_true`). With no flag, the program uses P1. The startup log shows the text step.
+  5. **Model loads with P4:** NeMo ASR and NLLB do not load. The order is sources, Seamless (its CUDA check first), VAD, speaker model. NeMo still loads for TitaNet. **Decision:** as proposed.
+  6. **`STOP_JOIN_S` (handover 05):** [RUN, C3] the longest P4 line on the GPU is 0.83 s, less than 2.0 s. No change. A P4 call on the CPU (up to 36.4 s) gives the error line of D-061. **Decision:** as proposed.
+  7. **The speaker step** does not change (D-056 rule). It uses `segment.audio`, not the text. **Decision:** as proposed.
+  8. **INT8 on the GPU.**
+     - **A.** Measure with bitsandbytes in a temporary dependency group (as `spk-eval`), then remove it.
+     - **B.** No measurement, if the probe shows that a batch of two costs little more than a batch of one. Then the decode waits for the CPU, and INT8 cannot make it faster [UNVERIFIED reason].
+     - Claude's preference: B. Weak point: D-056 asks for an INT8 number, and B gives none on the GPU. Fact that can show B is wrong: V2 costs about 2 times V1 for each decode step; then Claude proposes A.
+     - **Decision:** B.
+  9. **CPU mode (D-056 question 1).**
+     - **A.** No CPU mode in the program. The README gives the CPU numbers.
+     - **B.** A flag `--device cpu` for P1 and P4, only if the probe shows that P4 on the CPU meets K1.
+     - **C.** A CPU mode now, for P1 and P4.
+     - Claude's preference: A, with B as the rule. Weak point of A: the program does not use the CPU optimizations. Fact that can show A is wrong: after the optimizations, P4 on the CPU has a maximum line time of about 3 s or less (K1 is 5 s, with the VAD wait of 0.5 s and two sources).
+     - **Decision:** B. The device flag comes only if the CPU numbers of the probe and of T-PERF-P4-01 part (b) meet K1. Else the README states the CPU limits of P4 (D-056 part 1).
+  10. **Process:** no separate red run, as in C4 and C5 (D-055, D-057 part 8). Claude (R14, one time): a test that cannot fail stays hidden. Mitigation: the tests come from the approved table, not from the code.
+  11. **Time box:** 3.5 h for the full scope [UNVERIFIED estimate: probe 0.5 h, text step 0.75 h, P4 adapter and tests 0.75 h, flag and end-to-end test 0.5 h, sim and live test 0.5 h, documents and handover 0.5 h]. Claude tells Aren when C6 goes over it (R16).
+- **Tests:** `TESTS.md` §2.8.
+- **Reason (Aren's words):** part 2: "1. A"; part 3: "2. A"; part 4: "3. b"; part 5: "4. AGREE"; part 6: "5. Agree"; part 7: "6. Agree"; part 8: "7. B"; part 9: "8. B"; tests: "agree on the tests"; part 11: "agree on the time box"; the goal of C6: "agree on the goal"; part 1: "proceed". Aren gave no other reason.
+- **Questions raised:** Claude (R16, one time): C0 to C5 took about 19.35 h; with C7 and C8 (2.5 h), the total is about 21.9 h before C6, over the 20 h of the brief. Aren keeps C6 (D-056) with the time box of part 11.
+- **Revisit when:** the probe shows that V2 is much faster than V1 (parts 2 and 3); V2 costs about 2 times V1 for each decode step (part 8); or the CPU numbers meet K1 (part 9).
