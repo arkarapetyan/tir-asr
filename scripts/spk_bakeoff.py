@@ -51,7 +51,7 @@ MIB = 2**20
 
 def load_model(name: str):
     if name == "titanet":
-        from tir_asr.eval.spk_titanet import TitanetEmbedder
+        from tir_asr.speakers.titanet import TitanetEmbedder
 
         return TitanetEmbedder()
     raise SystemExit(f"spk_bakeoff: unknown model {name}")

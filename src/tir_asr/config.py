@@ -27,6 +27,8 @@ class Params:
     vad_min_speech_ms: int = 250  # ms, D-026
     vad_max_speech_s: int = 10  # s, D-026
     mt_beam_size: int = 2  # D-033
+    spk_threshold: float = 0.50  # cosine, D-058 (start value; L-06 tests it)
+    spk_min_new_s: float = 1.0  # s, D-057 part 5B, D-058 (start value; L-06 tests it)
 
 
 def parameter_lines(params: Params) -> list[str]:

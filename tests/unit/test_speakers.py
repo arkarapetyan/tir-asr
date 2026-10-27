@@ -1,4 +1,4 @@
-"""T-SPK-01 to T-SPK-05 and T-SPK-07: online speaker clustering and label accuracy (D-057).
+"""T-SPK-01 to T-SPK-05, T-SPK-07, T-SPK-11: speaker clustering, label accuracy, labeler.
 
 No model. The embeddings are small vectors at known angles, so each cosine similarity is known
 from the angle between two vectors. The expected labels come from the approved test table
@@ -14,6 +14,8 @@ import pytest
 from tir_asr.eval.metrics import MetricError, label_accuracy
 from tir_asr.eval.nearest import NearestClusterer
 from tir_asr.speakers.cluster import CentroidClusterer, SpeakerError
+from tir_asr.speakers.labeler import SpeakerLabeler
+from tir_asr.types import Segment
 
 RULES = [CentroidClusterer, NearestClusterer]
 LONG = 3.0  # s of speech: longer than min_new_s in all tests
@@ -157,3 +159,32 @@ def test_spk_07_the_two_rules_differ_after_a_chain():
 
     assert [centroid.assign(at(a), LONG) for a in angles] == ["Speaker 1", "Speaker 1", "Speaker 2"]
     assert [nearest.assign(at(a), LONG) for a in angles] == ["Speaker 1", "Speaker 1", "Speaker 1"]
+
+
+class FakeEmbedder:
+    """Gives the vectors in order and records the audio of each call."""
+
+    def __init__(self, vectors):
+        self.vectors = list(vectors)
+        self.calls = []
+
+    def embed(self, audio):
+        self.calls.append(audio)
+        return self.vectors.pop(0)
+
+
+def segment(start: float, end: float) -> Segment:
+    audio = np.full(16, start, dtype=np.float32)  # the audio shows which segment it is
+    return Segment("System", audio, start, end, end + 0.5, cut=False)
+
+
+def test_spk_11_labeler_gives_the_audio_and_the_speech_time():
+    embedder = FakeEmbedder([at(0), at(90), at(80)])
+    labeler = SpeakerLabeler(embedder, CentroidClusterer(threshold=0.9, min_new_s=1.0))
+    segments = [segment(1.0, 4.0), segment(5.0, 8.0), segment(9.0, 9.5)]
+
+    labels = [labeler.label(s) for s in segments]
+
+    # The third segment: 0.5 s of speech, so it is short: the most similar speaker (cos 10 deg).
+    assert labels == ["Speaker 1", "Speaker 2", "Speaker 2"]
+    assert [call[0] for call in embedder.calls] == [1.0, 5.0, 9.0]
