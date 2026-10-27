@@ -1,8 +1,8 @@
-# Bake-off results (C3, C5)
+# Bake-off results (C3, C5, C6)
 
-**Date:** 2026-10-26 (C3), 2026-10-27 (C5) · **Decisions:** D-053 (P4: Seamless end to end), D-058 (speaker model) · **Rules:** R6 (measure, do not guess)
+**Date:** 2026-10-26 (C3), 2026-10-27 (C5, C6) · **Decisions:** D-053 (P4: Seamless end to end), D-058 (speaker model), D-063 (P4 variant) · **Rules:** R6 (measure, do not guess)
 
-The sections up to "Not measured" are the C3 bake-off. The section "Speaker labels (C5)" is the C5 sweep.
+The sections up to "Not measured" are the C3 bake-off. The section "Speaker labels (C5)" is the C5 sweep. The section "P4 variants (C6)" is the C6 probe.
 
 ## Conditions
 
@@ -113,3 +113,44 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 - **Removed after the sweep (D-058):** the ECAPA and WeSpeaker adapters and the dependency group `spk-eval` (`speechbrain`, `pyannote.audio`). The `c5-embed` commits in git keep them.
 - **Limits:** 4 voices and 19 segments. 0 errors in 19 segments gives an approximate 95 % upper limit of about 15 % for the error rate [calc]. No segment under 2.40 s and no noise, so `spk_min_new_s` and Q-14 are not tested. The live check is L-06.
 - **H-S1 (D-003):** three models trained on English voices separate the four Armenian voices with no error over a range of thresholds. No fine-tuning is necessary on this data.
+
+## P4 variants (C6)
+
+### Conditions
+
+- **Laptop (Aren), 2026-10-27:** RTX 5070 Laptop GPU; CPU with 24 cores: 8 fast cores (2 at 5.4 GHz, 6 at 5.3 GHz) and 16 slow cores (4.7 GHz). torch 2.14.1, transformers 5.20.2, attention `sdpa`.
+- **Script:** `scripts/probe_p4.py` (D-062 part 1). `facebook/seamless-m4t-v2-large`, `SeamlessM4Tv2ForSpeechToText`, the generate values of the model: greedy (no `num_beams` in the model files), `max_new_tokens` 256.
+- **GPU data:** float16; the 34 segments of S1–S3 (the program's VAD, `Params()`, as in C3). For each segment, the variants run one after the other. The VAD loads after the model, so torch has 1 CPU thread, as in the program.
+- **CPU data:** float32 (and INT8); the 3 segments of the C3 CPU probe (s3-01, s3-05, s3-07, mic side, cut with the labels); no Silero import.
+- **Variants:** V0, two full `generate` calls (the HY line, then the EN line), as in C3; V1, one encoder pass and two decodes that get the encoder output; V2, one encoder pass and one decode of a batch of two rows (the `hye` code and the `eng` code).
+- **Files (local):** `test-results/c6-probe-gpu.txt`, `test-results/c6-probe-cpu.txt`, `test-results/bakeoff/p4-probe-{gpu,cpu}.json`.
+
+### Results on the GPU
+
+| Variant | WER | CER | chrF | Line mean / max | Texts as V0 | Decode steps (mean) | One decode step |
+|---|---|---|---|---|---|---|---|
+| V0 | 6.8 % | 2.3 % | 59.0 | 0.661 / 0.829 s | 34 of 34 | 45.9 | — |
+| V1 | 6.8 % | 2.3 % | 59.0 | 0.586 / 0.744 s | 34 of 34 | 45.9 | 12.1 ms (batch of one) |
+| **V2** | 7.1 % | 2.3 % | 59.0 | **0.337 / 0.443 s** | 32 of 34 | 24.8 | 12.3 ms (batch of two) |
+
+- V0 gives the C3 numbers again.
+- V2 gives the same English text as V0 on all 34 segments. Two Armenian texts differ by one character: «:» → «։» (no WER change after the normalization) and «պատշգամբում» → «պատճգամբում» (1 word of 397).
+- A step with a batch of two takes 1.02 times a step with a batch of one, so the decode waits for the CPU, not for the GPU work. Thus INT8 on the GPU is not measured (D-062 part 8).
+- VRAM 2884 MiB after the load; peak torch memory 2955 MiB for each variant.
+- With the VAD wait (about 0.5 s), the slowest V2 line is about 0.95 s [calc].
+
+### Results on the CPU (3 segments)
+
+| Setting | V0 | V1 | V2 |
+|---|---|---|---|
+| float32, 24 threads | 5.2–50.5 s | 15.0–30.7 s | 15.3–29.5 s |
+| float32, 8 threads | 4.1–6.1 s | 3.4–4.7 s | 2.7–3.9 s |
+| INT8 (`quantize_dynamic`, `nn.Linear`), 8 threads | — | — | 1.18–1.76 s |
+
+- The slow C3 CPU lines (up to 36.4 s) come from the thread count: 24 threads on 8 fast and 16 slow cores. The decode steps do not explain the times (s3-01: 45 steps, 50.5 s with 24 threads, 4.1 s with 8 threads).
+- INT8: the Armenian texts are the same as float32, except one first letter that is not a capital; the English texts differ in some words (chrF 61.5 against 59.7 on 3 segments, not a quality result). torch 2.14.1 writes that `torch.ao.quantization` "is deprecated and will be removed in 2.10".
+- With INT8 and 8 threads, the longest line plus the VAD wait is about 2.3 s, under K1 [calc, 3 segments]. The program has no CPU mode (D-063 part 4); this is a limit in the README and a possible next step.
+
+### Decision
+
+- **D-063:** V2 on the GPU, float16. The latency line of P4 has one step, `s2t` (part 2). No INT8 on the GPU; no CPU mode. T-PERF-P4-01 checks V2 in the program adapter: WER ≤ 7.6 %, chrF ≥ 58.5, line mean ≤ 0.40 s, maximum ≤ 0.55 s.
