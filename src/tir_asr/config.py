@@ -22,10 +22,10 @@ class Params:
     mt_compute_type: str = "float16"  # D-015
     vad_threshold: float = 0.5  # probability, D-026
     vad_end_threshold: float = 0.35  # probability, D-026
-    vad_min_silence_ms: int = 500  # ms, D-027 (start value)
+    vad_min_silence_ms: int = 500  # ms, D-027 (start value; 300 ms failed T-E2E-01, D-069)
     vad_speech_pad_ms: int = 30  # ms, D-026
     vad_min_speech_ms: int = 250  # ms, D-026
-    vad_max_speech_s: int = 10  # s, D-026
+    vad_max_speech_s: int = 15  # s, D-069 (D-026: 10)
     mt_beam_size: int = 2  # D-033
     spk_threshold: float = 0.50  # cosine, D-058 (start value; L-06 tests it)
     spk_min_new_s: float = 1.0  # s, D-057 part 5B, D-058 (start value; L-06 tests it)

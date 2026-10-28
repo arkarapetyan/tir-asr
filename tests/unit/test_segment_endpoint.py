@@ -21,6 +21,11 @@ SPEECH = 0.9
 SILENT = 0.1
 MID = 0.4  # between vad_end_threshold (0.35) and vad_threshold (0.5)
 
+# The frame counts of these tests use a minimum silence of 500 ms (16 frames) and a maximum
+# length of 10 s. These tests check the rules, not the program values; T-CFG-01 checks the
+# values (D-069: the program uses 15 s).
+RULE_PARAMS = Params(vad_min_silence_ms=500, vad_max_speech_s=10)
+
 
 class FakeVad:
     """SpeechProbability fake: each call returns the next number of the list."""
@@ -39,7 +44,7 @@ def block(k: int) -> AudioBlock:
 
 def run(probabilities):
     """Push one block for each probability. Return the Endpointer and [(frame, Segment)]."""
-    endpointer = Endpointer(Params(), FakeVad(probabilities))
+    endpointer = Endpointer(RULE_PARAMS, FakeVad(probabilities))
     found = []
     for k in range(len(probabilities)):
         segment = endpointer.push(block(k))
@@ -165,7 +170,7 @@ def test_seg_08_start_at_frame_0_has_no_start_pad():
 def test_seg_08_pad_longer_than_one_frame_is_limited_to_the_samples_that_exist():
     # vad_speech_pad_ms = 100 is 1600 samples (3.125 frames). Speech starts at frame 2,
     # so only 1024 samples exist before it. The second segment has the full pad.
-    params = Params(vad_speech_pad_ms=100)
+    params = Params(vad_min_silence_ms=500, vad_max_speech_s=10, vad_speech_pad_ms=100)
     probabilities = [SILENT] * 2 + [SPEECH] * 10 + [SILENT] * 16 + [SPEECH] * 10 + [SILENT] * 20
     endpointer = Endpointer(params, FakeVad(probabilities))
     found = [
