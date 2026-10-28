@@ -1422,3 +1422,19 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** Aren ran the tests and committed: "done, proceed".
 - **Questions raised:** Claude: the margin is small (61.0 ms against the limit of 64 ms), and the mechanism is not proven; the result agrees with it.
 - **Revisit when:** a sim run or a live run shows a gap over 64 ms again.
+
+## D-068. NeMo log lines at the startup (C8)
+
+- **Status:** PROPOSED (2026-10-28). Aren decides after the final live test.
+- **Context:** D-043 point 3 left the NeMo lines visible for M1. Aren (C7): silence them in C8; errors must stay visible (R10).
+- **Facts:**
+  - [RUN, `test-results/c7-live-p1.txt`] 244 lines before "Listening"; the lines that are not `startup:` lines come from the NeMo logger (`[NeMo W …]`, `[NeMo I …]` and their indented continuation lines), except two `OneLogger` lines at the NeMo import. NeMo also passes a torch `UserWarning` through its logger.
+  - [SOURCE: `nemo-toolkit` 3.0.0 wheel, `nemo/utils/__init__.py` and `nemo/utils/nemo_logging.py`] `nemo.utils.logging` is one `Logger` instance with `setLevel` and the levels `WARNING` and `ERROR`.
+- **Options:**
+  - **A.** `app.quiet_nemo` sets the NeMo logger level to ERROR at the start of `load_models`, for the rest of the process, and prints `startup: NeMo log level ERROR: the NeMo info and warning lines are hidden (D-068)`. Weak points: a NeMo warning that tells of a real problem is hidden; the two `OneLogger` lines stay.
+  - **B.** Send file descriptors 1 and 2 to a log file during the model loads; print the file name on an error. Weak points: more code; the `startup:` lines need a separate output; C++ errors go to the file.
+  - **C.** No change (D-043 point 3).
+- **Claude's preference:** A. Fact that can show A is wrong: in the final live test, NeMo lines still appear before "Listening", or a model error gives no message.
+- **Decision:**
+- **Reason (Aren's words):**
+- **Revisit when:** a NeMo problem needs its warnings (then run with A removed).
