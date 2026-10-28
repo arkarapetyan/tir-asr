@@ -1425,7 +1425,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 
 ## D-068. NeMo log lines at the startup (C8)
 
-- **Status:** PROPOSED (2026-10-28). Aren decides after the final live test.
+- **Status:** ACCEPTED (2026-10-28), option A
 - **Context:** D-043 point 3 left the NeMo lines visible for M1. Aren (C7): silence them in C8; errors must stay visible (R10).
 - **Facts:**
   - [RUN, `test-results/c7-live-p1.txt`] 244 lines before "Listening"; the lines that are not `startup:` lines come from the NeMo logger (`[NeMo W …]`, `[NeMo I …]` and their indented continuation lines), except two `OneLogger` lines at the NeMo import. NeMo also passes a torch `UserWarning` through its logger.
@@ -1435,6 +1435,6 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - **B.** Send file descriptors 1 and 2 to a log file during the model loads; print the file name on an error. Weak points: more code; the `startup:` lines need a separate output; C++ errors go to the file.
   - **C.** No change (D-043 point 3).
 - **Claude's preference:** A. Fact that can show A is wrong: in the final live test, NeMo lines still appear before "Listening", or a model error gives no message.
-- **Decision:**
-- **Reason (Aren's words):**
+- **Decision:** A.
+- **Reason (Aren's words):** "agree on your proposal".
 - **Revisit when:** a NeMo problem needs its warnings (then run with A removed).
