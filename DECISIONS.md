@@ -1323,3 +1323,26 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "1. A", "2. B", "3. No need for INT8 on GPU", "4. B", "5. Agree". Parts 6 and 7 follow from part 1; Aren gave no separate answer.
 - **Questions raised:** D-056 question 4 (the 36.4 s CPU line) is answered: the cause is the thread count on cores of different speed, not the beam search (the model is greedy) and not a long output.
 - **Revisit when:** T-PERF-P4-01 fails its limits; a transformers update breaks the base `generate` call; or a run with no NVIDIA GPU becomes necessary (part 4).
+
+## D-064. L-07 result: P4 fails live; no run of unoptimized P4; a recorded live test decides P4 (C6 end)
+
+- **Status:** ACCEPTED (2026-10-28)
+- **Context:** L-07 (`TESTS.md` §4) is the live test of P4 (`./run.sh --seamless`). On 2026-10-27, Aren ran P4 for some minutes in a call, then P1, and kept no output file. Aren asked if the optimization (V2, D-063) is the cause; if yes, unoptimized P4 must be tried, and if no, C6 ends. On 2026-10-28, Aren tested P4 again.
+- **Facts:**
+  - Aren, L-07 (2026-10-27, no file): "P1 was miles better than P4 like unbelievably better". What was better: "the text of both normal, as well as slightly 'artificially clarified' speech, seamless was constantly failing"; "no not really invented lines on noise or silence"; "also seamless gave some #err symbols for some reason".
+  - Aren, more tests (2026-10-28, no file): "it worked a bit better this time, but I still get #err symbol, as well as english text in armenian transcription".
+  - [RUN, probe, 34 eval segments] V2 and V0 (unoptimized, as in C3) give the same English text on all 34 segments, and the same Armenian text on 32; the other 2 differ by one character (D-063). Thus the optimization is not the cause.
+  - [RUN, T-SIM-03, `test-results/c6-cli-sim.txt`] P4 through the real capture path (null sinks, the S1 mic side and stream D): 24 blocks with correct Armenian text, no `#err`, and no English text in an HY line; 19 of 19 speaker labels correct; totals 0.76–0.99 s. But the capture thread `Me` had an arrival gap of 145.0 ms (limit 64 ms, Q-10), so T-SIM-03 fails on its point (5). With P1 (T-SIM-02, the same run), the largest gap was 49.5 ms.
+  - [RUN, T-MODEL-P4-01] on 2 s of zeros, P4 wrote «ՄԱՐԻԿ - Այո։» and "The first thing we do is we make a little bit of a noise." In L-07, Aren saw no such lines on noise.
+  - The source of the `#err` text is not known [UNVERIFIED]: the model output (a token of its vocabulary), the tokenizer, or the terminal.
+- **Options:**
+  - **A.** Run unoptimized P4 (V0) live, to check the optimization.
+  - **B.** No run of V0. P1 stays the default (D-056); P4 stays behind `--seamless` as experimental; the README states the live problems. The next chat starts with the P4 problems (the `#err` text, English text in the HY line, the capture gap of T-SIM-03) and a full live test of P1 and P4 with the output in a file; then the final decision on P4 (keep, fix, or remove).
+  - **C.** As B, but remove P4 from the program now.
+- **Claude's preference:** B. Weak points: the cause of the live problems is not measured (R6); a flag that gives broken lines live stays in the program until the final decision. Fact that can show B is wrong: the recorded live test shows that P4 cannot be fixed in the time budget; then C.
+- **Decision:** B.
+- **Reason (Aren's words):** 2026-10-27: "Is this due to optimization? If so then we need to try unoptimized P4. If not, then this is the end, we should begin wrapping up the project. so lets end C6 on this bombshell". 2026-10-28: "We have to address this issue in the next step and conduct a full live test, this time you'll get the results and we'll settle on a final decision."
+- **Questions raised:**
+  - Claude (R14, R6): the eval set and T-SIM-03 say that P4 gives correct text on recorded audio, but the live result says the opposite; the live result has no data. Thus the final decision waits for the recorded live test.
+  - Claude (R3): T-SIM-03 fails on point (5), so `c6-cli` has a failed test. The failed test is of the P4 flag only; all P1 tests pass. Aren decides if `c6-cli` merges into `main` now.
+- **Revisit when:** the recorded live test of the next chat.
