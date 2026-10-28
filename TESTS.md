@@ -588,6 +588,16 @@ Decisions: D-065 (plan), D-066 (the P4 fixes), D-067 (the GIL switch interval). 
 - **Diagnostic (D-066 part 2, before D-067)** (`test-results/c7-p4-sim03.txt`): T-SIM-03 FAILS on point (5). 522 GC passes, none of generation 2, longest 0.6 ms. 24 text step calls, longest 0.451 s. Gaps over 64 ms: 17 on `Me` (largest 135.0 ms), 18 on `System` (largest 146.2 ms); each came during a text step call, and no full GC pass came in a gap.
 - **`fix(pipeline)` (D-067):** ruff passes; unit 263 passed (`test-results/c7-gil-unit.txt`): 261 and the 2 cases of T-PIPE-15. **T-SIM-03 PASSES** (`test-results/c7-gil-sim03.txt`): 0 gaps over 64 ms, largest 61.0 ms (`Me`) and 55.0 ms (`System`); 19 of 19 labels correct, 4 labels; totals max 0.96 s, mean 0.88 s; 523 GC passes, none of generation 2. Model (`test-results/c7-gil-model.txt`): T-E2E-01 to T-E2E-03, 4 passed; exit code 0, 1.22 s after SIGINT.
 
+**Branch `c7-notext`** (D-031 for the delivery, D-065 scope A): a segment with an empty text gives no block; the shutdown line still counts it.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-PIPE-03 (changed) | D-031, §2.6. | As before, with the clock 0.0, 1.400 (no write). | No MT call; no block; `Stopped. Segments: 0, short segments: 0, empty texts: 1, not processed: 0.`; no clock value left. | unit | PASSES |
+| T-PIPE-04 (changed) | D-031, §2.6. | As before, with the clock 0.0, 1.400, 1.500, 1.510, 4.500. | The last line is `Stopped. Segments: 1, short segments: 1, empty texts: 1, not processed: 0.`; no clock value left. | unit | PASSES |
+| T-PIPE-09 (changed) | D-031, D-059 point 3. | As before, with the clock list without the last write. | The `Me` block and the `Speaker 2` block, no `System` block; `Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0.`; one labeler call; no clock value left. | unit | PASSES |
+
+**Results (branch `c7-notext`, Aren's laptop, 2026-10-28):** ruff passes; unit 263 passed, 27 deselected (`test-results/c7-notext-unit.txt`). Model (`test-results/c7-notext-model.txt`): T-E2E-01 to T-E2E-03, 4 passed in 60.67 s; totals 0.64 s and 0.62 s (P1), 0.88 s and 0.85 s (P4); exit code 0, 1.27 s and 1.37 s after SIGINT. `output.format_block` keeps its form for an empty text (T-OUT-03, T-OUT-06 c), but the program does not call it with an empty text.
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
