@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.19 · **Date:** 2026-10-28
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067).
+**Version:** 0.20 · **Date:** 2026-10-28
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5).
 
 ---
 
@@ -379,6 +379,16 @@ ASR: automatic speech recognition. MT: machine translation.
   - **From C7 (Aren, 2026-10-28):** a final live test with two speakers on the call side (M4; L-06 again), with the output in a file; and no NeMo startup lines on the screen (D-043 point 3). C8 proposes the method for the startup lines with the R7 steps (R10).
   5. **Last step, after Claude's last message:** Aren requests the full data export and puts each project chat into `chats/` as one `.md` file (with the converter from S1, if necessary). Then Aren commits and pushes.
 - **Done when:** M5. Aren sends the repository link.
+- **Result (2026-10-28, D-068 to D-070):**
+  - Full README (setup, models with alternatives and reasons, architecture, measured results, limits, improvements, how we worked).
+  - D-068: NeMo log level ERROR from the model load; [RUN] 0 NeMo lines in the final live test.
+  - Final live test (`test-results/c8-live.txt`, P1, 2 people on the call side, script S1, then free talk with interruptions, slang, and a bad connection, about 6.5 min): 88 lines, totals 0.17–0.69 s, clean stop. Four hard cuts at 10 s; turns of two people in one line; 5 extra labels from short fragments (Speakers 3–7). Aren: "The rest was fine".
+  - D-069: `vad_max_speech_s` 10 → 15 s. 300 ms for `vad_min_silence_ms` split a sentence in T-E2E-01, so it stays 500 ms.
+  - D-070: `GIL_SWITCH_S` 1 → 0.5 ms, after T-SIM-03 (P4) failed with a gap of 70.4 ms; then T-SIM-03 passes.
+  - Final tests: unit 263 passed; model T-E2E-01 to T-E2E-03 passed (with D-069); sim T-SIM-01 and T-SIM-02 passed (D-069), T-SIM-03 passed (D-070).
+  - **§1 check:** F1 (two sources, device list and flags, monitor source in place of BlackHole) done; F2, F3 done (P1; P4 experimental); F4 done, with the limits of the README §7 (extra labels from noise, two voices in one line); F5 done; K1 met (live totals at most 0.94 s); K2 met (`HF_HUB_OFFLINE=1`, local models); K3 met; K4 met (Aren's laptop); K5 met (README §4). D1 done; D2 done; D3 after the export (step 5).
+  - **M4:** reached with the C8 live test (2 people on the call side). **M5:** reached after the chat export and the merge.
+  - Not done (Aren: "No more live tests"): the rehearsal of step 4 as a separate run; the D-060 measurements (README §8).
 
 ---
 
@@ -559,10 +569,10 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C5 | 3 h | about 4.4 h | 2026-10-26, about 22:32–22:50 (the ONNX question; estimate); 2026-10-27, 13:57–15:56 (D-056 to D-059, three branches); 17:14–17:55 (L-06 and its report); 19:21 to the end of the chat (D-060, D-061, `c5-stop`, the chat end). The breaks are not counted. About 1.4 h over the time box: the L-06 follow-up (D-060) and the abort at the stop (D-061). Estimate from the chat times; Aren confirms or corrects it. |
 | C6 | 3.5 h (D-062) | 1.42 h | 2026-10-27, 20:51–22:08 (77 min), and 2026-10-28, 11:12–11:20 (8 min) (Aren). His own P4 tests on 2026-10-28 before 11:12 are not counted. Under the time box: the probe chose the variant quickly, and the CPU mode was not built (D-063 part 4). |
 | C7 | 1.5 h + 10 min (the calls, Aren) | 1.62 h | 2026-10-28, 11:23–11:50 (27 min); the two S5 calls (10 min, Aren); 13:32–14:32 (60 min). The break is not counted. Inside the time box. |
-| C8 | 1 h | | |
+| C8 | 1 h | about 1.0 h (Aren corrects) | 2026-10-28, 14:35–14:55 (README, D-068); the live test (Aren, not counted here); 20:01–20:40 (D-069, D-070, the chat end). Estimate from the chat times. |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **25.5 h** | about 22.4 h | C0 to C7. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.4 h after C8 (R16 notes in §5.1). |
+| **Total** | **25.5 h** | about 23.4 h | C0 to C8 (C8 an estimate). Over the "about 20 hours" of the brief: S1, D-035 (C2b–C2d), and the overruns of C0, C2d, and C5 (R16 notes in §5.1). |
 
 ---
 
@@ -589,3 +599,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.17 | 2026-10-27 | C6 started: D-062 (the order, the text step design, the flag `--seamless`, INT8, the CPU mode rule, the tests); the C6 time box 3.5 h; the R16 note at the C6 start. |
 | 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (1.42 h, Aren: to 11:20). |
 | 0.19 | 2026-10-28 | C7 closed: D-065 to D-067; the C7 result in §5.2; the R16 note at the C7 end; C7 time logged (1.62 h); the two C8 items from Aren (a live test with two people on the call side; the NeMo startup lines). |
+| 0.20 | 2026-10-28 | C8 closed: D-068 to D-070; the C8 result, the §1 check, M4 and M5 in §5.2; C8 time logged (estimate). |
