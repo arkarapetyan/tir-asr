@@ -4,3 +4,51 @@
 [[chat]]
 title = "Armenian speech recognition app"
 file = "00-kickoff.md"
+
+[[chat]]
+title = "Claude data export format"
+file = "00b-export-format.md"
+
+[[chat]]
+title = "Armenian ASR research C1"
+file = "01-research.md"
+
+[[chat]]
+title = "C2 step"
+file = "02-skeleton-design.md"
+
+[[chat]]
+title = "C2b step"
+file = "02b-segment.md"
+
+[[chat]]
+title = "C2c step"
+file = "02c-adapters.md"
+
+[[chat]]
+title = "Step c2d development start"
+file = "02d-cli.md"
+
+[[chat]]
+title = "C3 step"
+file = "03-eval.md"
+
+[[chat]]
+title = "C4 step"
+file = "04-two-sources.md"
+
+[[chat]]
+title = "C5 step"
+file = "05-speakers.md"
+
+[[chat]]
+title = "C6 step"
+file = "06-p4.md"
+
+[[chat]]
+title = "C7 step"
+file = "07-live.md"
+
+[[chat]]
+title = "Commit C8 README and CI"
+file = "08-delivery.md"
