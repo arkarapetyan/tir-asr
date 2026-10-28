@@ -174,7 +174,7 @@ ASR: automatic speech recognition. MT: machine translation.
 
 **Note (C6 start, R16):** Aren keeps C6 with a time box of 3.5 h for the full D-056 scope (D-062 part 11). The expected total is now about 25.4 h (calc: 19.35 + 3.5 + 1.5 + 1.0).
 
-**Note (C6 end, R16):** C6 took about 1.7 h, under its time box (§11). C0 to C6 took about 21.05 h. With C7 and C8 (2.5 h), the expected total is about 23.55 h. Aren wants to wrap up the project; C7 first settles P4 (D-064), and Aren decides the rest of the C7 scope.
+**Note (C6 end, R16):** C6 took about 1.4 h, under its time box (§11). C0 to C6 took about 20.8 h (calc: 19.35 + 1.42). With C7 and C8 (2.5 h), the expected total is about 23.3 h. Aren wants to wrap up the project; C7 first settles P4 (D-064), and Aren decides the rest of the C7 scope.
 
 ### 5.2 Details for each chat
 
@@ -553,12 +553,12 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C3 | 2.5 h | 2.5 h | 2026-10-26, 15:14–17:44 (2 h 30 min, from the chat times). On the time box, with the full shortlists (D-049). The P4 implementation moved to C6 (D-053). |
 | C4 | 2 h | 1.03 h | 2026-10-26, 20:41–21:28 (47 min, the three branches); 21:53–22:03 (10 min, live test L-05); 22:03–22:08 (5 min, closing). The time 21:28–21:53 is not counted (Aren). Aren adds the time of his last commits if necessary. 0.97 h under the time box; Aren decides if it goes to the buffer. |
 | C5 | 3 h | about 4.4 h | 2026-10-26, about 22:32–22:50 (the ONNX question; estimate); 2026-10-27, 13:57–15:56 (D-056 to D-059, three branches); 17:14–17:55 (L-06 and its report); 19:21 to the end of the chat (D-060, D-061, `c5-stop`, the chat end). The breaks are not counted. About 1.4 h over the time box: the L-06 follow-up (D-060) and the abort at the stop (D-061). Estimate from the chat times; Aren confirms or corrects it. |
-| C6 | 3.5 h (D-062) | about 1.7 h | 2026-10-27, 20:51–22:08, and 2026-10-28, 11:12–11:40 (from the chat times; Aren confirms or corrects it; his own P4 tests on 2026-10-28 before 11:12 are not counted). Under the time box: the probe chose the variant quickly, and the CPU mode was not built (D-063 part 4). |
+| C6 | 3.5 h (D-062) | 1.42 h | 2026-10-27, 20:51–22:08 (77 min), and 2026-10-28, 11:12–11:20 (8 min) (Aren). His own P4 tests on 2026-10-28 before 11:12 are not counted. Under the time box: the probe chose the variant quickly, and the CPU mode was not built (D-063 part 4). |
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **25.5 h** | about 21.05 h | C0 to C6. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h after C5 (R16 notes in §5.1). |
+| **Total** | **25.5 h** | about 20.77 h | C0 to C6. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h after C5 (R16 notes in §5.1). |
 
 ---
 
@@ -583,4 +583,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.15 | 2026-10-27 | D-056: Q16 closed; the C6 scope (P4 behind a flag, P1 the default, optimizations, P4 tests, no custom ONNX); C5 before C6, with the rule for the speaker step. |
 | 0.16 | 2026-10-27 | C5 closed: M3 reached; D-057 to D-061; the C5 status and data; the C7 work from D-060 (step 5); the R16 note after C5; C5 time logged (about 4.4 h, Aren confirms). |
 | 0.17 | 2026-10-27 | C6 started: D-062 (the order, the text step design, the flag `--seamless`, INT8, the CPU mode rule, the tests); the C6 time box 3.5 h; the R16 note at the C6 start. |
-| 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (Aren confirms). |
+| 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (1.42 h, Aren: to 11:20). |
