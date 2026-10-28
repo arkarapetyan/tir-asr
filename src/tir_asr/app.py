@@ -1,9 +1,9 @@
 """The program: the startup log, the two sources, the model loads, the warm-up, and the pipeline.
 
 ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059, D-062,
-D-063. This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py` imports it
-only after the parse of the command line. Each startup line starts with "startup: ", so that it
-is easy to find between the lines that NeMo prints at its load (D-043, point 3).
+D-063, D-068. This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py`
+imports it only after the parse of the command line. Each startup line starts with "startup: ",
+so that it is easy to find. NeMo shows only its errors (D-068).
 """
 
 import importlib.metadata
@@ -83,6 +83,8 @@ def load_models(params: Params, log: TextIO, labels: list[str], seamless: bool =
     """
     import torch
 
+    quiet_nemo(log)
+
     def used_mib() -> int:
         free, total = torch.cuda.mem_get_info()  # the full device: CTranslate2 is included
         return (total - free) // MIB
@@ -116,6 +118,19 @@ def load_models(params: Params, log: TextIO, labels: list[str], seamless: bool =
         f"GPU memory used {spk_used} MiB ({spk_used - before:+d} MiB)",
     )
     return vads, text_step, embedder
+
+
+def quiet_nemo(log: TextIO) -> None:
+    """Show only the NeMo errors, from the model load to the end of the run (D-068).
+
+    NeMo prints about 185 info and warning lines at the load of the ASR and speaker models
+    (D-043, point 3). The NeMo logger level ERROR hides them. NeMo errors and all exceptions stay
+    visible (R10), and this startup line tells that the NeMo info and warnings are hidden.
+    """
+    from nemo.utils import logging as nemo_logging
+
+    nemo_logging.setLevel(nemo_logging.ERROR)
+    log_line(log, "NeMo log level ERROR: the NeMo info and warning lines are hidden (D-068)")
 
 
 def load_cascade(params: Params, log: TextIO, used_mib) -> TextStep:
