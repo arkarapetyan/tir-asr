@@ -8,7 +8,7 @@ C8 (`PLAN.md` §5.2 C8): the full README from `DECISIONS.md`, `ARCHITECTURE.md`,
 
 ## Current state
 
-- **`main`:** `c7-p4` is merged (fast-forward). **`c7-notext`** (D-031: no block for an empty text; the shutdown line still counts it) is committed and passes (unit 263, T-E2E-01 to T-E2E-03); with the last documents of C7, Aren merges it into `main`.
+- **`main`:** `c7-p4` and `c7-notext` are merged (fast-forward). `c7-notext` (D-031): no block for an empty text; the shutdown line still counts it (unit 263, T-E2E-01 to T-E2E-03 pass).
 - **P4 fixes (D-066, D-067):**
   - The core module `text/clean.py`; `TextStep.process` applies its rules for P1 and P4. Rule 1 removes the hesitation marks of P4 (`#err` in HY, the `#` of `#Hmm` in EN). Rule 2 shows only Armenian text in the HY line and only English text in the EN line; a run of words in another script becomes one `[?]`.
   - `GIL_SWITCH_S` = 1 ms while `run()` runs (`pipeline.py`); `run()` sets the old value back. T-SIM-03 passes (largest gap 61.0 ms; limit 64 ms).
@@ -37,10 +37,10 @@ C8 (`PLAN.md` §5.2 C8): the full README from `DECISIONS.md`, `ARCHITECTURE.md`,
 
 ## Open questions
 
-1. R16: C0 to C7 took about 22.5 h (C7 about 1.7 h, Aren confirmed). With C8 (1 h), about 23.5 h. C8 has a time box of 1 h.
-2. M4: the live test had one person on the call side (the C7 goal says two or more), and L-06 did not run again. Aren decides if M4 counts as reached.
+1. R16: C0 to C7 took about 22.4 h (C7 1.62 h, inside its time box). With C8 (1 h), about 23.4 h. C8 has a time box of 1 h.
+2. M4: the C7 live test had one person on the call side (the goal says two or more). **Aren (2026-10-28):** a final live test with two speakers on the call side comes in C8 (L-06 again, the output in a file, `scripts/score_live.py` if the people read a script).
 3. Not done in C7 (D-065, scope A): the speaker diagnostic line, the D-060 VAD measurements (interruptions, noises, short texts), L-06 again. The README states the limits.
-4. The NeMo load lines at the startup (about 185 lines, D-043 point 3: "decide again in C7") were not decided in C7. C8 decides: leave them, or set the NeMo log level (a decision, R10).
+4. The NeMo load lines at the startup (about 185 lines, D-043 point 3). **Aren (2026-10-28):** silence them in C8. C8 proposes the method with the R7 steps (for example the NeMo log level during the load); errors must stay visible (R10).
 5. P1 or P4 as the default: P4 gives the better English, P1 the better Armenian text on casual call speech. A change needs a new decision (D-056).
 6. `data/c7/p1.*.wav` are about 22 min long, because the P1 recorders ran after the P1 call. No test uses `data/c7/`.
 
@@ -58,7 +58,7 @@ C8 (`PLAN.md` §5.2 C8): the full README from `DECISIONS.md`, `ARCHITECTURE.md`,
 
 1. Ask for the access to `/home/aren/dev/armenian-asr`.
 2. Do the chat start checklist (`RULES.md` §5.1).
-3. Ask Aren: the merge of `c7-notext` and the state of CI; the C8 scope inside the 1 h time box; open questions 2 and 4.
+3. Ask Aren: the state of CI on `main`; the C8 scope inside the 1 h time box (the README, the startup lines, the final live test, the rehearsal, the export).
 4. Propose the README structure (PLAN §5.2 C8, step 1) with the R7 steps.
 
 ## Do not

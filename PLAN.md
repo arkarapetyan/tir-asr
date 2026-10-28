@@ -174,7 +174,7 @@ ASR: automatic speech recognition. MT: machine translation.
 
 **Note (C6 start, R16):** Aren keeps C6 with a time box of 3.5 h for the full D-056 scope (D-062 part 11). The expected total is now about 25.4 h (calc: 19.35 + 3.5 + 1.5 + 1.0).
 
-**Note (C7 end, R16):** C7 took about 1.7 h (Aren confirmed), about 0.1 h over its time box (1.5 h, plus 10 min for the calls). C0 to C7 took about 22.5 h (calc: 20.77 + 1.7). With C8 (1 h), the expected total is about 23.5 h.
+**Note (C7 end, R16):** C7 took 1.62 h (11:23–11:50, 10 min for the calls, 13:32–14:32; Aren), inside its time box (1.5 h plus 10 min for the calls). C0 to C7 took about 22.4 h (calc: 20.77 + 1.62). With C8 (1 h), the expected total is about 23.4 h.
 
 **Note (C6 end, R16):** C6 took about 1.4 h, under its time box (§11). C0 to C6 took about 20.8 h (calc: 19.35 + 1.42). With C7 and C8 (2.5 h), the expected total is about 23.3 h. Aren wants to wrap up the project; C7 first settles P4 (D-064), and Aren decides the rest of the C7 scope.
 
@@ -356,7 +356,7 @@ ASR: automatic speech recognition. MT: machine translation.
      - `vad_threshold`, `vad_min_speech_ms`, and a rule for texts with one or two letters, with a new recording of noises and short words;
      - L-06 again with 2 or more people, about 5 min; `spk_threshold` and `spk_min_new_s` again.
 - **Done when:** M4 works.
-- **Result (C7, D-065 to D-067):** scope A (D-065). Two recorded calls with the new script S5 (P1, then P4) and `scripts/score_live.py`. `#err` is the hesitation mark of the model; the output rules of `text/clean.py` remove it and show only Armenian text in the HY line and only English text in the EN line, with `[?]` for a word in another script (D-066). The capture gap of P4 came from the GIL; `GIL_SWITCH_S` (1 ms) during `run()` fixes it, and T-SIM-03 passes (D-067). No block for an empty text (D-031). L-04 passes. Not done (R16): the speaker diagnostic line, the D-060 VAD measurements, and L-06 again; the README states these limits. P1 stays the default. **M4:** the weakest links are better and the latency is measured, but the live test had one person on the call side (the goal says two or more), and L-06 did not run again; Aren decides if M4 counts as reached.
+- **Result (C7, D-065 to D-067):** scope A (D-065). Two recorded calls with the new script S5 (P1, then P4) and `scripts/score_live.py`. `#err` is the hesitation mark of the model; the output rules of `text/clean.py` remove it and show only Armenian text in the HY line and only English text in the EN line, with `[?]` for a word in another script (D-066). The capture gap of P4 came from the GIL; `GIL_SWITCH_S` (1 ms) during `run()` fixes it, and T-SIM-03 passes (D-067). No block for an empty text (D-031). L-04 passes. Not done (R16): the speaker diagnostic line, the D-060 VAD measurements, and L-06 again; the README states these limits. P1 stays the default. **M4:** the weakest links are better and the latency is measured, but the live test had one person on the call side (the goal says two or more), and L-06 did not run again; Aren: a final live test with two speakers on the call side comes in C8.
 
 #### S1. Side chat: export format
 
@@ -376,6 +376,7 @@ ASR: automatic speech recognition. MT: machine translation.
      - When two remote people speak at the same time, the segment gets one label (D-017).
   3. Check each item in §1 against the result.
   4. Aren does a rehearsal of the interview start: install, audio setup, run.
+  - **From C7 (Aren, 2026-10-28):** a final live test with two speakers on the call side (M4; L-06 again), with the output in a file; and no NeMo startup lines on the screen (D-043 point 3). C8 proposes the method for the startup lines with the R7 steps (R10).
   5. **Last step, after Claude's last message:** Aren requests the full data export and puts each project chat into `chats/` as one `.md` file (with the converter from S1, if necessary). Then Aren commits and pushes.
 - **Done when:** M5. Aren sends the repository link.
 
@@ -557,11 +558,11 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C4 | 2 h | 1.03 h | 2026-10-26, 20:41–21:28 (47 min, the three branches); 21:53–22:03 (10 min, live test L-05); 22:03–22:08 (5 min, closing). The time 21:28–21:53 is not counted (Aren). Aren adds the time of his last commits if necessary. 0.97 h under the time box; Aren decides if it goes to the buffer. |
 | C5 | 3 h | about 4.4 h | 2026-10-26, about 22:32–22:50 (the ONNX question; estimate); 2026-10-27, 13:57–15:56 (D-056 to D-059, three branches); 17:14–17:55 (L-06 and its report); 19:21 to the end of the chat (D-060, D-061, `c5-stop`, the chat end). The breaks are not counted. About 1.4 h over the time box: the L-06 follow-up (D-060) and the abort at the stop (D-061). Estimate from the chat times; Aren confirms or corrects it. |
 | C6 | 3.5 h (D-062) | 1.42 h | 2026-10-27, 20:51–22:08 (77 min), and 2026-10-28, 11:12–11:20 (8 min) (Aren). His own P4 tests on 2026-10-28 before 11:12 are not counted. Under the time box: the probe chose the variant quickly, and the CPU mode was not built (D-063 part 4). |
-| C7 | 1.5 h + 10 min (the calls, Aren) | about 1.7 h | 2026-10-28, 11:23–11:50 (27 min); the two S5 calls (10 min, Aren); 13:32 to the end of the chat (about 63 min). The break is not counted. Estimate from the chat times; Aren confirmed it. |
+| C7 | 1.5 h + 10 min (the calls, Aren) | 1.62 h | 2026-10-28, 11:23–11:50 (27 min); the two S5 calls (10 min, Aren); 13:32–14:32 (60 min). The break is not counted. Inside the time box. |
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **25.5 h** | about 22.5 h | C0 to C7. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.5 h after C8 (R16 notes in §5.1). |
+| **Total** | **25.5 h** | about 22.4 h | C0 to C7. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.4 h after C8 (R16 notes in §5.1). |
 
 ---
 
@@ -587,4 +588,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.16 | 2026-10-27 | C5 closed: M3 reached; D-057 to D-061; the C5 status and data; the C7 work from D-060 (step 5); the R16 note after C5; C5 time logged (about 4.4 h, Aren confirms). |
 | 0.17 | 2026-10-27 | C6 started: D-062 (the order, the text step design, the flag `--seamless`, INT8, the CPU mode rule, the tests); the C6 time box 3.5 h; the R16 note at the C6 start. |
 | 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (1.42 h, Aren: to 11:20). |
-| 0.19 | 2026-10-28 | C7 closed: D-065 to D-067; the C7 result in §5.2; the R16 note at the C7 end; C7 time logged (about 1.7 h, Aren confirmed). |
+| 0.19 | 2026-10-28 | C7 closed: D-065 to D-067; the C7 result in §5.2; the R16 note at the C7 end; C7 time logged (1.62 h); the two C8 items from Aren (a live test with two people on the call side; the NeMo startup lines). |
