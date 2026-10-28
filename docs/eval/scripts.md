@@ -85,3 +85,59 @@ Note (D-048): the recording of 2026-10-26 stops inside the last word: the audio 
 | s4-08 | Speaker 1 | Ոչինչ, կանեն։ Ի դեպ, եղանակը տեսե՞լ ես, վաղը ձյուն է սպասվում։ | That is okay, they will do it. By the way, have you seen the weather? Snow is expected tomorrow. |
 | s4-09 | Me | Հա, լսել եմ։ Դե, ուրեմն տանը կմնամ։ Լավ, Սոնա, հետո կզանգեմ, հիմա պիտի գնամ։ | Yes, I have heard. Well, then I will stay at home. Okay, Sona, I will call later; now I have to go. |
 | s4-10 | Speaker 1 | Լավ, հաջող, բարևներ տնեցիներին։ | Okay, bye, say hello to your family. |
+
+## Script 5: weekend plans, casual speech (2 people)
+
+C7 (D-064, D-065): the recorded live test of P1 and P4. The text has casual spoken forms («էս», «էդ», «էն», «հա», «չէ», «ախր») and 23 lines with «՞». Me and Speaker 1 read it in two calls on 2026-10-28: first with P1 (`./run.sh`), then with P4 (`./run.sh --seamless`). The program outputs are `test-results/c7-live-p1.txt` and `test-results/c7-live-p4.txt`; `scripts/score_live.py` scores them. The audio of both sides is in `data/c7/` (local only).
+
+| ID | Speaker | Armenian | English |
+|---|---|---|---|
+| s5-01 | Speaker 1 | Ալո, բարև, լսո՞ւմ ես ինձ։ | Hello, hi, can you hear me? |
+| s5-02 | Me | Հա, լավ եմ լսում։ Բարև, ո՞նց ես։ | Yes, I can hear you well. Hi, how are you? |
+| s5-03 | Speaker 1 | Լավ եմ, շնորհակալություն։ Դու ո՞նց ես, ի՞նչ կա, ի՞նչ չկա։ | I'm fine, thank you. How are you, what's new? |
+| s5-04 | Me | Դե, ոչինչ, նորմալ։ Էս օրերին շատ գործ ունեի, հիմա մի քիչ ազատվել եմ։ | Well, nothing special, fine. I had a lot of work these days, now I'm a bit freer. |
+| s5-05 | Speaker 1 | Լավ է։ Էս շաբաթ-կիրակի ի՞նչ ես անում, պլաններ ունե՞ս։ | That's good. What are you doing this weekend, do you have plans? |
+| s5-06 | Me | Դեռ չգիտեմ։ Մտածում էի տանը մնալ, մի քիչ հանգստանալ։ Իսկ դո՞ւ։ | I don't know yet. I was thinking of staying at home and resting a bit. And you? |
+| s5-07 | Speaker 1 | Մենք ընկերներով ուզում ենք Սևան գնալ։ Չե՞ս ուզում մեզ հետ գալ։ | We want to go to Sevan with friends. Don't you want to come with us? |
+| s5-08 | Me | Սևա՞ն։ Էս եղանակին ցուրտ չի՞ լինի։ | Sevan? Won't it be cold in this weather? |
+| s5-09 | Speaker 1 | Մի քիչ ցուրտ կլինի, բայց տաք շորեր կվերցնենք։ Ախր վաղուց չենք հավաքվել։ | It will be a bit cold, but we'll take warm clothes. We haven't got together for a long time, after all. |
+| s5-10 | Me | Ճիշտ ես, վերջին անգամ ամռանն ենք հանդիպել։ Ովքե՞ր են գալու։ | You're right, the last time we met was in the summer. Who is coming? |
+| s5-11 | Speaker 1 | Ես, քույրս, իր ամուսինը ու աշխատանքից մի քանի ընկեր։ Մեքենայով ենք գնալու։ | Me, my sister, her husband, and a few friends from work. We're going by car. |
+| s5-12 | Me | Լավ, իսկ ե՞րբ եք դուրս գալու, առավոտյա՞ն։ | OK, and when are you leaving, in the morning? |
+| s5-13 | Speaker 1 | Հա, շուտ առավոտյան, որ ճանապարհին խցանումներ չլինեն։ Ճաշին արդեն էնտեղ կլինենք։ | Yes, early in the morning, so that there are no traffic jams on the way. We'll already be there by lunch. |
+| s5-14 | Me | Իսկ գիշերելու տեղ ունե՞ք, թե՞ նույն օրը հետ եք գալու։ | And do you have a place to stay overnight, or are you coming back the same day? |
+| s5-15 | Speaker 1 | Լճի մոտ մի փոքր տնակ ենք վարձել։ Կիրակի երեկոյան հետ կգանք։ | We've rented a small cottage near the lake. We'll come back on Sunday evening. |
+| s5-16 | Me | Հետաքրքիր է։ Բայց շաբաթ օրը մի քիչ գործ ունեմ, պետք է վերջացնեմ։ | That's interesting. But I have some work on Saturday, I need to finish it. |
+| s5-17 | Speaker 1 | Ախր դու միշտ գործ ունես։ Մի օր հանգստանալը քեզ չի սպանի։ | But you always have work. Resting for one day won't kill you. |
+| s5-18 | Me | Լավ, լավ, համոզեցիր։ Կփորձեմ ուրբաթ երեկոյան ամեն ինչ վերջացնել։ | OK, OK, you convinced me. I'll try to finish everything on Friday evening. |
+| s5-19 | Speaker 1 | Վա՜յ, իսկապե՞ս։ Ուրեմն քեզ էլ եմ հաշվում։ | Wow, really? Then I'm counting you in too. |
+| s5-20 | Me | Հա, հաշվիր։ Ի՞նչ բերեմ, ուտելիք, թե՞ խմիչք։ | Yes, count me in. What should I bring, food or drinks? |
+| s5-21 | Speaker 1 | Ուտելիքը մենք կառնենք։ Դու մի քիչ միրգ բեր, ու եթե կարող ես, քո փոքր բարձրախոսը։ | We'll buy the food. You bring some fruit, and, if you can, your small speaker. |
+| s5-22 | Me | Բարձրախոսը կբերեմ, միայն պետք է լիցքավորեմ։ Երաժշտությունն էլ ե՞ս եմ ընտրելու։ | I'll bring the speaker, I just need to charge it. Am I choosing the music too? |
+| s5-23 | Speaker 1 | Չէ, խնդրում եմ, միայն քո հին ռոքը չլինի։ Բոլորը կքնեն։ | No, please, just not your old rock. Everyone will fall asleep. |
+| s5-24 | Me | Ի՞նչ ես ասում, իմ երաժշտությունը շատ լավն է։ Դու ուղղակի չես հասկանում։ | What are you talking about, my music is very good. You just don't understand. |
+| s5-25 | Speaker 1 | Լավ, տեղում կորոշենք։ Իսկ քո մեքենան հիմա աշխատո՞ւմ է, թե՞ էլի վարպետի մոտ է։ | OK, we'll decide when we're there. And does your car work now, or is it at the mechanic's again? |
+| s5-26 | Me | Անցյալ շաբաթ վերցրի, հիմա լավ է։ Բայց երկար ճանապարհին չեմ ուզում ռիսկի դիմել։ | I picked it up last week, it's fine now. But I don't want to take risks on a long road. |
+| s5-27 | Speaker 1 | Ուրեմն մեր մեքենայով կգաս։ Տեղ կա, խնդիր չկա։ | Then you'll come in our car. There's room, no problem. |
+| s5-28 | Me | Շատ լավ։ Որտեղի՞ց եք ինձ վերցնելու, տանի՞ց։ | Very good. Where will you pick me up, from home? |
+| s5-29 | Speaker 1 | Հա, քո շենքի մոտից։ Դուրս գալուց առաջ կզանգեմ, որ իջնես։ | Yes, near your building. I'll call before we leave, so that you come down. |
+| s5-30 | Me | Լավ։ Իսկ եղանակը նայե՞լ ես, անձրև չի՞ լինելու։ | OK. And have you checked the weather, isn't it going to rain? |
+| s5-31 | Speaker 1 | Նայել եմ, շաբաթ օրը արևոտ է, իսկ կիրակի գուցե մի քիչ ամպամած լինի։ | I've checked, Saturday is sunny, and on Sunday it may be a bit cloudy. |
+| s5-32 | Me | Լավ է, ուրեմն կարող ենք լճի ափին քայլել։ Շատ վաղուց չեմ քայլել։ | Good, then we can walk on the shore of the lake. I haven't gone for a walk in a very long time. |
+| s5-33 | Speaker 1 | Ճիշտն ասած, ես էլ։ Մենք բոլորս շատ ենք աշխատում ու քիչ ենք հանգստանում։ | To be honest, me neither. We all work a lot and rest little. |
+| s5-34 | Me | Հա, էդ ճիշտ է։ Ի դեպ, հաջորդ շաբաթ Աննայի ծննդյան օրն է, հիշո՞ւմ ես։ | Yes, that's true. By the way, next week is Anna's birthday, do you remember? |
+| s5-35 | Speaker 1 | Իհարկե հիշում եմ։ Դեռ նվեր չեմ առել, ի՞նչ ես կարծում, ի՞նչ առնենք։ | Of course I remember. I haven't bought a present yet. What do you think, what should we buy? |
+| s5-36 | Me | Չգիտեմ, նա գրքեր շատ է սիրում։ Գուցե մի լավ գիրք ու ծաղիկներ։ | I don't know, she loves books very much. Maybe a good book and flowers. |
+| s5-37 | Speaker 1 | Գիրքը լավ միտք է, բայց ո՞ր գիրքը։ Նա արդեն ամեն ինչ կարդացել է։ | A book is a good idea, but which book? She has already read everything. |
+| s5-38 | Me | Կարող ենք գրախանութ գնալ ու վաճառողին հարցնել։ Նրանք միշտ նոր բաներ գիտեն։ | We can go to a bookshop and ask the seller. They always know new things. |
+| s5-39 | Speaker 1 | Լավ, համաձայն եմ։ Իսկ որտե՞ղ ենք նշելու, տանը, թե՞ ռեստորանում։ | OK, I agree. And where are we celebrating, at home or in a restaurant? |
+| s5-40 | Me | Կարծեմ տանն է լինելու։ Ինքն ասաց, որ մեծ աղմուկ չի ուզում։ | I think it will be at home. She said that she doesn't want a big fuss. |
+| s5-41 | Speaker 1 | Դե լավ, ավելի հարմար է։ Գոնե ուշ գիշերով տուն գնալու մասին չենք մտածի։ | Well, OK, that's more convenient. At least we won't have to think about going home late at night. |
+| s5-42 | Me | Հա։ Մեկ էլ, էն ֆիլմը, որ ասում էիր, նայեցի։ | Yes. One more thing, I watched that film you told me about. |
+| s5-43 | Speaker 1 | Իսկապե՞ս։ Հը, ո՞նց էր, դո՞ւր եկավ։ | Really? So, how was it, did you like it? |
+| s5-44 | Me | Սկիզբը մի քիչ ձանձրալի էր, բայց վերջը շատ ուժեղ էր։ Ընդհանուր առմամբ, լավն էր։ | The beginning was a bit boring, but the ending was very strong. All in all, it was good. |
+| s5-45 | Speaker 1 | Ասում էի, չէ՞։ Ես էլ սկզբում ուզում էի անջատել, հետո չկարողացա կտրվել։ | I told you, didn't I? At first I also wanted to turn it off, then I couldn't tear myself away. |
+| s5-46 | Me | Հա, լավ, ես հիմա պիտի գնամ, մի հանդիպում ունեմ։ | Yes, OK, I have to go now, I have a meeting. |
+| s5-47 | Speaker 1 | Լավ, գնա։ Ուրբաթ երեկոյան կգրեմ, մանրամասները կասեմ։ | OK, go. I'll write on Friday evening and tell you the details. |
+| s5-48 | Me | Պայմանավորվեցինք։ Մինչ հանդիպում, բարի օր։ | Deal. See you, have a good day. |
+| s5-49 | Speaker 1 | Բարի օր, հաջողություն։ | Have a good day, good luck. |
