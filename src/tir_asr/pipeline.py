@@ -1,7 +1,8 @@
 """Pipeline: the warm-up, the threads, the segment queue, and the stop (ARCHITECTURE.md 2.6, 4).
 
-Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059, D-061, D-062. This module is core:
-it gets the adapters as arguments, and it imports no model and no audio-device package (D-021).
+Decisions: D-022, D-029, D-031, D-037, D-042, D-054, D-059, D-061, D-062, D-067. This module is
+core: it gets the adapters as arguments, and it imports no model and no audio-device package
+(D-021).
 
 Threads (section 4): one capture thread for each audio source reads the blocks of its source,
 calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
@@ -15,9 +16,13 @@ before `run()` returns. Each capture thread stops at its next block and closes i
 iterator, so that the audio stream closes. Thus no thread uses the audio library or a model
 while Python runs its exit functions: the exit function of `soundcard` frees the PulseAudio
 main loop, and a capture thread that still records then stops the process (L-02, exit code 134).
+
+The GIL (D-067): while `run()` runs, a thread that waits for the interpreter lock gets it after
+`GIL_SWITCH_S`, not after the Python default of 5 ms. `run()` sets the old value back at its end.
 """
 
 import queue
+import sys
 import threading
 import time
 import traceback
@@ -43,6 +48,12 @@ STOP_POLL_S = 0.5
 # D-061: at the end of run(), the main thread waits this time in total for all threads. A thread
 # that does not stop in this time stays a daemon thread, and `err` gets a line for it (R10).
 STOP_JOIN_S = 2.0
+# D-067: the interpreter switch interval while run() runs (the Python default is 0.005 s).
+# [RUN, C7, T-SIM-03 with P4] Each arrival gap over 64 ms came during a text step call, and no
+# full GC pass came in a gap. Probable mechanism [UNVERIFIED]: the P4 worker runs the Python code
+# of the decode loop, and a capture thread waits up to the switch interval for the GIL at each of
+# its handoffs in a block.
+GIL_SWITCH_S = 0.001
 
 Clock = Callable[[], float]
 
@@ -87,7 +98,28 @@ def run(
     `labelers` has a labeler for each source label that needs speaker labels (the program:
     "System"). A source with no labeler keeps its source label. A segment with an empty text
     gets no labeler call and keeps its source label (D-059 point 3).
+
+    While `run()` runs, the interpreter switch interval is `GIL_SWITCH_S` (D-067). At each end,
+    `run()` sets the old value back.
     """
+    previous = sys.getswitchinterval()
+    sys.setswitchinterval(GIL_SWITCH_S)
+    try:
+        return _run(sources, text_step, params, clock, out, err, labelers)
+    finally:
+        sys.setswitchinterval(previous)
+
+
+def _run(
+    sources: Sequence[tuple[AudioSource, SpeechProbability]],
+    text_step: TextStep,
+    params: Params,
+    clock: Clock,
+    out: TextIO,
+    err: TextIO,
+    labelers: Mapping[str, Labeler] | None,
+) -> int:
+    """The body of `run()`."""
     labelers = dict(labelers or {})
     endpointers = [Endpointer(params, vad) for _, vad in sources]
     segments: queue.Queue = queue.Queue()  # one queue for all sources, no size limit (D-029)

@@ -1,4 +1,4 @@
-"""T-PIPE-01 to T-PIPE-14: the pipeline with fakes (C2d, C4, C5, C6).
+"""T-PIPE-01 to T-PIPE-15: the pipeline with fakes (C2d, C4, C5, C6, C7).
 
 Contract: ARCHITECTURE.md sections 2.6, 2.7, and 4. Decisions: D-022, D-029, D-031, D-037,
 D-042, D-054, D-059, D-062. C6 (`c6-textstep`, D-062 part 2): `run()` and `warm_up()` get the P1
@@ -20,10 +20,14 @@ returns, the block iterator of the source must be closed and the threads of `run
 ended. T-PIPE-11 and T-PIPE-13 stop with `_thread.interrupt_main()`, which has the effect of
 Ctrl+C on the main thread (the test thread). Thus the stop path has a unit test. T-PIPE-13 has a
 source that gives no more blocks: the stop must not wait for it with no message (R10).
+
+T-PIPE-15 (C7, `c7-p4`, D-067): during `run()`, the interpreter switch interval is
+`GIL_SWITCH_S`; after `run()`, also after an error, it has its old value again.
 """
 
 import _thread
 import io
+import sys
 import threading
 import time
 
@@ -32,7 +36,7 @@ import pytest
 
 from tir_asr.config import SAMPLE_RATE, VAD_FRAME, WARMUP_AUDIO_S, WARMUP_TEXT, Params
 from tir_asr.errors import TirError
-from tir_asr.pipeline import run, warm_up
+from tir_asr.pipeline import GIL_SWITCH_S, run, warm_up
 from tir_asr.speakers.cluster import CentroidClusterer
 from tir_asr.speakers.labeler import SpeakerLabeler
 from tir_asr.text.step import CascadeTextStep, TextStep
@@ -640,3 +644,37 @@ def test_pipe_14_the_line_gets_the_step_names_of_the_text_step():
     )
     assert err.getvalue() == ""
     assert code == 0
+
+
+class SwitchRecorder(OneStep):
+    """A text step that records the interpreter switch interval in the worker (D-067)."""
+
+    def __init__(self, error: BaseException | None = None):
+        self.error = error
+        self.seen: list[float] = []
+
+    def _armenian(self, state) -> str:
+        self.seen.append(sys.getswitchinterval())
+        if self.error is not None:
+            raise self.error
+        return "բարև"
+
+
+@pytest.mark.parametrize("error", [None, FakeAsrError("asr: test")])
+def test_pipe_15_gil_switch_interval_during_run(error):
+    before = sys.getswitchinterval()
+    step = SwitchRecorder(error)
+    clock = FakeClock([0.0] if error else [0.0, 1.400, 1.500, 1.510])
+
+    code = run(
+        [(FakeSource(111), FakeVad(probabilities(111, [(5, 24)])))],
+        step,
+        Params(),
+        clock,
+        io.StringIO(),
+        io.StringIO(),
+    )
+
+    assert step.seen == [pytest.approx(GIL_SWITCH_S)]
+    assert sys.getswitchinterval() == pytest.approx(before)
+    assert code == (1 if error else 0)
