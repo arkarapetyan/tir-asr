@@ -1,8 +1,10 @@
 """The text step of one segment: Template Method for P1 and P4 (ARCHITECTURE.md section 2.9).
 
-Decisions: D-031, D-053 (addition), D-062 part 2, D-063 part 2. `TextStep.process` and
+Decisions: D-031, D-053 (addition), D-062 part 2, D-063 part 2, D-066. `TextStep.process` and
 `TextStep.warm_up` are the template methods. They fix the order of the steps, the empty-text
-rule (D-031), and the clock reads, the same for P1 and P4. A subclass gives only the hooks:
+rule (D-031), and the clock reads, the same for P1 and P4. `process` also applies the output
+rules of `text/clean.py` (D-066): the HY text has only Armenian text, and the EN text has only
+English text. A subclass gives only the hooks:
 `_prepare` (default: the audio, with no work), `_armenian`, and `_english`. A subclass does not
 define `process` or `warm_up` (T-TEXT-04). `STEPS` gives the names of the text steps on the
 latency line: two names (P1: `asr`, `mt`), or one name when one step gives both texts (P4:
@@ -20,6 +22,7 @@ import numpy as np
 
 from tir_asr.config import WARMUP_TEXT
 from tir_asr.errors import TirError
+from tir_asr.text.clean import clean_armenian, clean_english
 from tir_asr.types import TextResult, Transcriber, Translator
 
 Clock = Callable[[], float]
@@ -37,16 +40,18 @@ class TextStep(ABC):
     def process(self, audio: np.ndarray, clock: Clock) -> TextResult:
         """The texts of one segment. The clock gives the end of each of the two steps.
 
-        An empty Armenian text gets no English step: the English text is "", and the end of the
-        English step is the end of the Armenian step (D-031). An error of a hook goes up with no
-        change (R10).
+        Each text gets the output rules of `text/clean.py` (D-066): the Armenian text before the
+        empty-text check and before `_english` (so P1 translates the cleaned text), the English
+        text after `_english`. An empty Armenian text gets no English step: the English text is
+        "", and the end of the English step is the end of the Armenian step (D-031). An error of
+        a hook goes up with no change (R10).
         """
         state = self._prepare(audio)
-        hy = self._armenian(state)
+        hy = clean_armenian(self._armenian(state))
         asr_end = clock()
         if not hy:
             return TextResult(hy=hy, en="", asr_end=asr_end, mt_end=asr_end)
-        en = self._english(state, hy)
+        en = clean_english(self._english(state, hy))
         mt_end = clock()
         return TextResult(hy=hy, en=en, asr_end=asr_end, mt_end=mt_end)
 
@@ -55,6 +60,7 @@ class TextStep(ABC):
 
         The English step always runs, with `WARMUP_TEXT` as the Armenian text, also when the
         audio (zeros) gives no Armenian text. P1 translates `WARMUP_TEXT`; P4 does not use it.
+        The program does not show the warm-up texts, so the output rules (D-066) do not apply.
         """
         state = self._prepare(audio)
         hy = self._armenian(state)

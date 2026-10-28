@@ -1,9 +1,10 @@
-"""T-TEXT-01 to T-TEXT-05: the text step, Template Method for P1 and P4 (C6, `c6-textstep`).
+"""T-TEXT-01 to T-TEXT-07: the text step, Template Method for P1 and P4 (C6, `c6-textstep`).
 
 Contract: ARCHITECTURE.md section 2.9. Decisions: D-022, D-031, D-037, D-062 part 2. A recorder
 subclass of `TextStep` records each hook call. Its `_prepare` gives a new state object at each
 call, so that a test sees which state each hook gets. The fake clock fails when the text step
-reads it more often than the contract says.
+reads it more often than the contract says. T-TEXT-06 and T-TEXT-07 (C7, `c7-p4`, D-066) test the
+output rules of `text/clean.py` and their place in the template.
 """
 
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 
 from tir_asr.config import SAMPLE_RATE, WARMUP_AUDIO_S, WARMUP_TEXT
 from tir_asr.errors import TirError
+from tir_asr.text.clean import FOREIGN, clean_armenian, clean_english
 from tir_asr.text.step import CascadeTextStep, TextStep
 from tir_asr.types import TextResult
 
@@ -168,3 +170,62 @@ def test_text_05_error_of_the_english_hook_goes_up_with_no_change():
 
     assert raised.value is error
     assert clock.values == []  # 1 read: the end of the Armenian step
+
+
+# T-TEXT-06 (C7, D-066 parts 1 and 3): the output rules. The first case of each list is the P4
+# line of s5-43 in the live call (test-results/c7-live-p4.txt).
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("իսկապես #err ոնց էր, դուր եկավ։", "իսկապես ոնց էր, դուր եկավ։"),
+        ("#err", ""),
+        ("#err, լավ եմ։", "լավ եմ։"),
+        (" Ալո, բարև։ ", " Ալո, բարև։ "),  # no change: the spaces stay
+        (
+            "Ո՞նց ես: Վա՜յ, ժամը 8-ին «Նռնենի» ռեստորանում։",
+            "Ո՞նց ես: Վա՜յ, ժամը 8-ին «Նռնենի» ռեստորանում։",
+        ),
+        ("Hello, how are you?", FOREIGN),  # an English line in place of the Armenian line
+        ("լավ, OK Google, գնանք", f"լավ, {FOREIGN} գնանք"),  # one mark for a run of words
+        ("Привет բարև", f"{FOREIGN} բարև"),
+        ("համար #1", f"համար {FOREIGN}"),  # "#" is not an Armenian character
+    ],
+)
+def test_text_06_armenian_line_has_only_armenian_text(text, expected):
+    assert clean_armenian(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Really? #Hmm, how was it? Did you like it?", "Really? Hmm, how was it? Did you like it?"),
+        (" No change. ", " No change. "),
+        ("Song #1 is “fine” — it’s ok…", "Song #1 is “fine” — it’s ok…"),
+        ("Hello Սոնա, how are you?", f"Hello {FOREIGN} how are you?"),
+        ("Hi Сона Սոնա!", f"Hi {FOREIGN}"),
+        ("A café", f"A {FOREIGN}"),  # a letter with an accent is not allowed
+    ],
+)
+def test_text_06_english_line_has_only_english_text(text, expected):
+    assert clean_english(text) == expected
+
+
+def test_text_07_template_cleans_both_texts_before_their_use():
+    step = Recorder(hy="բարև OK", en="hi Привет")
+    clock = FakeClock([1.0, 2.0])
+
+    result = step.process(np.ones(16_000, dtype=np.float32), clock)
+
+    state = step.states[0]
+    assert step.calls[2] == ("english", state, f"բարև {FOREIGN}")  # P1 translates the clean text
+    assert result == TextResult(hy=f"բարև {FOREIGN}", en=f"hi {FOREIGN}", asr_end=1.0, mt_end=2.0)
+
+
+def test_text_07_a_text_with_only_hesitation_marks_is_an_empty_text():
+    step = Recorder(hy="#err", en="#Hmm")
+    clock = FakeClock([1.0])
+
+    result = step.process(np.ones(16_000, dtype=np.float32), clock)
+
+    assert [call[0] for call in step.calls] == ["prepare", "armenian"]  # D-031: no English step
+    assert result == TextResult(hy="", en="", asr_end=1.0, mt_end=1.0)

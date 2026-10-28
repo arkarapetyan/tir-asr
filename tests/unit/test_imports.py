@@ -62,6 +62,7 @@ REQUIRED = {
     "tir_asr.speakers.labeler",
     "tir_asr.text",
     "tir_asr.text.step",
+    "tir_asr.text.clean",
 }
 
 CHECK = """
