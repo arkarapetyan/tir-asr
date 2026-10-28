@@ -1438,3 +1438,35 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** A.
 - **Reason (Aren's words):** "agree on your proposal".
 - **Revisit when:** a NeMo problem needs its warnings (then run with A removed).
+
+## D-069. Segment values after the final live test (C8)
+
+- **Status:** ACCEPTED (2026-10-28), option C (after the B test run)
+- **Context:** the final live test (`test-results/c8-live.txt`, P1, 2 people on the call side, about 6.5 min): 88 blocks, totals 0.17–0.69 s, 0 NeMo lines (D-068), clean stop. Aren: the program "still tends to union separate speeches", and long speech needs a higher limit.
+- **Facts [RUN, `test-results/c8-live.txt`]:**
+  - Four `Me` segments ended at the 10 s hard cut (02:01, 03:49, 04:20, 05:09); the next line continues the sentence.
+  - Turns of two people in one line, for example 06:20 (Speaker 2 with the start of the next turn).
+  - The call side had 2 people (Aren), but the program gave 7 labels: Speaker 1 (20 lines) and Speaker 2 (27 lines) are the two people; Speakers 3–7 have 1–2 short fragments each (for example «Օի։», «Խ։», «Հովհ.»), from noise and a bad connection.
+- **Options:**
+  - **A.** No change; the README states the limits, and Aren's proposal is the first improvement. Weak point: the known merges and hard cuts stay.
+  - **B (Aren).** Change both values now: `vad_min_silence_ms` 500 → 300 ms, `vad_max_speech_s` 10 → 15 s. Then run the unit, model, and sim tests again.
+- **Claude's preference:** A, because the new values are not measured (R6). Risks of B (named one time, R14): more short fragments, which can start new speakers (as Speakers 3–7); a sentence can split at a pause, with worse ASR and MT; a 15 s line comes up to 5 s later; the eval numbers in the README used 500 ms and 10 s. Fact that can show A is wrong: the sim tests pass with B, and a live check shows fewer merged turns with no more extra labels.
+- **Decision:** B, with 300 ms and 15 s (Claude proposed the exact values; Aren's earlier proposal was 250 ms, D-060; Aren approves the values with the test run, R10). The unit tests of the `Endpointer` rules keep 500 ms and 10 s in their own `Params` (they check the rules); T-CFG-01 checks the new values. The README states that WER and chrF with these values are not measured.
+- **Reason (Aren's words):** "we need to have higher max length for a speech and shorter speech interval threshold, as it still tends to union separate speeches". In the question: "Change both now".
+- **Result of B [RUN, `test-results/c8-d069-*.txt`]:** unit 5 failed (T-PIPE-01, 06, 07, 09, 14 expect the latency text of 500 ms: `vad 0.51s` became `vad 0.32s`); T-E2E-01 and T-E2E-03 failed: clip 1 gave 2 lines, because 300 ms split its sentence at a pause (3 blocks, expected 2); T-SIM-03 (P4) failed: a capture gap of 71.4 ms (limit 64 ms; 61.0 ms in C7, D-067).
+- **Option C (Claude, after the run):** keep only `vad_max_speech_s` = 15 s (4 measured hard cuts); `vad_min_silence_ms` stays 500 ms, because the run shows the sentence split. Other options: revert both; keep both and accept more lines and the P4 gap.
+- **Final decision:** C. `vad_max_speech_s` = 15 s (approved 2026-10-28, R10); `vad_min_silence_ms` = 500 ms (D-027). The `Endpointer` rule tests keep 10 s in their own `Params`; T-CFG-01 checks 15 s.
+- **Reason (Aren's words):** "Only 15 s (Recommended)" (in the question).
+- **Revisit when:** a measurement of the minimum silence on WER, chrF, and speaker accuracy (README §8), or a live run with a hard cut at 15 s.
+
+## D-070. A shorter GIL switch interval (C8)
+
+- **Status:** PROPOSED (2026-10-28). The T-SIM-03 run decides.
+- **Context:** D-067 revisit condition: T-SIM-03 (P4 only) failed again after D-069 (`test-results/c8-d069b-sim.txt`): one `System` gap of 70.4 ms at 19.20 s, during a text step call, with no GC pass (limit 64 ms; `Me` 61.3 ms). In C7 the largest gap was 61.0 ms. The D-069 change does not touch this test (500 ms silence; no segment reaches 10 s). All P1 tests pass (unit 263, model 4, T-SIM-01, T-SIM-02).
+- **Options:**
+  - **A.** Record the gap as a limit of P4 (experimental); no code change. Weak point: T-SIM-03 stays failed.
+  - **B (Aren).** `GIL_SWITCH_S` 1 ms → 0.5 ms; run T-SIM-03 again. Weak points: the mechanism is [UNVERIFIED]; a shorter interval gives more thread switches, so the worker can get slower; it is the third try on this problem (R12).
+- **Claude's preference:** A. Claude (R12, one time): if B fails, we stop and use A.
+- **Decision:** B, for one run.
+- **Reason (Aren's words):** "Try a fix now" (in the question).
+- **Revisit when:** the T-SIM-03 run of B: a pass keeps 0.5 ms; a fail gives A (the old value 1 ms back).
