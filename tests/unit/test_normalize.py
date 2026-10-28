@@ -19,11 +19,14 @@ NORMALIZED_LINE = re.compile("[\u0561-\u0586\u055e]+( [\u0561-\u0586\u055e]+)*")
 
 
 def script_lines() -> list[str]:
-    """The Armenian column of each script line in docs/eval/scripts.md (S1 to S4)."""
+    """The Armenian column of each script line in docs/eval/scripts.md (S1 to S4).
+
+    S5 (C7) is not in this list: it has hyphen words, which rule 5 splits by design (D-047).
+    """
     rows = [
         line
         for line in SCRIPTS.read_text(encoding="utf-8").splitlines()
-        if re.match(r"\| s\d-\d\d", line)
+        if re.match(r"\| s[1-4]-\d\d", line)
     ]
     return [row.split("|")[3].strip() for row in rows]
 

@@ -261,7 +261,7 @@ Notes:
 
 - **Results (Aren's laptop, 2026-10-26):** red run 47 failed, each with `NotImplementedError`, and 15 passed (T-IMPORT-01) (`test-results/c3-norm-red.txt`). Green run: `ruff check` and `ruff format --check` pass; 118 unit tests pass (`test-results/c3-norm-green.txt`).
 - **Red state:** a stub `normalize_hy` raises `NotImplementedError`, so that each test runs and fails alone. T-IMPORT-01 adds `tir_asr.eval` and `tir_asr.eval.normalize` to `REQUIRED`.
-- **T-NORM-08** reads `docs/eval/scripts.md`. A change of the script table can change the result of this test.
+- **T-NORM-08** reads `docs/eval/scripts.md`. A change of the script table can change the result of this test. C7: the test reads only the rows of S1 to S4 (its approved input); S5 has hyphen words («շաբաթ-կիրակի»), which rule 5 splits by design. The first S5 commit broke CI here, because the regex of the test read all scripts.
 - **Known limit (P1):** an ASCII «?» in place of «՞» becomes a space. Then the word does not match the reference word, and WER counts an error.
 
 **`metrics.py`** (branch `c3-metrics`, D-047, D-049). Aren approved T-MET-01 to T-MET-08 on 2026-10-26. Test file: `tests/unit/test_metrics.py`. WER and CER use `normalize_hy`. chrF uses `sacrebleu` with its default values (character order 6, word order 0, beta 2) and no normalization. Each score is for the full list: the total edits divided by the total reference length.
