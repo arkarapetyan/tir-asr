@@ -1,4 +1,4 @@
-# Bake-off results (C3, C5, C6)
+# Bake-off results (C3, C5, C6, C7)
 
 **Date:** 2026-10-26 (C3), 2026-10-27 (C5, C6) · **Decisions:** D-053 (P4: Seamless end to end), D-058 (speaker model), D-063 (P4 variant) · **Rules:** R6 (measure, do not guess)
 
@@ -154,3 +154,37 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 ### Decision
 
 - **D-063:** V2 on the GPU, float16. The latency line of P4 has one step, `s2t` (part 2). No INT8 on the GPU; no CPU mode. T-PERF-P4-01 checks V2 in the program adapter: WER ≤ 7.6 %, chrF ≥ 58.5, line mean ≤ 0.40 s, maximum ≤ 0.55 s.
+
+## Live calls (C7)
+
+### Conditions
+
+- Aren's laptop, RTX 5070 Laptop GPU, 2026-10-28. Me: the laptop microphone. System: the monitor of Redmi Buds 3 Lite.
+- Script S5 (`docs/eval/scripts.md`): casual Eastern Armenian, 49 lines (Me 24, Speaker 1 25), 499 words. Two people read it in two calls: first P1 (`./run.sh`), then P4 (`./run.sh --seamless`) (D-065). The readers did not write down changed words; Aren: "close to the text by 99%". Thus all differences count as errors of the program.
+- Program: `main` at `0eb4b54`, before the C7 fixes (D-066, D-067).
+- Scores: `scripts/score_live.py` on `test-results/c7-live-p1.txt` and `c7-live-p4.txt`. The texts of each side, joined in the order of the output, against the S5 lines of that side (as the C3 main numbers, D-046 point 2). WER and CER after `normalize_hy` (D-047); chrF on the English text.
+
+### Results
+
+| Call | Side | WER | CER | chrF | `#` marks | HY lines with Latin letters | Blocks / lines | Totals |
+|---|---|---|---|---|---|---|---|---|
+| P1 | Me | 7.1 % | 2.1 % | 56.0 | 0 | 0 | 24 / 24 | 0.57–0.67 s |
+| P1 | call | 12.7 % | 2.8 % | 59.6 | 0 | 0 | 26 / 25 | (both sides) |
+| P4 | Me | 8.3 % | 1.8 % | 64.2 | 0 | 0 | 24 / 24 | 0.70–0.94 s |
+| P4 | call | 18.1 % | 7.9 % | 65.5 | 1 | 1 | 28 / 25 | (both sides) |
+
+- The totals do not grow (mean of the first third against the last third: P1 0.62 / 0.61 s, P4 0.85 / 0.83 s).
+- GPU (`nvidia-smi`, 1 s): P1 mean 13.4 W, max 20.6 W, max 47 °C; P4 mean 14.1 W, max 24.2 W, max 50 °C.
+- Question marks «՞» in the HY lines: P1 8 + 5, P4 6 + 5 (the reference has 18 + 19).
+
+### Findings
+
+1. **`#err`** is the mark of the model for a hesitation sound: it came one time, at s5-43, for the interjection «Հը», and the EN line had `#Hmm`. «՞» is in the vocabulary and is not the cause (D-066). The output rules of D-066 remove the mark.
+2. **English text in the HY line** did not come in a call with a read script.
+3. **P4 changes casual Armenian to standard Armenian**, mostly on the call side: «էս շաբաթ-կիրակի» → «այս շաբաթվա կիրակի», «էնտեղ» → «այնտեղ», «իր ամուսինը ու» → «նրա ամուսինը եւ», «հետ կգանք» → «կվերադառնանք». The meaning stays, but WER and CER count each change. P1 makes sound errors instead: «լճի» → «հրեշի», «վարձել» → «բարձել», «կքնեն» → «կքննեն».
+4. **P4 gives the better English** on both sides (chrF +8.2 for Me, +5.9 for the call side).
+5. Two readings of the script, not one audio file, so the comparison has the noise of the reading.
+
+### Decision
+
+- **D-066:** fix P4 with the output rules (hesitation marks; only Armenian text in the HY line and only English text in the EN line). **D-067:** a shorter GIL switch interval during `run()`; T-SIM-03 passes. P1 stays the default (D-056).

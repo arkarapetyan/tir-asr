@@ -3,7 +3,7 @@
 Live Armenian speech transcription and English translation in the terminal, with speaker labels.
 All models run locally.
 
-**Status:** M3 (MVP, C5), with an experimental P4 behind a flag (C6). The program captures your microphone (`Me`) and the other side of a call (`Speaker 1`, `Speaker 2`, …), and prints the Armenian text and the English translation of each speech segment, with its latency. See `PLAN.md` for the phases.
+**Status:** M3 (MVP, C5), with an experimental P4 behind a flag (C6), tested in a recorded live call (C7). The program captures your microphone (`Me`) and the other side of a call (`Speaker 1`, `Speaker 2`, …), and prints the Armenian text and the English translation of each speech segment, with its latency. See `PLAN.md` for the phases.
 
 The name comes from Tir. In Armenian mythology, Tir is the god of written language and wisdom, the scribe of the chief god Aramazd, and an interpreter of dreams ([source](https://en.wikipedia.org/wiki/Tir_(god))).
 
@@ -34,10 +34,11 @@ Push Ctrl+C one time to stop. The models must be in the local Hugging Face cache
 - **Interruptions:** the program cuts the speech only after 0.5 s of silence. When a person starts to speak less than 0.5 s after another person, or interrupts, both voices are in one line. That line gets the label of the person who spoke more (D-060, Q-04).
 - **Noises:** a cough or another short sound can pass as speech. Then the line has one letter or a fragment, and the translation can be an invented sentence (Q-14). A short sound before the first speaker gets the label `Unidentified` (D-060).
 - **Translation:** the default pipeline (P1: NeMo ASR, then NLLB) sometimes leaves out a sentence or gives a wrong translation (`docs/eval/results.md`).
-- **P4 (`--seamless`) is experimental:** on the recorded eval set, P4 has fewer word errors and better translations than the default P1 (WER 7.1 % against 10.6 %, chrF 59.0 against 51.7; `docs/eval/results.md`). But in live tests (L-07), P4 often failed on normal and clear speech, some lines had `#err` symbols, and some Armenian lines had English text; P1 was much better. The cause is not measured yet (D-064). With P4, a line takes about 0.85 s in all (P1: about 0.63 s), and the capture can wait up to 145 ms (T-SIM-03). Thus P1 is the default.
+- **P4 (`--seamless`) is experimental:** on the recorded eval set, P4 has fewer word errors and better translations than the default P1 (WER 7.1 % against 10.6 %, chrF 59.0 against 51.7). In a recorded live call with a read script of casual Armenian (C7), P4 gave the better English (chrF 64.2 and 65.5 against 56.0 and 59.6), but more word errors on the call side (WER 18.1 % against 12.7 %): P4 often changes casual spoken Armenian to standard Armenian (for example «էս» → «այս»), with the same meaning. With P4, a line takes about 0.85 s in all (P1: about 0.62 s). Thus P1 stays the default (`docs/eval/results.md`, D-066).
+- **Output rules:** the Armenian line shows only Armenian text, and the English line shows only English text. A word in another script, for example a name in Latin letters in the Armenian line, shows as `[?]`. The hesitation marks of P4 (`#err`, `#Hmm`) are removed (D-066).
 - **Hardware:** the program needs an NVIDIA GPU with CUDA. It has no CPU mode. A probe of P4 on the CPU of the laptop gave 1.2–1.8 s for each line with INT8 and 8 threads on the 8 fast cores, but 5–50 s with float32 and 24 threads (3 segments; `docs/eval/results.md`, "P4 variants (C6)", D-063).
 
-C7 measures the possible improvements (D-060) and makes the final decision on P4 (D-064).
+The measurements of D-060 for interruptions and noises were not done (D-065, time budget), so these limits stay.
 
 ## Project documents
 
