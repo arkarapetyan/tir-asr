@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.17 · **Date:** 2026-10-27
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box).
+**Version:** 0.18 · **Date:** 2026-10-28
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time.
 
 ---
 
@@ -174,6 +174,8 @@ ASR: automatic speech recognition. MT: machine translation.
 
 **Note (C6 start, R16):** Aren keeps C6 with a time box of 3.5 h for the full D-056 scope (D-062 part 11). The expected total is now about 25.4 h (calc: 19.35 + 3.5 + 1.5 + 1.0).
 
+**Note (C6 end, R16):** C6 took about 1.7 h, under its time box (§11). C0 to C6 took about 21.05 h. With C7 and C8 (2.5 h), the expected total is about 23.55 h. Aren wants to wrap up the project; C7 first settles P4 (D-064), and Aren decides the rest of the C7 scope.
+
 ### 5.2 Details for each chat
 
 #### C0. Kickoff and repository setup (this chat)
@@ -327,7 +329,11 @@ ASR: automatic speech recognition. MT: machine translation.
   3. A separate performance test of P4 alone, and a live test of P4.
   4. No custom ONNX implementation of P4 for now.
 - **Open for C6 (D-056, questions 1 to 5):** a CPU mode of P1; INT8 on the GPU; the reuse of the encoder output; the 36.4 s line of the CPU probe; a new time box.
-- **Status (2026-10-27): started** (D-062).
+- **Status (2026-10-28): done** (D-062 to D-064). Branches `c6-d062`, `c6-probe`, `c6-textstep`, `c6-seamless`, `c6-cli`.
+  - Result: P4 is in the program behind `--seamless` (variant V2, one latency step `s2t`), as experimental; P1 stays the default. T-PERF-P4-01: WER 7.1 %, chrF 59.0, line time 0.334 s mean, 0.426 s maximum on the GPU. No INT8 on the GPU (a batch of two costs 1.02 times a batch of one); no CPU mode (D-063 part 4).
+  - T-SIM-03 (P4) fails on its point (5): a capture gap of 145 ms (Q-10). The P4 lines through the capture path are correct.
+  - L-07 (live, no output files): P4 fails on normal and clear speech, with `#err` symbols and English text in the HY line; P1 is much better. The optimization is not the cause (the probe shows the same texts for V0 and V2). The next chat finds the cause, does a recorded live test of P1 and P4, and makes the final P4 decision (D-064).
+  - The plan items below are the original C6 plan.
   - Order: measure first (R6), then build. Branches `c6-d062`, `c6-probe` (`scripts/probe_p4.py`; then D-063 selects the P4 variant), `c6-textstep`, `c6-seamless`, `c6-cli`. No separate red run.
   - Design: a Template Method text step (`TextStep`) with `CascadeTextStep` (P1) and `SeamlessTextStep` (P4); the latency line keeps `asr` and `mt`; the flag `--seamless`; with P4, NeMo ASR and NLLB do not load; the speaker step and `STOP_JOIN_S` do not change.
   - INT8 on the GPU: no measurement, if the probe shows that a batch of two costs little more than a batch of one. CPU mode: a device flag only if the CPU numbers meet K1; else the README states the limits.
@@ -336,6 +342,7 @@ ASR: automatic speech recognition. MT: machine translation.
 #### C7. Live test and reliability
 
 - **Goal:** A full live test with two or more people on the call side.
+- **First part (D-064):** find the cause of the P4 problems (the `#err` text, English text in the HY line, the capture gap of T-SIM-03); a full live test of P1 and P4 with the output in files; then the final decision on P4 (keep, fix, or remove). Then the rest of C7 in the scope that Aren decides (R16).
 - **Steps:**
   1. Run all sim tests. Then run the live checklist in `TESTS.md`.
   2. Write the latency report.
@@ -546,12 +553,12 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C3 | 2.5 h | 2.5 h | 2026-10-26, 15:14–17:44 (2 h 30 min, from the chat times). On the time box, with the full shortlists (D-049). The P4 implementation moved to C6 (D-053). |
 | C4 | 2 h | 1.03 h | 2026-10-26, 20:41–21:28 (47 min, the three branches); 21:53–22:03 (10 min, live test L-05); 22:03–22:08 (5 min, closing). The time 21:28–21:53 is not counted (Aren). Aren adds the time of his last commits if necessary. 0.97 h under the time box; Aren decides if it goes to the buffer. |
 | C5 | 3 h | about 4.4 h | 2026-10-26, about 22:32–22:50 (the ONNX question; estimate); 2026-10-27, 13:57–15:56 (D-056 to D-059, three branches); 17:14–17:55 (L-06 and its report); 19:21 to the end of the chat (D-060, D-061, `c5-stop`, the chat end). The breaks are not counted. About 1.4 h over the time box: the L-06 follow-up (D-060) and the abort at the stop (D-061). Estimate from the chat times; Aren confirms or corrects it. |
-| C6 | 3.5 h (D-062) | | Started 2026-10-27, 20:51. |
+| C6 | 3.5 h (D-062) | about 1.7 h | 2026-10-27, 20:51–22:08, and 2026-10-28, 11:12–11:40 (from the chat times; Aren confirms or corrects it; his own P4 tests on 2026-10-28 before 11:12 are not counted). Under the time box: the probe chose the variant quickly, and the CPU mode was not built (D-063 part 4). |
 | C7 | 1.5 h | | |
 | C8 | 1 h | | |
 | S1 | 0.5 h | | |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
-| **Total** | **25.5 h** | about 19.35 h | C0 to C5. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h after C5 (R16 notes in §5.1). |
+| **Total** | **25.5 h** | about 21.05 h | C0 to C6. S1 adds 0.5 h over the 20 h of the brief. D-035 adds 3.5 h (C2b–C2d). Expected total about 23.9 h after C5 (R16 notes in §5.1). |
 
 ---
 
@@ -576,3 +583,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.15 | 2026-10-27 | D-056: Q16 closed; the C6 scope (P4 behind a flag, P1 the default, optimizations, P4 tests, no custom ONNX); C5 before C6, with the rule for the speaker step. |
 | 0.16 | 2026-10-27 | C5 closed: M3 reached; D-057 to D-061; the C5 status and data; the C7 work from D-060 (step 5); the R16 note after C5; C5 time logged (about 4.4 h, Aren confirms). |
 | 0.17 | 2026-10-27 | C6 started: D-062 (the order, the text step design, the flag `--seamless`, INT8, the CPU mode rule, the tests); the C6 time box 3.5 h; the R16 note at the C6 start. |
+| 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (Aren confirms). |
