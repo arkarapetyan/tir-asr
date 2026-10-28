@@ -164,7 +164,7 @@ NLLB-200 and SeamlessM4T v2 are **CC-BY-NC-4.0 (non-commercial)**. NLLB is also 
 
 - **Core and adapters (D-021):** core modules have no model or device import, so CI runs their unit tests with fakes. Adapters hold the model and device code.
 - **Threads (D-029, D-054):** one capture thread for each source, one worker for all GPU work. The GPU models run one at a time.
-- **Segments (D-026, D-027):** a segment ends after 500 ms of silence (`vad_min_silence_ms`), or at 10 s of continuous speech.
+- **Segments (D-027, D-069):** a segment ends after 500 ms of silence (`vad_min_silence_ms`), or at 15 s of continuous speech (`vad_max_speech_s`).
 - **Speaker labels (D-057 to D-060):** each `System` segment gets an embedding. It joins the nearest speaker centroid when the cosine similarity is 0.50 or more (`spk_threshold`); else it starts a new speaker. A segment under 1.0 s (`spk_min_new_s`) cannot start a new speaker. Labels stay the same for the full session.
 - **Text step (D-062, D-063):** one abstract `TextStep` with the empty-text rule, the clock reads, and the output rules (D-066). P1 and P4 implement only the model hooks.
 - **Fail loudly (R10):** each error stops the program with the module name and the cause. No fallback, no hidden retry. Each tuned parameter is in `config.Params` and in the startup log.
@@ -180,6 +180,7 @@ All numbers are from Aren's laptop (RTX 5070 Laptop GPU, 8 GB).
 |---|---|---|
 | Latency of a line, live (P1) | 0.57–0.67 s total; no growth during a call | C7 live calls |
 | Latency of a line, live (P4) | 0.70–0.94 s total | C7 live calls |
+| Final live test (P1, 2 people on the call side, free talk with interruptions, about 6.5 min) | 88 lines, totals 0.17–0.69 s, clean stop | C8, `test-results/c8-live.txt` (with 500 ms and 10 s, before D-069) |
 | ASR + MT time for each segment (P1) | 0.10 s mean, 0.14 s max | C3 bake-off |
 | WER / chrF, eval set (P1) | 10.6 % / 51.7 | C3 bake-off |
 | WER / chrF, eval set (P4) | 7.1 % / 59.0 | T-PERF-P4-01 |
@@ -189,11 +190,13 @@ All numbers are from Aren's laptop (RTX 5070 Laptop GPU, 8 GB).
 
 ## 7. Known limits
 
-- **Interruptions:** a segment ends only after 0.5 s of silence. When a person starts to speak less than 0.5 s after another person, or interrupts, both voices are in one line, with the label of the person who spoke more (D-060).
+- **Interruptions:** a segment ends only after 0.5 s of silence. When a person starts to speak less than 0.5 s after another person, or interrupts, both voices are in one line, with the label of the person who spoke more (D-060). A shorter silence (300 ms) split a sentence at a normal pause in our tests, so it is not in the program (D-069).
 - **Two people at the same time** on the call side give one line with one label (D-017).
+- **Extra speaker labels from noise:** in the final live test (2 people on the call side, bad connection), short fragments such as «Օի։» or «Խ։» got 5 extra labels (Speakers 3–7, 1–2 lines each). Speaker 1 and Speaker 2 (the two people) had 47 of the 52 call-side lines (D-069).
 - **Noises:** a cough or a short sound can pass as speech. The line then has one letter or a fragment, and the translation can be an invented sentence. A short sound before the first speaker gets the label `Unidentified` (D-060).
 - **Short phrases:** a phrase under 250 ms (for example a fast «հա») is removed as noise (`vad_min_speech_ms`).
-- **Long speech:** after 10 s of speech with no pause, the program cuts the segment, and a word can be split (Q15).
+- **Long speech:** after 15 s of speech with no pause, the program cuts the segment, and a word can be split (Q15, D-069).
+- **Maximum length not measured on the eval set:** the eval numbers (§6) used a maximum length of 10 s (no eval segment reached it). The C8 live test had 4 hard cuts at 10 s, so the program uses 15 s (D-069). A 15 s line comes up to 5 s later than a 10 s line.
 - **Translation (P1):** each segment is translated alone, with no context. NLLB sometimes leaves out the second sentence of a segment. Armenian «նա» is "he" or "she", and the model must guess.
 - **P4:** it changes casual Armenian to standard Armenian (§4.3). It is experimental.
 - **Output rules:** the Armenian line shows only Armenian script, and the English line only Latin script. A word in another script, for example a Latin name in the Armenian line, shows as `[?]` (D-066).
@@ -207,7 +210,7 @@ All numbers are from Aren's laptop (RTX 5070 Laptop GPU, 8 GB).
 
 In the order of the measured need:
 
-1. **Interruptions:** a shorter `vad_min_silence_ms` for the `System` side (250–400 ms), measured on WER, chrF, and speaker accuracy; or a speaker-change split inside a segment with embeddings on short windows.
+1. **Interruptions and segment values:** measure `vad_min_silence_ms` (250–500 ms) and `vad_max_speech_s` on WER, chrF, and speaker accuracy, maybe with a separate value for the `System` side; or a speaker-change split inside a segment with embeddings on short windows.
 2. **Noises:** a measured `vad_threshold` and `vad_min_speech_ms`, and a rule for texts with one or two letters, with a recording of coughs and short words.
 3. **Translation context:** give the MT the previous segment of the same speaker, so that pronouns and cut sentences get a better translation.
 4. **A CPU mode:** P1 on the CPU, and P4 with INT8 on the fast cores, behind a `--device cpu` flag (the probe numbers meet the 5 s limit).
