@@ -22,6 +22,10 @@ as time 0, and computes the label accuracy after the best mapping (D-057 part 2)
 T-SIM-03 (C6, D-062, D-063) is T-SIM-02 with the P4 text step (`load_models(…, seamless=True)`).
 Its latency lines have the step `s2t` (D-063 part 2).
 
+Q-10 diagnostic (C7, D-066 part 2): T-SIM-02 and T-SIM-03 also report, with no new assert, the
+Python GC passes during the run (`gc.callbacks`), the times of the text step calls, and, for each
+arrival gap over 64 ms, its time, whether a text step call overlaps it, and the GC passes in it.
+
 Caution: the tests change the audio server for a few seconds. Do not run them during a call.
 If a test stops and the sink stays, run `pactl list short modules | grep null-sink`, then
 `pactl unload-module <number>`.
@@ -30,6 +34,7 @@ The tests run on Aren's laptop only (marker `sim`). They import `soundcard` and 
 inside the test functions, so that CI can collect this file without the `laptop` group (D-021).
 """
 
+import gc
 import io
 import math
 import os
@@ -568,6 +573,66 @@ class RecordedLabeler:
         return label
 
 
+class TimedTextStep:
+    """Test wrapper of the text step: it records (start, end) of each `process` call (Q-10)."""
+
+    def __init__(self, text_step):
+        self.text_step = text_step
+        self.STEPS = text_step.STEPS
+        self.calls: list[tuple[float, float]] = []
+
+    def process(self, audio, clock):
+        start = time.monotonic()
+        try:
+            return self.text_step.process(audio, clock)
+        finally:
+            self.calls.append((start, time.monotonic()))
+
+
+class GcPasses:
+    """A `gc.callbacks` function: it records (start, end, generation) of each GC pass (Q-10)."""
+
+    def __init__(self):
+        self.passes: list[tuple[float, float, int]] = []
+        self._start: float | None = None
+
+    def __call__(self, phase: str, info: dict) -> None:
+        if phase == "start":
+            self._start = time.monotonic()
+        elif self._start is not None:
+            self.passes.append((self._start, time.monotonic(), info["generation"]))
+            self._start = None
+
+
+def report_gaps(recorded, text_calls, gc_passes) -> None:
+    """Q-10 diagnostic (C7, D-066 part 2). Report only: no assert."""
+    full = [(end - start) * 1000 for start, end, generation in gc_passes if generation == 2]
+    longest = max(((end - start) * 1000 for start, end, _ in gc_passes), default=0.0)
+    report(
+        f"gc: {len(gc_passes)} passes, {len(full)} of generation 2; longest {longest:.1f} ms; "
+        f"generation 2 passes (ms) {[round(ms, 1) for ms in full]}"
+    )
+    durations = [end - start for start, end in text_calls]
+    report(f"text step: {len(text_calls)} calls; longest {max(durations, default=0.0):.3f} s")
+    for source in recorded:
+        arrivals = np.array(source.arrivals)
+        gaps = np.diff(arrivals)
+        over = sorted(np.flatnonzero(gaps > MAX_GAP_S), key=lambda i: -gaps[i])
+        report(f"{source.label}: {len(over)} gaps over {MAX_GAP_S * 1000:.0f} ms")
+        for i in over[:5]:
+            start, end = arrivals[i], arrivals[i + 1]
+            in_text = any(s < end and start < e for s, e in text_calls)
+            passes = [
+                f"generation {g} {(e - s) * 1000:.1f} ms"
+                for s, e, g in gc_passes
+                if s < end and start < e
+            ]
+            report(
+                f"  gap {gaps[i] * 1000:.1f} ms at {start - arrivals[0]:.2f} s; text step call: "
+                f"{'yes' if in_text else 'no'}; GC passes in the gap: {', '.join(passes) or 'none'}"
+            )
+
+
 @pytest.mark.model
 def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
     speaker_labels_run(tmp_path, seamless=False)
@@ -619,16 +684,19 @@ def speaker_labels_run(tmp_path, seamless: bool) -> None:
     asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
     report(f"warm-up ASR {asr_s:.3f} s, MT {mt_s:.3f} s, speaker {spk_s:.3f} s")
     labeler = RecordedLabeler(speaker_labeler(embedder, params))
+    timed = TimedTextStep(text_step)  # Q-10 diagnostic (D-066 part 2)
+    gc_passes = GcPasses()
 
     recorded = [Recorded(source, count) for source in sources]
     indexes = {row[0] for row in pactl_rows("sinks") if row[1] in SIM_SINKS.values()}
     players = Players(copies, SIM_SINKS, [r.started for r in recorded], indexes)
     players.start()
     out, err = io.StringIO(), io.StringIO()
+    gc.callbacks.append(gc_passes)
     try:
         code = run(
             list(zip(recorded, vads, strict=True)),
-            text_step,
+            timed,
             params,
             time.monotonic,
             out,
@@ -636,11 +704,13 @@ def speaker_labels_run(tmp_path, seamless: bool) -> None:
             labelers={"System": labeler},
         )
     finally:
+        gc.callbacks.remove(gc_passes)
         players.join(timeout=START_LIMIT_S)
         players.kill()
 
     for line in out.getvalue().splitlines():
         report(line)
+    report_gaps(recorded, timed.calls, gc_passes.passes)
     report(f"routing: new playback streams (stream: sink) {players.new}, test sinks {indexes}")
     for process in players.processes:
         _, errors = process.communicate()
