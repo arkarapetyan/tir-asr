@@ -1461,7 +1461,7 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 
 ## D-070. A shorter GIL switch interval (C8)
 
-- **Status:** PROPOSED (2026-10-28). The T-SIM-03 run decides.
+- **Status:** ACCEPTED (2026-10-28), option B
 - **Context:** D-067 revisit condition: T-SIM-03 (P4 only) failed again after D-069 (`test-results/c8-d069b-sim.txt`): one `System` gap of 70.4 ms at 19.20 s, during a text step call, with no GC pass (limit 64 ms; `Me` 61.3 ms). In C7 the largest gap was 61.0 ms. The D-069 change does not touch this test (500 ms silence; no segment reaches 10 s). All P1 tests pass (unit 263, model 4, T-SIM-01, T-SIM-02).
 - **Options:**
   - **A.** Record the gap as a limit of P4 (experimental); no code change. Weak point: T-SIM-03 stays failed.
@@ -1469,4 +1469,5 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Claude's preference:** A. Claude (R12, one time): if B fails, we stop and use A.
 - **Decision:** B, for one run.
 - **Reason (Aren's words):** "Try a fix now" (in the question).
-- **Revisit when:** the T-SIM-03 run of B: a pass keeps 0.5 ms; a fail gives A (the old value 1 ms back).
+- **Result [RUN, `test-results/c8-d070-unit.txt`, `c8-d070-sim03.txt`]:** unit 263 passed (T-PIPE-15 included); T-SIM-03 passes (one run). The margin of D-067 is still small, and the mechanism is still [UNVERIFIED].
+- **Revisit when:** a sim run or a live run of P4 shows a gap over 64 ms again; then record it as a P4 limit (option A).
