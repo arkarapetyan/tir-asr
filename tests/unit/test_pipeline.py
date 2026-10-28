@@ -21,6 +21,9 @@ ended. T-PIPE-11 and T-PIPE-13 stop with `_thread.interrupt_main()`, which has t
 Ctrl+C on the main thread (the test thread). Thus the stop path has a unit test. T-PIPE-13 has a
 source that gives no more blocks: the stop must not wait for it with no message (R10).
 
+T-PIPE-03, T-PIPE-04, and T-PIPE-09 changed in C7 (`c7-notext`, D-031): an empty text gives no
+block and no clock read for a write; the shutdown line still counts it.
+
 T-PIPE-15 (C7, `c7-p4`, D-067): during `run()`, the interpreter switch interval is
 `GIL_SWITCH_S`; after `run()`, also after an error, it has its old value again.
 """
@@ -297,20 +300,17 @@ def test_pipe_02_error_in_the_capture_thread():
     assert code == 1
 
 
-def test_pipe_03_empty_text_gets_no_mt_call():
+def test_pipe_03_empty_text_gets_no_mt_call_and_no_block():
     translator = FakeTranslator()
-    clock = FakeClock([0.0, 1.400, 1.410])
+    clock = FakeClock([0.0, 1.400])  # the session start and the ASR end; no write
 
     code, out, err = start(111, [(5, 24)], FakeTranscriber([""]), translator, clock)
 
     assert translator.calls == []
     assert out == (
-        LISTENING + "[00:00:00] Me\n"
-        " HY: (no text)\n"
-        " [Latency: vad 0.51s, asr 0.09s | Total 0.61s]\n"
-        "\n"
-        "Stopped. Segments: 1, short segments: 0, empty texts: 1, not processed: 0.\n"
+        LISTENING + "Stopped. Segments: 0, short segments: 0, empty texts: 1, not processed: 0.\n"
     )
+    assert clock.values == []
     assert err == ""
     assert code == 0
 
@@ -318,15 +318,16 @@ def test_pipe_03_empty_text_gets_no_mt_call():
 def test_pipe_04_shutdown_line_counts_the_segments():
     # Regions: normal (5-24), short (60-66: 7 frames = 224 ms), empty text (100-119).
     transcriber = FakeTranscriber(["բարև", ""])
-    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 4.500, 4.510])
+    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 4.500])
 
     code, out, err = start(
         150, [(5, 24), (60, 66), (100, 119)], transcriber, FakeTranslator(), clock
     )
 
     assert out.splitlines()[-1] == (
-        "Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0."
+        "Stopped. Segments: 1, short segments: 1, empty texts: 1, not processed: 0."
     )
+    assert clock.values == []
     assert err == ""
     assert code == 0
 
@@ -457,8 +458,8 @@ def test_pipe_09_system_lines_get_the_speaker_label_and_the_spk_step():
     system = FakeSource(140, label="System", after=me.ended)  # its segments come after Me
     labeler = FakeLabeler(["Speaker 2"])
     # Me: ASR end, MT end, write. System, text: ASR end, MT end, speaker end, write.
-    # System, empty text: ASR end, write (no MT call and no speaker step).
-    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 3.200, 3.300, 3.320, 3.330, 4.500, 4.510])
+    # System, empty text: ASR end only (no MT call, no speaker step, and no block: D-031, C7).
+    clock = FakeClock([0.0, 1.400, 1.500, 1.510, 3.200, 3.300, 3.320, 3.330, 4.500])
     out, err = io.StringIO(), io.StringIO()
 
     code = run(
@@ -485,12 +486,9 @@ def test_pipe_09_system_lines_get_the_speaker_label_and_the_spk_step():
         " EN: hi\n"
         " [Latency: vad 0.51s, asr 0.13s, mt 0.10s, spk 0.02s, out 0.01s | Total 0.77s]\n"
         "\n"
-        "[00:00:03] System\n"
-        " HY: (no text)\n"
-        " [Latency: vad 0.51s, asr 0.15s | Total 0.67s]\n"
-        "\n"
-        "Stopped. Segments: 3, short segments: 1, empty texts: 1, not processed: 0.\n"
+        "Stopped. Segments: 2, short segments: 1, empty texts: 1, not processed: 0.\n"
     )
+    assert clock.values == []
     assert err.getvalue() == ""
     assert code == 0
     assert len(labeler.calls) == 1  # only the System segment with a text

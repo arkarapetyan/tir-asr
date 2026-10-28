@@ -7,9 +7,10 @@ core: it gets the adapters as arguments, and it imports no model and no audio-de
 Threads (section 4): one capture thread for each audio source reads the blocks of its source,
 calls the `Endpointer.push` of its source, and puts each segment in the one segment queue. The
 worker thread does the text step (the Armenian text, then the English text if the Armenian text
-is not empty; P1 or P4, D-062), then the speaker step (a source with a labeler, and a text that
-is not empty), then writes the block. The main thread waits for
-"done" (the end of all sources) or for the first error, or it gets Ctrl+C.
+is not empty; P1 or P4, D-062), then the speaker step (a source with a labeler), then writes the
+block. A segment with an empty text gives no block; the shutdown line counts it (D-031, C7).
+The main thread waits for "done" (the end of all sources) or for the first error, or it gets
+Ctrl+C.
 
 The stop (D-061): at each end, the main thread sets the stop event and waits for all threads
 before `run()` returns. Each capture thread stops at its next block and closes its block
@@ -97,7 +98,7 @@ def run(
 
     `labelers` has a labeler for each source label that needs speaker labels (the program:
     "System"). A source with no labeler keeps its source label. A segment with an empty text
-    gets no labeler call and keeps its source label (D-059 point 3).
+    gets no labeler call (D-059 point 3) and no block (D-031, C7); the shutdown line counts it.
 
     While `run()` runs, the interpreter switch interval is `GIL_SWITCH_S` (D-067). At each end,
     `run()` sets the old value back.
@@ -162,8 +163,12 @@ def _run(
                 continue
             text = text_step.process(segment.audio, clock)  # D-031 is in the text step
             hy = text.hy
+            if not hy:  # D-031 (C7): no block and no speaker step; the shutdown line counts it
+                with output_lock:
+                    counts["empty"] += 1
+                continue
             labeler = labelers.get(segment.source)
-            if labeler is not None and hy:  # D-059 point 3: no speaker step for an empty text
+            if labeler is not None:
                 label = labeler.label(segment)
                 spk_end = clock()
             else:
@@ -187,8 +192,6 @@ def _run(
                 )
                 write_block(line, session_start, out)
                 counts["written"] += 1
-                if not hy:
-                    counts["empty"] += 1
         events.put(("done", None))
 
     def thread(name: str, target: Callable[[], None]) -> threading.Thread:
@@ -249,7 +252,8 @@ def _run(
 
     with output_lock:
         stopped.set()
-        not_processed = sum(queued) - counts["written"]  # in the queue or in the worker
+        # in the queue or in the worker; an empty text is processed, but it has no block
+        not_processed = sum(queued) - counts["written"] - counts["empty"]
         short = sum(endpointer.short_segments for endpointer in endpointers)
         out.write(
             f"Stopped. Segments: {counts['written']}, short segments: {short}, "
