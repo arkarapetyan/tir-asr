@@ -53,8 +53,8 @@ STOP_JOIN_S = 2.0
 # [RUN, C7, T-SIM-03 with P4] Each arrival gap over 64 ms came during a text step call, and no
 # full GC pass came in a gap. Probable mechanism [UNVERIFIED]: the P4 worker runs the Python code
 # of the decode loop, and a capture thread waits up to the switch interval for the GIL at each of
-# its handoffs in a block.
-GIL_SWITCH_S = 0.001
+# its handoffs in a block. D-070: 0.5 ms, because 1 ms gave a gap of 70.4 ms in C8.
+GIL_SWITCH_S = 0.0005
 
 Clock = Callable[[], float]
 

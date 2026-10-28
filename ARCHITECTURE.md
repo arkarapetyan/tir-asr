@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.36 · **Date:** 2026-10-28
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.38 · **Date:** 2026-10-28
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. The v0.37 change (C8) applies D-069. The v0.38 change (C8) applies D-070. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
 
 ---
 
@@ -306,7 +306,7 @@ Constants (fixed by a model or a test, not tunable):
 | `WARMUP_TEXT` | «Բարև, ինչպե՞ս ես։» | Synthetic MT warm-up input. |
 | `MT_SRC_LANG`, `MT_TGT_LANG` | `hye_Armn`, `eng_Latn` | NLLB language codes. |
 | `STOP_POLL_S` (`pipeline.py`) | 0.5 s | The main thread waits for an event with this time limit, in a loop. It only wakes the main thread, so that Python can handle Ctrl+C (D-044). |
-| `GIL_SWITCH_S` (`pipeline.py`) | 0.001 s | The interpreter switch interval while `run()` runs (Python default 0.005 s). A capture thread waits less for the GIL while the P4 worker runs Python code (§4, D-067). Not a tunable parameter. |
+| `GIL_SWITCH_S` (`pipeline.py`) | 0.0005 s (D-070; 0.001 s in D-067) | The interpreter switch interval while `run()` runs (Python default 0.005 s). A capture thread waits less for the GIL while the P4 worker runs Python code (§4, D-067). Not a tunable parameter. |
 | `STOP_JOIN_S` (`pipeline.py`) | 2.0 s | At each end of `run()`, the main thread waits this time in total for all threads (clean stop, D-061). A thread stops within one block (32 ms) and the worker within one segment [RUN: ASR, MT, and the speaker step take at most 0.2 s on the GPU with P1; the P4 text step takes at most 0.44 s (C6 probe, D-062 part 6)]. A thread that does not stop gives an error line (R10). |
 
 ## 6. Parameters
@@ -318,10 +318,10 @@ Only Aren adds a parameter (RULES.md R10). The startup log shows each parameter.
 | `mt_compute_type` | `float16` | — | `auto` selects `int8_float16`, which fails on RTX 50-series GPUs; float16 was the fastest mode in the CTranslate2 benchmark (D-015). | 2026-10-24 |
 | `vad_threshold` | 0.5 | probability | Silero default (D-026). | 2026-10-25 |
 | `vad_end_threshold` | 0.35 | probability | Silero rule: threshold − 0.15 (D-026). | 2026-10-25 |
-| `vad_min_silence_ms` | 500 | ms | Start value; pauses at phrase ends; no sentence split on the T-INSTALL-04 clips (D-027). | 2026-10-25 |
+| `vad_min_silence_ms` | 500 | ms | Start value; pauses at phrase ends; no sentence split on the T-INSTALL-04 clips (D-027). [RUN] 300 ms split a sentence of T-E2E-01 (D-069). | 2026-10-25 |
 | `vad_speech_pad_ms` | 30 | ms | Silero default; no latency cost (D-026). | 2026-10-25 |
 | `vad_min_speech_ms` | 250 | ms | Silero default; removes clicks (D-026). | 2026-10-25 |
-| `vad_max_speech_s` | 10 | s | Limits the wait during a long speech (D-026). | 2026-10-25 |
+| `vad_max_speech_s` | 15 | s | Fewer hard cuts in long speech (D-069; 4 hard cuts at 10 s in the C8 live test). Limits the wait during a long speech (D-026). | 2026-10-28 |
 | `mt_beam_size` | 2 | — | CTranslate2 default. Beam sizes 1 and 2 gave the same texts and the same times (T-INSTALL-03, D-033). | 2026-10-25 |
 | `spk_threshold` | 0.50 | cosine | The middle of the zero-error range 0.40–0.60 of TitaNet with rule A in the C5 sweep (D-058). [RUN] L-06: no wrong label on clean turns; kept (D-060). C7 checks it again. | 2026-10-27 |
 | `spk_min_new_s` | 1.0 | s | Start value: a shorter segment starts no speaker and changes no speaker (D-057 part 5B, D-058); before the first speaker, it gets `Unidentified` (D-060). No source and no eval segment under 2.40 s; L-06 gave no fact (no segment length in the output); kept. C7 sets it with the diagnostic line (D-060). | 2026-10-27 |
@@ -490,3 +490,5 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.34 | 2026-10-28 | C7 (§2.9), D-066: the limits of P4 get the result of the recorded calls and the D-067 gap. |
 | 0.35 | 2026-10-28 | C7, branch `c7-notext` (§2.5, §2.6), D-031: no block for an empty text; the shutdown line counts it. |
 | 0.36 | 2026-10-28 | C8 (§2.7), D-068: the NeMo logger level ERROR from the model load (`app.quiet_nemo`). |
+| 0.37 | 2026-10-28 | C8 (§6), D-069: `vad_max_speech_s` 10 → 15 s; `vad_min_silence_ms` stays 500 ms. |
+| 0.38 | 2026-10-28 | C8 (§5), D-070: `GIL_SWITCH_S` 1 ms → 0.5 ms. |
