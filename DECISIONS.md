@@ -1346,3 +1346,79 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude (R14, R6): the eval set and T-SIM-03 say that P4 gives correct text on recorded audio, but the live result says the opposite; the live result has no data. Thus the final decision waits for the recorded live test.
   - Claude (R3): T-SIM-03 fails on point (5), so `c6-cli` has a failed test. The failed test is of the P4 flag only; all P1 tests pass. Aren decides if `c6-cli` merges into `main` now.
 - **Revisit when:** the recorded live test of the next chat.
+
+## D-065. C7 plan: scope, process, and the recorded live test
+
+- **Status:** ACCEPTED (2026-10-28)
+- **Context:** D-064: C7 starts with the P4 problems (the `#err` text, English text in the HY line, the capture gap of T-SIM-03) and a recorded live test of P1 and P4. R16: C0 to C6 took about 20.8 h; with C7 and C8, the total is about 23.3 h. The handover asked for the merge state, the scope, and the process.
+- **Facts:** [RUN] `c6-cli` is merged into `main` (`0eb4b54`), and CI is green (Aren). [RUN] L-04: `./run.sh --list-devices` lists the sources and the defaults, exit code 0, no model load (`test-results/c7-l04.txt`).
+- **Options:**
+  - **Scope:** **A** (minimum): the P4 decision, the removal of the `(no text)` blocks (D-031), L-04, and the README. **B:** A, plus the speaker diagnostic line and L-06 again. **C:** B, plus the VAD measurements of D-060.
+  - **Live test:** **B1:** one live call with P4 and the audio of both sides saved, then a replay of the audio into P1 and P4 through two null sinks. **B2:** P1 and P4 live at the same time in two terminals. **B3:** two calls, P1 then P4.
+- **Claude's preference:** scope A; weak point: the D-060 limits (interruptions, noises) stay, and the README states them. Live test B1; weak points: the replay audio goes through PulseAudio a second time, and no P1 live output exists for the same call.
+- **Decision:**
+  1. Scope A. The D-060 items (the speaker diagnostic line, the VAD measurements, L-06 again) do not come in C7.
+  2. No separate red run in C7 (as D-055, D-057 part 8, D-062 part 10).
+  3. Part A of the cause search: A1 (the Seamless vocabulary) and A2 (T-SIM-03 alone in its own process).
+  4. Live test B3 (Aren's proposal): two calls with the same new script S5 (casual Eastern Armenian, 2 people, 49 lines, `docs/eval/scripts.md`), first P1, then P4. Each call has the output in a file, the audio of both sides in `data/c7/` (`parecord`), and a GPU log. `scripts/score_live.py` scores the output files against S5.
+  5. P4: fix it (Aren, before the data).
+- **Reason (Aren's words):** "it is on main"; "2. A"; "3. no separate red runs"; "6. A2 for Part A"; "7. here's a proposal let's do B3 with new long script for both of the calls, the script can be more on the casual armenian speech side"; "8. we fix the P4".
+- **Questions raised:**
+  - Claude (R14, one time) on point 5: if the cause is the model, a fix in our code may not exist; a text filter on the model output must be visible (R10).
+  - Aren: "I have suspicions that #err appears for the armenian question symbol". [RUN] A1b and the S5 call: no. «՞» is in the vocabulary (25 tokens), P4 wrote «՞» 11 times, and `#err` came for the interjection «Հը» (D-066).
+  - Claude asked for the IDs of the lines that the readers said differently. Aren: "I think we were pretty much close to the text by 99% so it was mostly program errors". Thus the scores count all differences as errors of the program.
+  - Claude (R16, two times): C7 goes over its time box (1.5 h, plus 10 min for the calls) by about 10–15 min [estimate].
+- **Revisit when:** —
+
+## D-066. P4 fixes: hesitation marks, only one script on each line, and the gap diagnostic
+
+- **Status:** ACCEPTED (2026-10-28)
+- **Context:** D-065. Results of the two S5 calls and of Part A.
+- **Facts [RUN, Aren's laptop, 2026-10-28]:**
+  - A1 (`test-results/c7-a1-vocab.txt`): `#err` is two normal tokens of the Seamless vocabulary, `▁#` and `err`.
+  - A1b (`test-results/c7-a1b-marks.txt`): «՞» is in 25 tokens; «։» and «՝» are tokens; «և» is in no token (Seamless writes «եւ»).
+  - A2 (`test-results/c7-a2-sim03.txt`): T-SIM-03 alone, `torch CPU threads 1`: the gap is still 134.4 ms. Thus the 4 threads of the C6 test process were not the cause.
+  - The S5 calls (`test-results/c7-live-p1.txt`, `c7-live-p4.txt`; scores from `scripts/score_live.py`; Me: laptop microphone; System: monitor of Redmi Buds 3 Lite):
+
+    | Call | Side | WER | CER | chrF | `#` marks | HY lines with Latin letters | Blocks / lines |
+    |---|---|---|---|---|---|---|---|
+    | P1 | Me | 7.1 % | 2.1 % | 56.0 | 0 | 0 | 24 / 24 |
+    | P1 | call | 12.7 % | 2.8 % | 59.6 | 0 | 0 | 26 / 25 |
+    | P4 | Me | 8.3 % | 1.8 % | 64.2 | 0 | 0 | 24 / 24 |
+    | P4 | call | 18.1 % | 7.9 % | 65.5 | 1 | 1 | 28 / 25 |
+
+  - Totals: P1 0.57–0.67 s, P4 0.70–0.94 s; no growth (mean of the first third against the last third: P1 0.62 / 0.61 s, P4 0.85 / 0.83 s). GPU: P1 mean 13.4 W, max 20.6 W, 47 °C; P4 mean 14.1 W, max 24.2 W, 50 °C. Both runs end with the shutdown line and no abort line.
+  - `#err`: one time, at s5-43, where Speaker 1 said the interjection «Հը». The EN line has `#Hmm` at the same place; P1 wrote «հը». Thus `#err` is the mark of the model for a hesitation sound. Free speech has many hesitation sounds, so this probably explains the `#err` of L-07 [inference].
+  - English text in the HY line: 0 lines in both calls.
+  - P4 changes casual Armenian to standard Armenian, mostly on the call side (for example «էս շաբաթ-կիրակի» → «այս շաբաթվա կիրակի», «էնտեղ» → «այնտեղ», «իր ամուսինը ու» → «նրա ամուսինը եւ», «հետ կգանք» → «կվերադառնանք»). The meaning stays, but WER and CER count each change. P1 makes sound errors instead («լճի» → «հրեշի», «վարձել» → «բարձել»). P4 gives the better English on both sides (chrF +8.2 and +5.9).
+- **Parts, options, Claude's preference, and decision:**
+  1. **Hesitation marks.** **A:** a core rule removes them (HY: `#` with the Latin letters after it; EN: only the `#`). **B:** suppress the 10 tokens with `#` in `generate`; weak points: the replacement output is not known (maybe a Latin "err" in the HY line), and the decode changes. **C:** no change; a README limit.
+     - Claude's preference: A. Weak points: a filter on the model output; the HY line loses the interjection. Fact that can show A is wrong: a free-speech run shows other Latin marks in the HY lines.
+     - **Decision:** A.
+  2. **The capture gap.** **A:** one diagnostic run of T-SIM-03 with report lines only (the Python GC passes, the gaps over 64 ms with their times, the text step calls). Hypothesis [UNVERIFIED]: a full GC pass stops all threads. **B:** accept the gap as a P4 limit.
+     - Claude's preference: A. Weak point: two more sim runs, and maybe no clear cause.
+     - **Decision:** A. Result [RUN, `test-results/c7-p4-sim03.txt`]: 522 GC passes, none of generation 2, longest 0.6 ms, so the GC hypothesis is wrong. Each of the 17 (`Me`) and 18 (`System`) gaps over 64 ms came during a text step call. The fix is D-067.
+  3. **Only one script on each line (Aren's requirement):** "lets still make sure that valid armenian symbols appear in the Armenian output and English valid siymbols on the English output ALWAYS."
+     - Claude's design: rule 2 of the core module `text/clean.py`, applied with rule 1 in `TextStep.process` for P1 and P4 (not in `warm_up`). A word with a character that its line does not allow becomes `[?]`; one `[?]` for each run of such words, so the line shows that a part was removed (R10). The allowed characters are in ARCHITECTURE §2.9. [RUN] On 328 real texts (both calls, two sim runs), the rules changed only the `#err` line and its `#Hmm` line.
+     - Claude (R14, one time): a correct foreign word becomes `[?]` (for example "Google" in Latin letters in the HY line, or "café" in the EN line); in P1, an HY `[?]` goes into NLLB.
+     - **Decision:** as designed. Tests T-TEXT-06 and T-TEXT-07; `tir_asr.text.clean` in T-IMPORT-01.
+  4. **P4 and casual Armenian** (the last fact): a limit of the model. The README and ARCHITECTURE §2.9 state it. P1 stays the default (D-056); a change of the default needs a new decision.
+- **Reason (Aren's words):** "1.A", "2.A"; part 3: the requirement above. Aren ran the tests and committed the code: "Done".
+- **Revisit when:** a live run shows `[?]` for correct words often, or a mark of another form than `#word`.
+
+## D-067. GIL switch interval while `run()` runs
+
+- **Status:** ACCEPTED (2026-10-28)
+- **Context:** Q-10. T-SIM-03 failed on point (5): 145.0 ms (C6) and 134.4 ms (A2, D-066). The diagnostic of D-066 part 2: each gap over 64 ms came during a P4 text step call, with no full GC pass.
+- **Fact [SOURCE: Python docs, `sys.setswitchinterval`]:** the switch interval sets the time slices of concurrent Python threads; the default is 0.005 s.
+- **Probable mechanism [UNVERIFIED]:** the P4 decode loop is Python code. A capture thread needs the GIL many times for one block, and at each time it can wait up to the switch interval. With P1, the MT step is C++ code with no GIL, and the gaps were under 50 ms.
+- **Options:**
+  - **A.** `run()` sets the switch interval to `GIL_SWITCH_S` = 0.001 s and sets the old value back at each end. A named constant in `pipeline.py` (as `STOP_POLL_S`), not a tunable parameter. New test T-PIPE-15.
+  - **B.** Accept the gap as a P4 limit (README); T-SIM-03 stays failed on point (5).
+  - **C.** The capture in a separate process. Too large for the time budget.
+- **Claude's preference:** A. Weak points: a setting of the full process during the run; the worker can get a little slower; 1 ms has no source. Fact that can show A is wrong: T-SIM-03 still has a gap over 64 ms, or its totals get clearly slower.
+- **Decision:** A.
+- **Result [RUN, `test-results/c7-gil-*.txt`]:** T-SIM-03 PASSES: 0 gaps over 64 ms, largest 61.0 ms (`Me`) and 55.0 ms (`System`); totals max 0.96 s, mean 0.88 s (before: 0.99 s and 0.88 s); 19 of 19 labels correct. Unit: 263 passed. T-E2E-01 to T-E2E-03: 4 passed (exit code 0, 1.22 s after SIGINT).
+- **Reason (Aren's words):** Aren ran the tests and committed: "done, proceed".
+- **Questions raised:** Claude: the margin is small (61.0 ms against the limit of 64 ms), and the mechanism is not proven; the result agrees with it.
+- **Revisit when:** a sim run or a live run shows a gap over 64 ms again.
