@@ -1572,3 +1572,26 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Decision:** as proposed.
 - **Reason (Aren's words):** "yes we accept the digits as correct".
 - **Revisit when:** a later eval compares models that write numbers in different forms, on more numbers than S1–S3 has.
+
+## D-076. Ayb eval: the forms `nf4` and `bf16-cpu`, and the dependency group `c9-eval`
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** D-072 part 2 (Ayb also in the form that the program can use) and D-074 (wait for the access). Hugging Face granted the access, and Aren downloaded the model (`test-results/c9-dl-ayb.txt`).
+- **Facts (R8):**
+  - **Checkpoint** [RUN: `test-results/c9-ayb-header.txt`]: 738 tensors, all BF16. Text model 4,211,977,216 parameters (embedding 641,925,120, layers 3,570,049,536, norm 2,560); vision encoder 333,514,240; MTP (multi-token prediction) layer 120,599,552; total 4,666,091,008. `vocab_size` is 250,752; the card gives 250,635 [SOURCE: `config.json`, model card]. Thus the gap of about 3 % in handover 09b was the MTP layer.
+  - **transformers 5.20.2** [SOURCE: wheel]: `Qwen3_5ForCausalLM` ignores `^mtp.*` and `^model.visual.*`; the bitsandbytes 4-bit and 8-bit loaders need `accelerate>=1.1.0` and `bitsandbytes>=0.46.1`; the defaults of `BitsAndBytesConfig` are "fp4" and float32; the tied embedding is not quantized (`get_keys_to_not_convert`); a missing weight gets random values, and the load only prints a report.
+  - **Packages** [SOURCE: wheel METADATA]: bitsandbytes 0.50.2 needs `torch>=2.4,<3` (block size 64, `nn/modules.py`); accelerate 1.16.0 needs `torch>=2.6.0`, `huggingface_hub>=0.21.0`, `numpy>=1.17`. Thus no conflict with the main environment is known; `uv add` checks it.
+  - **Main environment** [RUN: `test-results/c9-ayb-env.txt`]: no `accelerate`, `bitsandbytes`, `fla`, `causal_conv1d`, or `kernels`. Thus the linear attention uses the torch code of transformers.
+  - **Memory of the text model** [calc]: BF16 8,034 MiB, more than the 8,003 MiB that are free; NF4 2,982 MiB with double quantization and 3,142 MiB without it. The space next to OhanASR and TitaNet is 3,157 MiB (handover 09b).
+- **Parts and decision:**
+  1. **Dependency group (R11, D-028).** Options: **A.** a group `c9-eval` with `accelerate>=1.1.0` and `bitsandbytes>=0.50.2`, not in `default-groups`; **B.** no group, and Ayb in BF16 on the CPU only (eval only; it cannot pass condition 3 [UNVERIFIED speed]). Decision: A. The group leaves the project if Ayb loses.
+  2. **Forms and their parameters (R10):**
+     - `nf4`, the program form, for the rule: quant type `nf4`, compute dtype bfloat16, double quantization, all on the GPU. Runs: the reference text and the OhanASR text, each with context 0 and 3.
+     - `bf16-cpu`, the upper bound, on the reference text only (context 0 and 3): bfloat16, `device_map="auto"`, `max_memory` 7000 MiB on GPU 0 and 16 GiB on the CPU. The rule does not use it.
+     - The form `bf16` (all on the GPU) goes, because its weights are larger than the free memory [calc].
+     - Weak points: `bf16-cpu` is slow [UNVERIFIED]. NF4 leaves 175 MiB for the CUDA context, the cache, and the activations next to OhanASR and TitaNet [calc], so it can fail the VRAM part of condition 3. Fact that can show the upper bound is not necessary: NF4 passes condition 2 on both sets.
+  3. **Load check (R10):** `ayb.py` stops with `AybError` when the load report has a missing, mismatched, or unexpected key, or an error message.
+  4. **Branch:** `c9-ayb`. Claude first proposed "from `main`". Because `c9-eval` is not merged into `main`, the branch starts from `c9-eval`, which has the eval tools.
+  5. **Test changes for tuning (D-072 part 5):** in C10, as planned.
+- **Reason (Aren's words):** "1. yes, not merged, agree on new branch 2. A 3. yes 4. yes 5. approved".
+- **Revisit when:** the install check shows that a form does not load or does not fit, or Ayb loses the rule (then the group `c9-eval` leaves).
