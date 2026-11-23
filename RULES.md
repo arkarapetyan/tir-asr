@@ -1,8 +1,8 @@
 # RULES.md: Rules of Engagement
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.5 · **Date:** 2026-10-25
-**Status:** APPROVED by Aren on 2026-10-23 (v0.3). v0.4 applies D-011. v0.5 applies D-039.
+**Version:** 0.6 · **Date:** 2026-11-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.3). v0.4 applies D-011. v0.5 applies D-039. v0.6 applies D-071 (after the challenge).
 
 ---
 
@@ -202,20 +202,20 @@ When an error occurs, the program stops or shows the error clearly. The message 
 - Aren can question each claim. Claude must answer with a source or a run, not only with more text.
 - Claude does not change a correct answer only because Aren disagrees. Claude changes it when Aren gives a new fact or a new argument.
 
-### R15. Traceability and brief compliance (Brief: "Deliverables", "Use of AI tools")
+### R15. Traceability (Brief: "Use of AI tools"; changed by D-071)
 
-- All work for this project happens in chats in the Claude Project "armenian asr". We keep all chats. We do not delete them.
-- Claude does not start sub-agents or hidden sessions. Each step must be visible in a chat that we can export.
-  - Exception: Aren asks for a sub-agent, and we first confirm that its transcript can go into `chats/`.
-- Aren exports all chats once, after the last message of the last chat (D-011). Each chat becomes one Markdown file, unedited: `chats/NN-<phase>.md`.
-- The "Out of scope" list in the brief is binding. To add an item from that list, we need an entry in `DECISIONS.md`.
+- All work for this project happens in chats in the Claude Project "armenian asr". We keep all chats in the Claude app. We do not delete them.
+- Claude does not start sub-agents or hidden sessions. Each step must be visible in a chat.
+  - Exception: Aren asks for a sub-agent.
+- After the challenge, the repository has no `chats/` folder, and we do not export the chats (D-071). Until C8, the chats were exported into `chats/` (D-011, D-012); the git history keeps those files.
+- After the challenge, the "Out of scope" list of the brief (`PLAN.md` §1.4) is not binding (D-071). Each new feature still needs an entry in `DECISIONS.md` (R10).
 
-### R16. Time budget (Brief: "about 20 hours")
+### R16. Time box (changed by D-071)
 
 - `PLAN.md` gives a time box for each chat.
 - Claude tells Aren when a chat goes over its time box.
 - Aren writes the actual time in the `PLAN.md` time log at the end of each chat.
-- When the total time comes near 20 hours, we cut the scope back to the MVP. We do not add features.
+- After the challenge, there is no total time budget (D-071). Until C8, the brief gave "about 20 hours".
 
 ---
 
@@ -236,7 +236,7 @@ When an error occurs, the program stops or shows the error clearly. The message 
 5. Claude writes the handover file `docs/handovers/NN-<phase>.md`.
 6. Claude updates the Project documents (`PLAN.md` §7.3).
 7. Aren writes the time in the `PLAN.md` time log.
-8. Aren keeps the chat. Aren does not delete it (the export comes after C8, D-011).
+8. Aren keeps the chat in the Claude app. Aren does not delete it (D-071).
 
 ---
 
@@ -249,3 +249,4 @@ When an error occurs, the program stops or shows the error clearly. The message 
 | 0.3 | 2026-10-23 | Claude reads and writes only in the project folder on Aren's laptop (D-005). Aren runs all tests on Claude's request; results go to `test-results/`. Claude first runs `ruff` and unit tests on a copy (D-006). |
 | 0.4 | 2026-10-23 | Chat export: one final export after the last chat, not one export at the end of each chat (D-011). |
 | 0.5 | 2026-10-25 | R12: no bulk commits; Claude gives the full `git add`, `git commit`, and `git push` command; no co-author line in a commit message (D-039). |
+| 0.6 | 2026-11-23 | After the challenge (D-071): R15 has no chat export and no `chats/` folder, and the "Out of scope" list is not binding; R16 has no total time budget. |

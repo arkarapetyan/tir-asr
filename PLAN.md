@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.20 · **Date:** 2026-10-28
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5).
+**Version:** 0.22 · **Date:** 2026-11-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5). v0.21 applies D-071 (after the challenge). v0.22 starts C9 (D-072, D-073).
 
 ---
 
@@ -10,6 +10,8 @@
 
 The brief asks for a Python program that listens to a live conversation, transcribes spoken Armenian, and shows an English translation in the terminal.
 Each line must show the speaker. Each line must appear within 5 seconds.
+
+**After the challenge (D-071, 2026-11-23):** the challenge is over. The goal is now the best program for Aren's own online meetings. K1 is now a throughput limit; deliverable D3 and `chats/` are removed; §1.4 is not binding; R16 has no total time budget. §1.5 describes the interview of the challenge.
 
 ### 1.1 Required features
 
@@ -25,7 +27,7 @@ Each line must show the speaker. Each line must appear within 5 seconds.
 
 | ID | Constraint |
 |---|---|
-| K1 | Latency: maximum 5 s from the end of a spoken phrase to its English line. |
+| K1 | Throughput (D-071): the worker needs at most 0.5 s of model time for each second of segment audio. Until C8: latency, maximum 5 s from the end of a spoken phrase to its English line. |
 | K2 | Local models only. No cloud speech or translation APIs. |
 | K3 | Python. Any local libraries and models. |
 | K4 | The program runs on Aren's own laptop at the interview (§1.6). |
@@ -37,13 +39,14 @@ Each line must show the speaker. Each line must appear within 5 seconds.
 |---|---|
 | D1 | Source code in a Git repository. |
 | D2 | README: setup and run (with the audio device setup); chosen models, alternatives, and reasons; architecture; known limits and improvements. |
-| D3 | `chats/`: each chat session, complete and unedited, as one `.md` file per session. |
+| D3 | Removed (D-071). Until C8: `chats/`, each chat session as one `.md` file per session. |
 | — | Do not commit model weights, audio recordings, or API keys. |
 
-### 1.4 Out of scope (binding, RULES.md R15)
+### 1.4 Out of scope (binding until C8; not binding after D-071)
 
 GUI, installer, echo handling, speaker names, speaker memory across sessions, transcript files, and input languages other than Armenian.
 If we finish early, we make the core more reliable. We do not add features.
+After the challenge, each new feature needs a decision entry (D-071, R10).
 
 ### 1.5 Interview
 
@@ -92,7 +95,7 @@ Effects on the plan:
 
 | Place | Contents | Who uses it |
 |---|---|---|
-| GitHub repository (**source of truth**, owned by Aren) | Code, tests, all project `.md` files, handovers, `chats/` | Aren (all git operations), CI. Claude does not use it (D-005). |
+| GitHub repository (**source of truth**, owned by Aren) | Code, tests, all project `.md` files, handovers (`chats/` until C8, D-071) | Aren (all git operations), CI. Claude does not use it (D-005). |
 | Project folder on Aren's laptop: `/home/aren/dev/armenian-asr` | The git working copy. Test result files in `test-results/` (D-006). | Aren. Claude reads and writes **only in this folder** (D-005). |
 | Claude Project "armenian asr", documents | Copies of `RULES.md`, `PLAN.md`, `DECISIONS.md`, `ARCHITECTURE.md` | Each new chat in the Project |
 | Claude cloud workspace (one for each chat) | Claude's scratch space. Claude runs `ruff` and unit tests on a copy before Aren's official run (D-006). | Claude |
@@ -133,11 +136,10 @@ tir-asr/                    # local folder: /home/aren/dev/armenian-asr
 ├── data/                   # local only, in .gitignore
 ├── tests/{unit,model,sim}/ # the live checklist is in TESTS.md
 ├── tests/support/          # test code only: the WAV source (D-025)
-├── scripts/                # tools outside the package: export_chats.py, probe_audio.py, probe_sigint.py
+├── scripts/                # tools outside the package: probes, the bake-off, the C9 eval (export_chats.py removed, D-071)
 ├── run.sh                  # the launcher (D-045)
 ├── docs/research/RESEARCH.md
-├── docs/handovers/NN-<phase>.md
-└── chats/NN-<phase>.md     # D3
+└── docs/handovers/NN-<phase>.md
 ```
 
 ---
@@ -163,6 +165,9 @@ Phase order: option B, skeleton first (D-002).
 | C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report; the D-060 measurements (VAD for fast changes and noises) and the speaker diagnostic line | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
+| C9 | Model eval: OhanASR and Ayb | Eval against P1 and P4 with the rule of D-072; decision D-074 | — | 3 h |
+| C10 | Integration | The C9 winner in the program; removal of the losing pipelines; test changes for tuning | — | (C10) |
+| C11 | VAD and speaker values | Measured values for the D-060 items; live test | — | (C11) |
 | — | Buffer | — | — | 1 h |
 | | **Total** | | | **25.5 h** |
 
@@ -390,6 +395,29 @@ ASR: automatic speech recognition. MT: machine translation.
   - **M4:** reached with the C8 live test (2 people on the call side). **M5:** reached after the chat export and the merge.
   - Not done (Aren: "No more live tests"): the rehearsal of step 4 as a separate run; the D-060 measurements (README §8).
 
+#### C9. Model eval: OhanASR and Ayb (D-072, D-073)
+
+- **Goal:** compare OhanASR-v0.1 (ASR) and Ayb-0.5-4B (MT) with P1 and P4 on the same data. The decision rule of D-072 part 3 decides the result (D-074).
+- **Read list:** `docs/handovers/09-improve.md`; `README.md` §5, §7, §8; `PLAN.md` §1, §5.2 C8, §11; `ARCHITECTURE.md` §2.2, §2.8, §6; `docs/eval/results.md`. More files with Aren's approval (D-072 part 2).
+- **Steps:**
+  1. Aren downloads both gated models into `models/` (in `.gitignore`). Claude reads `ohanasr.py`, `requirements.txt`, and `model.json` (OhanASR), and `config.json` and the chat template (Ayb).
+  2. Install check on the laptop: OhanASR in its own environment (D-073); Ayb in the main environment; the VRAM of each model.
+  3. Eval tools on the branch `c9-eval`: the core module `tir_asr/eval/c9.py` with T-C9-01 to T-C9-06 (`TESTS.md` §2.10); `scripts/c9_run.py` (dump, asr, mt, report); `scripts/ohanasr_transcribe.py`. No separate red run.
+  4. Runs (Aren): the segment dump; ASR for OhanASR, `nemo-rnnt`, and P4; MT for Ayb (no context, context 3, the program form), NLLB, and Seamless text to text, on the reference text and on the ASR text; the report.
+  5. Results in `docs/eval/results.md`; decision D-074.
+- **Data:** S1–S3 (labels) and S5 (`data/c7/`, both calls; the P1 files cut at 234 s).
+- **Done when:** D-074 is ACCEPTED.
+
+#### C10. Integration of the eval winner
+
+- **Goal:** the winner of C9 in the program (a new text step in the Template Method, D-062), the program environment (two processes if necessary, D-073), and the removal of the losing pipelines (D-072 part 4). The test changes for tuning (D-072 part 5).
+- **Time box:** C10 proposes it.
+
+#### C11. VAD and speaker values
+
+- **Goal:** measured values for the D-060 items (interruptions, noises, long speech, speaker parameters), then Aren's live test with the audio of both sides saved (D-072 part 6).
+- **Time box:** C11 proposes it.
+
 ---
 
 ## 6. Research questions for C1
@@ -571,6 +599,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C7 | 1.5 h + 10 min (the calls, Aren) | 1.62 h | 2026-10-28, 11:23–11:50 (27 min); the two S5 calls (10 min, Aren); 13:32–14:32 (60 min). The break is not counted. Inside the time box. |
 | C8 | 1 h | about 1.0 h (Aren corrects) | 2026-10-28, 14:35–14:55 (README, D-068); the live test (Aren, not counted here); 20:01–20:40 (D-069, D-070, the chat end). Estimate from the chat times. |
 | S1 | 0.5 h | | |
+| C9 | 3 h (D-072) | | 2026-11-23, from 11:11. |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
 | **Total** | **25.5 h** | about 23.4 h | C0 to C8 (C8 an estimate). Over the "about 20 hours" of the brief: S1, D-035 (C2b–C2d), and the overruns of C0, C2d, and C5 (R16 notes in §5.1). |
 
@@ -600,3 +629,5 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.18 | 2026-10-28 | C6 closed: D-062 to D-064; the C6 status, T-SIM-03, and the L-07 result; the C7 first part for P4 (D-064); the R16 note at the C6 end; C6 time logged (1.42 h, Aren: to 11:20). |
 | 0.19 | 2026-10-28 | C7 closed: D-065 to D-067; the C7 result in §5.2; the R16 note at the C7 end; C7 time logged (1.62 h); the two C8 items from Aren (a live test with two people on the call side; the NeMo startup lines). |
 | 0.20 | 2026-10-28 | C8 closed: D-068 to D-070; the C8 result, the §1 check, M4 and M5 in §5.2; C8 time logged (estimate). |
+| 0.21 | 2026-11-23 | After the challenge (D-071): K1 is a throughput limit; D3 and `chats/` are removed; §1.4 is not binding; no total time budget. |
+| 0.22 | 2026-11-23 | C9 started: D-072 (scope, eval, decision rule, C10 and C11), D-073 (eval environment); the converter removed (D-071); §4, §5.1, §5.2 C9 to C11, §11. |

@@ -1471,3 +1471,74 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "Try a fix now" (in the question).
 - **Result [RUN, `test-results/c8-d070-unit.txt`, `c8-d070-sim03.txt`]:** unit 263 passed (T-PIPE-15 included); T-SIM-03 passes (one run). The margin of D-067 is still small, and the mechanism is still [UNVERIFIED].
 - **Revisit when:** a sim run or a live run of P4 shows a gap over 64 ms again; then record it as a P4 limit (option A).
+
+## D-071. Rules after the challenge (C9)
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** the Mathrix challenge is over (C8, M5). Aren (2026-11-23): "since the challenge is over, we dont have any constraints anymore with latency and so on. We just want the best working app that I can use for my online meetings." Some rules and constraints came from the brief: K1 (5 s), deliverable D3 (`chats/`), the "Out of scope" list (`PLAN.md` §1.4, R15), and the time budget (R16).
+- **Proposal (Claude) and decision, point by point:**
+  1. **R1 to R14 stay.** Aren: "yes".
+  2. **K1 changes from latency to throughput.** The 5 s limit goes. New limit: the worker needs at most 0.5 s of model time for each second of segment audio (the "GPU s per audio s" of C3). Reason (Claude, R14): the segment queue has no size limit (D-029). If the worker is slower than the speech, the queue grows, and the lines come later and later. With two sources that speak at the same time, 0.5 gives a full load. Aren: "yes".
+  3. **R16: no total time budget.** Each chat still gets a time box in `PLAN.md`, and the time log continues. Aren: "yes".
+  4. **`PLAN.md` §1.4 ("Out of scope") is not binding.** Each new feature still needs a decision entry (R10, tip T8). Aren: "yes".
+  5. **Chats.** Claude asked whether the chats after the delivery go into `chats/`. Aren: "no, in fact delete the chats folder". Thus deliverable D3 and the chat export (D-011, D-012) end. The chats stay in the Claude Project. R15 keeps the rule against sub-agents and hidden sessions.
+- **Questions raised (Claude, R14):**
+  - `git rm` removes `chats/` from the working tree only; the git history keeps the files.
+  - README §9 links to `chats/`, so it changes in the same commit as the removal.
+  - Without D3, the converter (`scripts/export_chats.py`, its tests in `tests/unit/test_export_chats.py`, `ARCHITECTURE.md` §8.1, `TESTS.md` §2.2) has no use. Claude's preference: remove it too. Aren (2026-11-23): "yes". Thus the tool, its tests, `ARCHITECTURE.md` §8.1, and `TESTS.md` §2.2 leave the project. The tests do not read `chats/` (they use a temporary folder) [SOURCE: the test file], so the removal of the folder does not break them.
+- **Reason (Aren's words):** "1)yes 2) yes 3) yes 4) yes 5) no, in fact delete the chats folder".
+- **Revisit when:** —
+
+## D-072. C9 scope: eval of OhanASR-v0.1 and Ayb-0.5-4B, the decision rule, and the next chats
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** Aren (2026-11-23): "These are now models trained by an armenian lab for aarmenian asr and a 4b armenian llm. Let's integrate them into the existing project, but before let's compare their result (asr with this asr model + am->en translation with this llm model) to the existing results and see will they provide better results. If they prove to be better than the seamless version as wellm this will be our go-to pipeline from now on and we will get rid of the fast conformer and seamless pipelines." After that: the VAD and other values, and "make sure that no test will block us from tuning those values".
+- **Facts (R8):**
+  - **OhanASR-v0.1** [SOURCE: model card, `huggingface.co/Metric-AI/OhanASR-v0.1`]: Armenian ASR with punctuation and case; a fairseq2 checkpoint that loads with `omnilingual-asr`; Python 3.10 or 3.11; BF16 on CUDA; up to 35 s in one piece (40 s limit); not streaming; gated; CC BY-NC 4.0; the training data is not described. Card WER after text and number normalization, for example FLEURS 3.9 % and Movies 20.2 % (not comparable with our numbers). `model.pt` is 9.12 GB [SOURCE: file list], thus about 2.28B parameters in float32 [calc]. omniASR LLM 1B has 2.28B parameters and needs about 6 GiB (BF16, 30 s, A100) [SOURCE: `omnilingual-asr` README]. Thus OhanASR is probably an LLM-ASR model [UNVERIFIED].
+  - **Ayb-0.5-4B** [SOURCE: model card, `huggingface.co/Metric-AI/Ayb-0.5-4B`]: Qwen3.5-4B-Base with continued pre-training (about 26.2B tokens of Armenian and English) and post-training; the weights include a vision encoder; BF16 about 9.3 GB; no translation scores on the card; thinking off by default; gated; CC BY-NC 4.0. `transformers` 5.20.2 has `qwen3_5`, and `Qwen3_5ForCausalLM` does not load the vision weights [SOURCE: transformers 5.20.2 wheel].
+  - **VRAM** [calc]: the two models in BF16 need about 14 GB; the GPU has 8151 MiB (`PLAN.md` §1.6).
+  - **Licence:** both CC BY-NC 4.0, the same as NLLB (D-015).
+- **Parts and decision:**
+  1. **Chats:** C9, the eval and the decision (time box 3 h); C10, the integration of the winner (text step, environment, removal of the losing pipelines) and the test changes of part 5; C11, the VAD and speaker values (the D-060 items), then a live test. Aren: "yes".
+  2. **Eval:**
+     - Data: S1–S3 (34 segments, labels, D-046) and S5 (`data/c7/`, both calls, both sides; 16 kHz, 16-bit [RUN]). The P1 S5 files are 1670 s long [RUN], because the recorders ran after the call. The eval cuts them at 234 s (Aren: "just cut from 234s onwards").
+     - The same VAD segments (`Params()`) for all models: one segment dump.
+     - ASR: OhanASR, `nemo-rnnt` (P1), and P4 (the program adapter, V2).
+     - MT on the reference Armenian text and on the ASR text: Ayb with no context and with a context of 3 earlier segments of the call (both sides), NLLB, and Seamless text to text. Ayb also in the form that the program can use (8 GB with OhanASR and TitaNet).
+     - The Ayb prompt is fixed before the first run, and it changes at most one time, with a record (Claude, R14: a prompt changed after each run fits the 132 eval lines). The prompt text is in `TESTS.md` §2.10 (T-C9-03). Aren: "yes".
+     - Tests T-C9-01 to T-C9-06 (`TESTS.md` §2.10); no separate red run (as D-065 point 2). Aren: "approved".
+  3. **Decision rule** (fixed before the run): the new pipeline replaces P1 and P4 when all four conditions are true:
+     1. its Armenian WER is not higher than the lower WER of P1 and P4, on S1–S3 and on S5 separately;
+     2. its English chrF is not lower than the chrF of P4, on S1–S3 and on S5 separately;
+     3. in the form that the program uses, it fits in 8 GB with TitaNet, and it needs at most 0.5 s of model time for each second of segment audio (K1, D-071);
+     4. no English line has added text (an answer, a comment, or a note in place of a translation): a script marks the lines (T-C9-05), and Aren reads them.
+     - If a cross combination wins (for example OhanASR + Seamless text to text), we keep that combination. If no candidate passes, P1 and P4 stay, and the numbers go into `docs/eval/results.md`.
+     - Weak point: with four conditions, there can be no winner. Fact that can show the rule is wrong: in real meetings, the winner gives clearly worse lines than the eval showed.
+     - Aren: "yes".
+  4. **Removal:** the removal of the FastConformer and Seamless pipelines comes in C10, only after the rule selects a winner. The git history keeps the removed code (as D-058 point 4).
+  5. **Tests and tuning (C10):** a test that checks a rule with `Params()` gets its own fixed `Params` (as `RULE_PARAMS`, D-069). T-CFG-01 stays (Aren: "keep teh cfg test"). The tests that check quality with the program values (the block count of T-E2E-01 and T-E2E-03, the speaker accuracy of T-SIM-02) check only the rules, and the quality numbers move into the eval report (option a, Aren: "a)"). Weak point: a worse value then fails no test; only the eval run shows it.
+  6. **Live test:** Aren: "I'll do a live test with this result in the end". The audio of both sides is saved (handover 09). The other people in a real meeting must agree to the recording.
+- **Claude's other weak points (R14, named one time):** the removal of NeMo ASR does not remove NeMo, because TitaNet uses it (D-058), and a torch conflict can open D-058 again (see D-073); the eval set is small, and a difference of 1 chrF point can be noise [UNVERIFIED]; `ohanasr.py` is code from the model repository, and Claude reads it before Aren runs it.
+- **Reason (Aren's words):** the request above; "2. yes", "4. yes", "6. yes", "7. granted", "8. I'll do a live test with this result in the end", "9. keep teh cfg test, a)"; then "A confirmed, yes, approved, yes, just cut from 234s onwards".
+- **Revisit when:** the install check fails for a model, or the eval selects no winner.
+
+## D-073. Eval environment for OhanASR: a separate environment (option A)
+
+- **Status:** ACCEPTED (2026-11-23), option A
+- **Context:** OhanASR needs `omnilingual-asr` and fairseq2. D-072 part 2 needs the OhanASR texts of the same segments as the other models.
+- **Options:**
+  - **A.** A separate environment for OhanASR only, for the eval. Weak points: two environments; C10 must still solve the program environment.
+  - **B.** The full project on Python 3.11 and the fairseq2 torch now. Weak point: NeMo, Seamless, and CTranslate2 must work with that torch [UNVERIFIED], before we know that OhanASR wins.
+  - **C.** `omnilingual-asr` in the main environment on Python 3.12. Weak point: the model card says that it does not install on Python 3.12.1 or newer.
+- **Claude's preference:** A. Fact that can show it is wrong: the fairseq2 pins have no torch build with CUDA 12.8 or newer.
+- **First decision:** C (Aren: "let's try it with C for now").
+- **Facts after the first decision** [SOURCE: wheel METADATA on PyPI, read in the workspace on 2026-11-23]:
+  - `omnilingual-asr` 0.2.0: `Requires-Python <=3.12,>=3.10` (thus 3.12.0 is the newest Python); `fairseq2[arrow]>=0.5.2,<=0.6.0`. Version 0.1.0 has no upper Python limit and the same fairseq2 range.
+  - `fairseq2` 0.6: `numpy~=1.23`, `huggingface_hub~=0.32`, `fairseq2n==0.6`. `fairseq2n` 0.6: `torch==2.8.0`. The newest releases are the same: `fairseq2n` 0.8.1 `torch==2.9.1`, `fairseq2` 0.8.1 `huggingface_hub~=0.32`.
+  - The main environment has `numpy>=2.5.4` (D-028), `huggingface-hub>=2.3.0`, and `torch>=2.14.1`. Three hard conflicts: thus C cannot resolve.
+  - `transformers` 5.20.2 (for Ayb, `qwen3_5`) needs `huggingface-hub>=1.31.0,<3.0`; 5.0.0 needs `>=1.3.0,<2.0`. Thus OhanASR and Ayb cannot share one environment.
+  - `torch` 2.8.0 on PyPI depends on `nvidia-cuda-runtime-cu12==12.8.90`. PyTorch builds with CUDA 12.8 or newer support Blackwell [SOURCE: PyTorch forum]. Thus option A can use the RTX 5070 [UNVERIFIED until the install check].
+- **Decision:** A. Form: one script `scripts/ohanasr_transcribe.py` with inline uv metadata (Python 3.11, `torch==2.8.0`, `omnilingual-asr==0.2.0`, and the pins of the model's `requirements.txt`), and its lock file `scripts/ohanasr_transcribe.py.lock`. It does not import `tir_asr` (that package needs Python 3.12 or newer). It reads the segment dump and writes the texts as JSON. The main `pyproject.toml` does not change.
+- **Reason (Aren's words):** "A confirmed".
+- **Effect on C10 (Claude, R14):** the program cannot load OhanASR and Ayb in one process. If OhanASR wins, C10 needs two processes, or a runtime outside the Python packages for one model. This cost is part of condition 3 of D-072.
+- **Revisit when:** a release of `omnilingual-asr` or fairseq2 supports torch 2.14 or newer and `huggingface-hub` 1.x or newer.
