@@ -1655,3 +1655,22 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Next:** Aren: "make this pipelien the default and let's wrap this up". If the rule selects OhanASR + Google, C10 makes it the program default (OhanASR in its own process, D-073) and removes P1 and P4 (D-072 part 4).
 - **Reason (Aren's words):** "googletrans proved to work well and is no-stress option".
 - **Revisit when:** `googletrans` fails in a meeting, or Google changes its servers so that `googletrans` stops working.
+
+## D-080. C9 result: OhanASR + Google Translate (`googletrans`) passes the rule and becomes the default in C10
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** D-072 part 3 (the rule), D-075 (digits), D-078 (Ayb out), D-079 (the Google candidate). The report: `test-results/c9-report-google.txt` (Aren's laptop, 2026-11-23, `--added-text 0`).
+- **Facts [RUN]:**
+  - **English chrF, S1–S3 / S5:** Google on the OhanASR text 67.5 / 69.3; Google on the reference text 76.2 / 75.0; P4 (audio to English) 59.0 / 65.3; Seamless text to text on the OhanASR text 56.0 / 62.9.
+  - **Lines:** the flag rule marked 0 lines. Claude's check of the 219 lines found no Armenian letters, no copies, and no second lines. Aren's count of added-text lines: 0.
+  - **Speed:** OhanASR + Google 0.401 (S1–S3) and 0.429 (S5) model s per audio s. Google: 0.989 s per line (mean) and 3.023 s (maximum), network time.
+  - **VRAM** [calc]: 4,646 + 0 + 148 + 200 = 4,994 MiB.
+  - **The report result:** `1_wer` False, `2_chrf` True, `3_vram_and_speed` True, `4_no_added_text` True. Condition 1 is False in the report because the code uses N1 (OhanASR 9.1 % on S1–S3 against P4 7.1 %). With D-075 (the digits as correct; the checked substitution for a comparison between models), OhanASR has 5.3 % [calc] on S1–S3 and 6.3 % on S5. Thus condition 1 passes.
+  - The same report gave the chrF of the Ayb runs with the prompt of D-077: the candidate `ayb-nf4-ctx3+asr-ohanasr` 63.4 / 63.6 (thus it also fails condition 2 on S5); the reference text with context 3: 72.8 / 71.9 (`nf4`) and 72.8 / 69.1 (`bf16-cpu`). D-078 does not change.
+- **Decision:**
+  1. OhanASR + Google (`googletrans`) passes the four conditions of D-072 part 3 (condition 1 with D-075). It replaces P1 and P4.
+  2. **C10** makes it the program default (Aren: "make this pipelien the default"): OhanASR in its own process (D-073), Google as the MT, and TitaNet as now. C10 also removes P1 and P4 (D-072 part 4) and does the test changes for tuning (D-072 part 5).
+  3. C9 closes.
+- **Weak points (Claude, R14):** the speed margin is small (0.429 against 0.5), because each Google call takes about 1 s. `googletrans` is unofficial (D-079). The eval set is small. Fact that can show the decision is wrong: a live test where the lines come later and later, or where Google calls fail.
+- **Reason (Aren's words):** "read it and finish"; for the default: "make this pipelien the default and let's wrap this up".
+- **Revisit when:** a live test shows a growing delay or failed Google calls.
