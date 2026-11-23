@@ -1,12 +1,12 @@
 [project]
 name = "tir-asr"
 version = "0.1.0"
-description = "Live Armenian speech transcription and English translation in the terminal, with speaker labels. Local models only."
+description = "Live Armenian speech transcription and English translation in the terminal, with speaker labels. Local models for the VAD, the ASR, and the speaker labels; Google Translate over the network for the English text."
 readme = "README.md"
 authors = [{ name = "Aren" }]
-requires-python = ">=3.12"
+requires-python = "==3.11.*"
 dependencies = [
-    "numpy>=2.5.4",
+    "numpy==1.26.4",  # D-081: fairseq2 0.5.2 needs numpy~=1.23
 ]
 
 [project.scripts]
@@ -26,7 +26,7 @@ default-groups = ["dev", "laptop"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
@@ -40,23 +40,29 @@ markers = [
 ]
 
 [dependency-groups]
-c9-eval = [
-    "googletrans>=4.0.2",
-]
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
     "sacrebleu>=2.6.0",
-    "scipy>=1.18.1",
+    "scipy>=1.17.1",
 ]
 laptop = [
-    "ctranslate2>=4.8.3",
-    "huggingface-hub>=2.3.0",
+    # OhanASR (D-073, D-081): the pins of the model's requirements.txt, as in C9.
+    "torch==2.8.0",
+    "torchaudio==2.8.0",
+    "fairseq2n==0.5.2",
+    "fairseq2==0.5.2",
+    "omnilingual-asr==0.2.0",
+    "pyarrow==21.0.0",
+    "pandas==2.2.3",
+    "polars==1.42.1",
+    "numba==0.61.2",
+    "soundfile==0.13.1",
+    "huggingface-hub==0.34.4",
+    # TitaNet (D-058), the VAD (D-026; the same version in C10, D-081), the audio (D-020),
+    # and the MT (D-079).
     "nemo-toolkit[asr]>=3.0.0",
-    "nvidia-cublas-cu12>=12.9.2.10",
-    "sentencepiece>=0.2.2",
-    "silero-vad>=6.2.3",
+    "silero-vad==6.2.3",
     "soundcard>=0.4.6",
-    "torch>=2.14.1",
-    "transformers>=5.20.2",
+    "googletrans>=4.0.2",
 ]
