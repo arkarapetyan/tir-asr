@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.22 · **Date:** 2026-11-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5). v0.21 applies D-071 (after the challenge). v0.22 starts C9 (D-072, D-073).
+**Version:** 0.23 · **Date:** 2026-11-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5). v0.21 applies D-071 (after the challenge). v0.22 starts C9 (D-072, D-073). v0.23 gives the C9 status (D-074, D-075).
 
 ---
 
@@ -397,7 +397,7 @@ ASR: automatic speech recognition. MT: machine translation.
 
 #### C9. Model eval: OhanASR and Ayb (D-072, D-073)
 
-- **Goal:** compare OhanASR-v0.1 (ASR) and Ayb-0.5-4B (MT) with P1 and P4 on the same data. The decision rule of D-072 part 3 decides the result (D-074).
+- **Goal:** compare OhanASR-v0.1 (ASR) and Ayb-0.5-4B (MT) with P1 and P4 on the same data. The decision rule of D-072 part 3 decides the result.
 - **Read list:** `docs/handovers/09-improve.md`; `README.md` §5, §7, §8; `PLAN.md` §1, §5.2 C8, §11; `ARCHITECTURE.md` §2.2, §2.8, §6; `docs/eval/results.md`. More files with Aren's approval (D-072 part 2).
 - **Steps:**
   1. Aren downloads both gated models into `models/` (in `.gitignore`). Claude reads `ohanasr.py`, `requirements.txt`, and `model.json` (OhanASR), and `config.json` and the chat template (Ayb).
@@ -406,7 +406,11 @@ ASR: automatic speech recognition. MT: machine translation.
   4. Runs (Aren): the segment dump; ASR for OhanASR, `nemo-rnnt`, and P4; MT for Ayb (no context, context 3, the program form), NLLB, and Seamless text to text, on the reference text and on the ASR text; the report.
   5. Results in `docs/eval/results.md`; decision D-074.
 - **Data:** S1–S3 (labels) and S5 (`data/c7/`, both calls; the P1 files cut at 234 s).
-- **Done when:** D-074 is ACCEPTED.
+- **Done when:** the rule of D-072 part 3 gives a result with Ayb, or Aren stops the wait (D-074).
+- **Status (2026-11-23): open, waiting for the Ayb access (D-074).**
+  - Done: the OhanASR install check (own environment, D-073); the eval tools on `c9-eval`; the runs of OhanASR, `nemo-rnnt`, P4, NLLB, and Seamless text to text; `docs/eval/results.md`, "C9: OhanASR-v0.1".
+  - Result: OhanASR gives the best Armenian text (S5: 6.3 %; S1–S3: 5.3 % with the digits as correct, D-075). With the OhanASR text, no available text translator reaches the English of P4. The program does not change now (D-074).
+  - Next, when the access comes: the Ayb install check, the Ayb runs, the rule (D-072 part 3). Option B of D-074 ("P6") stays a candidate.
 
 #### C10. Integration of the eval winner
 
@@ -631,3 +635,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.20 | 2026-10-28 | C8 closed: D-068 to D-070; the C8 result, the §1 check, M4 and M5 in §5.2; C8 time logged (estimate). |
 | 0.21 | 2026-11-23 | After the challenge (D-071): K1 is a throughput limit; D3 and `chats/` are removed; §1.4 is not binding; no total time budget. |
 | 0.22 | 2026-11-23 | C9 started: D-072 (scope, eval, decision rule, C10 and C11), D-073 (eval environment); the converter removed (D-071); §4, §5.1, §5.2 C9 to C11, §11. |
+| 0.23 | 2026-11-23 | C9 status: the OhanASR results; wait for the Ayb access (D-074); digits in the Armenian text are correct (D-075). |

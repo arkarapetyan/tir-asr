@@ -1542,3 +1542,33 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Reason (Aren's words):** "A confirmed".
 - **Effect on C10 (Claude, R14):** the program cannot load OhanASR and Ayb in one process. If OhanASR wins, C10 needs two processes, or a runtime outside the Python packages for one model. This cost is part of condition 3 of D-072.
 - **Revisit when:** a release of `omnilingual-asr` or fairseq2 supports torch 2.14 or newer and `huggingface-hub` 1.x or newer.
+
+## D-074. C9 result: wait for Ayb; no change to the program now
+
+- **Status:** ACCEPTED (2026-11-23), option A
+- **Context:** D-072 part 3 (the decision rule). The C9 runs are done except Ayb: Hugging Face answered "Access denied. Model 'Metric-AI/Ayb-0.5-4B' requires approval" (`test-results/c9-dl-ayb.txt`). All numbers: `docs/eval/results.md`, "C9: OhanASR-v0.1".
+- **Facts [RUN, Aren's laptop, 2026-11-23]:**
+  - Armenian WER, S1–S3 / S5: `nemo-rnnt` (P1) 10.6 / 10.0 %; P4 7.1 / 13.0 %; OhanASR 9.1 / 6.3 %. OhanASR with its 10 digit words as the reference words: 5.3 % on S1–S3 [calc] (D-075).
+  - English chrF, S1–S3 / S5: P4 (audio to English) 59.0 / 65.3; Seamless text to text on the OhanASR text 56.0 / 62.9; NLLB on the OhanASR text 52.3 / 58.7; P1 51.7 / 57.8. Seamless text to text on the reference text: 61.1 / 65.3.
+  - VRAM (peak minus 148 MiB before the load): OhanASR 4646 MiB, P4 3082 MiB, `nemo-rnnt` 952 MiB, NLLB 1932 MiB, Seamless text to text 2724 MiB. Model s per audio s (S5): OhanASR 0.164, P4 0.092. No flagged English line.
+  - Aren asked if vLLM can serve Ayb with no download access. Claude: no. vLLM gets the model from the Hugging Face Hub with `HF_TOKEN` [SOURCE: vLLM docs, "huggingface integration"], and a gated model can be served only when the account has access [SOURCE: text-generation-inference docs, "Serving Private & Gated Models"].
+- **Options:**
+  - **A.** Wait for the Ayb access. No change to the program now. Weak point: the wait time is not known, and C10 and C11 wait too.
+  - **B.** "P6": the OhanASR Armenian line and the Seamless English line (audio to English, the P4 path). Ayb tests against the P6 English when access comes. Weak points: two environments (D-073); VRAM 4646 + 3082 + 148 + 200 (TitaNet) = 8076 of 8151 MiB [calc], with a second CUDA context not counted; the two lines come from two models and can disagree; on S1–S3 it passes condition 1 only with the digits as correct (D-075).
+  - **C.** OhanASR + Seamless text to text. Weak point: it fails condition 2 (3.0 / 2.4 chrF under P4).
+  - **D.** No change (P1 default, P4 behind `--seamless`). Weak point: the weakest English (P1) and the weakest Armenian on casual speech (P4) stay.
+- **Claude's preference:** B. Fact that can show it is wrong: a load of OhanASR and Seamless together needs more than 8151 MiB, or a live test shows many lines where the English does not agree with the Armenian.
+- **Decision:** A. The program does not change. C9 stays open. When Hugging Face grants the access, C9 continues: the Ayb install check (VRAM; probably a smaller form than BF16, D-072 part 2), the Ayb runs (no context and context 3) on the reference text and on the OhanASR text, then the rule of D-072 part 3. Option B stays a candidate for the same decision.
+- **Reason (Aren's words):** "we wait for for the LLM model".
+- **Revisit when:** Hugging Face grants the Ayb access, or Aren stops the wait.
+
+## D-075. Digits in the Armenian text are correct (D-047 N1, revisit)
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** the revisit condition of D-047 N1 occurred: OhanASR wrote 10 words with digits on S1–S3 (D-074).
+- **Facts [RUN]:** each digit group of OhanASR is the correct number of the reference: «15 հազար» (տասնհինգ հազար), «7-ի» (յոթի), «7-ին» two times (յոթին), «099-11, 22-33» (զրո իննսունինը, տասնմեկ, քսաներկու, երեսուներեք), «7-ին 6» (յոթին վեց), «11-ին» (տասնմեկին). With N1, OhanASR has 9.1 % WER on S1–S3; with these 6 groups written as the reference words, 5.3 % [calc].
+- **Options:** keep N1 (a correct number in digits is an error); N2 (a converter from digits to Armenian words in `normalize_hy`); N3 (a second reference with digits); accept the digits as correct, with the substitution of the checked groups for a comparison between models.
+- **Claude's proposal:** accept the digits as correct. For a comparison between models, use the substitution of the checked groups ([calc], listed in `docs/eval/results.md`). For a tuning of one model against itself (C11), N1 stays, because each run of the same model writes the numbers in the same form [inference]. Weak point: the substitution is manual. Fact that can show it is wrong: a later eval compares models on many numbers; then N2 or N3 in code is necessary.
+- **Decision:** as proposed.
+- **Reason (Aren's words):** "yes we accept the digits as correct".
+- **Revisit when:** a later eval compares models that write numbers in different forms, on more numbers than S1–S3 has.

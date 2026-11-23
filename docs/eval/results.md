@@ -1,8 +1,8 @@
-# Bake-off results (C3, C5, C6, C7)
+# Bake-off results (C3, C5, C6, C7, C9)
 
 **Date:** 2026-10-26 (C3), 2026-10-27 (C5, C6) · **Decisions:** D-053 (P4: Seamless end to end), D-058 (speaker model), D-063 (P4 variant) · **Rules:** R6 (measure, do not guess)
 
-The sections up to "Not measured" are the C3 bake-off. The section "Speaker labels (C5)" is the C5 sweep. The section "P4 variants (C6)" is the C6 probe.
+The sections up to "Not measured" are the C3 bake-off. The section "Speaker labels (C5)" is the C5 sweep. The section "P4 variants (C6)" is the C6 probe. The section "C9: OhanASR-v0.1" is the C9 eval (D-072).
 
 ## Conditions
 
@@ -188,3 +188,47 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 ### Decision
 
 - **D-066:** fix P4 with the output rules (hesitation marks; only Armenian text in the HY line and only English text in the EN line). **D-067:** a shorter GIL switch interval during `run()`; T-SIM-03 passes. P1 stays the default (D-056).
+
+## C9: OhanASR-v0.1 (D-072, D-073)
+
+### Conditions
+
+- **Laptop (Aren), 2026-11-23:** NVIDIA GeForce RTX 5070 Laptop GPU. Main environment: torch 2.14.1, NeMo 3.0.0, CTranslate2 4.8.3, transformers 5.20.2, silero-vad 6.2.3. OhanASR environment (D-073): Python 3.11, torch 2.8.0, fairseq2 0.5.2, omnilingual-asr 0.2.0.
+- **Models:** `Metric-AI/OhanASR-v0.1` (omniASR_LLM_1B_v2, 2,279,634,560 parameters, bfloat16 on CUDA, the model's own `ohanasr.py`); `nemo-rnnt` (P1); P4 (the program adapter, variant V2). **Ayb-0.5-4B was not measured:** Hugging Face answered "Access denied. Model 'Metric-AI/Ayb-0.5-4B' requires approval" (`test-results/c9-dl-ayb.txt`).
+- **Data:** one segment dump for all models (`scripts/c9_run.py dump`, `Params()`): S1–S3, 34 segments, 161.0 s; S5, both calls and both sides, 102 segments, 356.2 s. The P1 recordings are cut at 234 s (Aren); the last P1 segments (s5-48, s5-49) end at 229.6 s and 231.9 s. No hard cut.
+- **Scores:** the joined text of each side of each call against the reference lines of that side (D-046 point 2); the output rules of `text/clean.py` on all texts (D-066); WER and CER with `normalize_hy` (D-047, N1: no number rule); chrF with `sacrebleu` 2.6.0.
+- **Times:** each call after one warm-up call; "model s per audio s" is the sum of the call times divided by the segment audio. **VRAM:** the peak used memory minus the used memory before the load (148 MiB in each run).
+- **Files (local):** `data/c9/segments.{npz,json}`, `test-results/c9/*.json`, `test-results/c9/report.txt`, `test-results/c9-*.txt`.
+
+### ASR
+
+| ASR | S1–S3 WER | S1–S3 CER | S5 WER | S5 CER | Digit words (S1–S3) | Time per segment, mean / max | Model s per audio s (S5) | VRAM |
+|---|---|---|---|---|---|---|---|---|
+| `nemo-rnnt` (P1) | 10.6 % | 3.3 % | 10.0 % | 2.5 % | 0 | 0.028 / 0.033 s | 0.007 | 952 MiB |
+| P4 (Seamless, V2, Armenian line) | 7.1 % | 2.3 % | 13.0 % | 9.0 % | 0 | 0.338 / 0.456 s (S1–S3) | 0.092 | 3082 MiB |
+| **OhanASR-v0.1** | 9.1 % | 4.6 % | **6.3 %** | **2.3 %** | 10 | 0.724 / 1.276 s (S1–S3); 0.572 / 0.829 s (S5) | 0.164 | 4646 MiB |
+| OhanASR, digits as the reference words [calc] | **5.3 %** | **1.7 %** | 6.3 % | 2.3 % | 0 | — | — | — |
+
+- **Digits (D-047 N1, revisit condition met):** OhanASR wrote 10 words with digits on S1–S3, for example «15 հազար դրամ», «ժամը 7-ին», «099-11, 22-33». Each number is the correct number of the reference. N1 counts each one as an error. The [calc] row puts the reference words in place of the 6 digit groups (`15`, `7-ի`, `7-ին` two times, `099-11, 22-33`, `7-ին 6`, `11-ին`) and changes nothing else.
+- **S5 (casual speech):** OhanASR keeps the casual forms; P4 changes them to standard Armenian (C7, D-066), so P4 has the highest WER on S5.
+- By side (WER, N1): OhanASR S1–S3 mic 3.4 / 22.2 / 4.8 %, call 8.9 / 8.0 / 10.4 % (S2 mic: the phone number and the times); S5 mic 5.0 / 2.9 %, call 7.7 / 9.3 % (P1 / P4 call).
+- No empty text from OhanASR or P4.
+
+### MT (chrF, S1–S3 / S5)
+
+| MT input | NLLB (CTranslate2) | Seamless text to text | P4 end to end (audio to English) |
+|---|---|---|---|
+| Reference Armenian text | 56.3 / 59.2 | 61.1 / 65.3 | — |
+| `nemo-rnnt` text (P1) | 51.7 / 57.8 | — | — |
+| OhanASR text | 52.3 / 58.7 | 56.0 / 62.9 | — |
+| Audio | — | — | **59.0 / 65.3** |
+
+- Model s per audio s on S5 (ASR + MT): P1 0.026; OhanASR + NLLB 0.183; OhanASR + Seamless text to text 0.233; P4 0.092. All are under the limit of 0.5 (K1, D-071).
+- VRAM of the MT models: NLLB 1932 MiB; Seamless text to text 2724–2726 MiB.
+- Flag rule (D-072 part 3, condition 4): 0 marked lines in each run, also for the P4 English lines.
+
+### Findings
+
+1. **ASR:** OhanASR gives the best Armenian text on casual speech (S5: 6.3 % against 10.0 % and 13.0 %). On S1–S3, its digits count as errors under N1 (9.1 %); with the digits as words, it is also the best (5.3 % [calc]).
+2. **MT:** with the OhanASR text, no available text translator reaches the English of P4: Seamless text to text is 3.0 / 2.4 points lower, NLLB 6.7 / 6.6 points lower. Seamless text to text on the reference text is the same as P4 on S5 (65.3), so the end-to-end English of P4 is near the best that a text translator gives with perfect Armenian text.
+3. **Decision rule (D-072 part 3) with no Ayb:** no cascade with OhanASR passes condition 2. A combination of the OhanASR Armenian line and the P4 English line (audio to English) passes condition 2 (equal chrF), and condition 1 on S5; on S1–S3 it passes only with the digits as words. Its VRAM is 4646 + 3082 + 148 + 200 (TitaNet) = 8076 MiB [calc], 75 MiB under 8151 MiB, with a second CUDA context not counted; only a run with both models loaded can show it.
