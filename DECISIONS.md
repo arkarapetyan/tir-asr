@@ -1674,3 +1674,55 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Weak points (Claude, R14):** the speed margin is small (0.429 against 0.5), because each Google call takes about 1 s. `googletrans` is unofficial (D-079). The eval set is small. Fact that can show the decision is wrong: a live test where the lines come later and later, or where Google calls fail.
 - **Reason (Aren's words):** "read it and finish"; for the default: "make this pipelien the default and let's wrap this up".
 - **Revisit when:** a live test shows a growing delay or failed Google calls.
+
+## D-081. C10 design: one environment for the program; OhanASR and Google in the program process
+
+- **Status:** ACCEPTED (2026-11-23), option B
+- **Context:** D-080 makes OhanASR + Google (`googletrans`) the program default. For the eval, OhanASR has its own environment (D-073, option A). Thus the C10 handover proposed a second process for OhanASR, and Claude proposed option A below. Aren (2026-11-23): "keep it as simple and sensible as possible let's create a new env and get rid of the old one, let's not bloat code too much and focus on delivering only this asr + googletrans capability". Claude read this as one new environment for the full program (option B), and checked that B can resolve.
+- **Facts (R8):**
+  - [SOURCE: the wheel METADATA on PyPI, read in the workspace on 2026-11-23]
+    - `fairseq2` 0.5.2: `numpy~=1.23`, `huggingface_hub~=0.32`. `fairseq2n` 0.5.2: `torch==2.8.0`.
+    - `nemo_toolkit` 3.0.0: `Requires-Python >=3.10`, `torch>=2.6.0`, `numpy>=1.22`, `huggingface_hub>=0.24`; the extra `common` has `lightning<=2.4.0,>2.2.1`.
+    - Thus fairseq2 sets the versions of torch, numpy, and `huggingface-hub`, and NeMo 3.0.0 accepts them.
+  - [RUN, workspace, `uv pip compile`, a resolution only, no install] The resolution is for Python 3.11 (x86_64, manylinux 2.28). These packages resolve together: the pins of `scripts/ohanasr_transcribe.py`, `nemo_toolkit[asr]`, `silero-vad==6.2.3`, `soundcard>=0.4.6`, `googletrans>=4.0.2`, and the group `dev`.
+    - The versions of the lock now: `nemo-toolkit` 3.0.0, `lightning` 2.4.0, `silero-vad` 6.2.3, `soundcard` 0.4.6.
+    - New versions: `torch` 2.8.0, `numpy` 1.26.4, `huggingface-hub` 0.34.4, `transformers` 4.57.6 (a NeMo dependency), `scipy` 1.17.1.
+    - With `silero-vad>=6.2.3`, the resolution gives 6.3. Thus the pin `==6.2.3` is necessary for the same VAD.
+  - [RUN, workspace] All Python files in `src/`, `tests/`, and `scripts/` compile with Python 3.11.15. A search found no numpy 2 function that numpy 1.26 does not have.
+  - [RUN, C9] OhanASR on torch 2.8.0 works on the RTX 5070 (D-073, D-080).
+- **Options:**
+  - **A.** Two environments: OhanASR in its own process, with a pipe protocol on stdin and stdout. Weak points: it needs more code (the protocol, and the start, stop, and errors of a child process). It has two CUDA contexts. A hung child process blocks the worker thread.
+  - **B.** One environment for the program, on Python 3.11, with the versions that fairseq2 sets. OhanASR loads in the program process. Weak points: below.
+- **Claude's preference:** A before Aren's instruction; B after it, because B has less code and the resolution passes. The weak points of B (R14):
+  1. **GIL:** OhanASR runs in the worker thread. It is an LLM ASR model, so its decoder is probably a Python loop, as in P4 [UNVERIFIED]. With P4, the capture threads waited up to 61.0 ms, against a limit of 64 ms (Q-10, D-067).
+  2. **torch 2.8.0:** TitaNet and Silero change from torch 2.14.1 to torch 2.8.0. This is not measured.
+  3. **One process:** fairseq2 can change a global torch setting that NeMo then uses, or the opposite [UNVERIFIED].
+  4. **Pins:** numpy stays at 1.26 and torch at 2.8.0 until fairseq2 changes (D-073, "Revisit when"). For numpy, this entry replaces the limit `numpy>=2.5.4` of D-028.
+  - Tests that can show that B is wrong. If one of them fails, A is the next step, with a new entry.
+    - T-SIM-02 with OhanASR gives an arrival gap over 64 ms (weak point 1).
+    - T-MODEL-SPK-01 or T-MODEL-VAD-01 fails on torch 2.8.0 (weak point 2).
+    - T-MODEL-ENV-01 gives a different TitaNet embedding after the OhanASR load (weak point 3).
+- **Decision:** B.
+  1. **Environment:** `requires-python = "==3.11.*"`, `.python-version` 3.11, and the ruff target `py311`. The project dependency is `numpy==1.26.4`. The group `laptop` has the pins of `scripts/ohanasr_transcribe.py`, `nemo-toolkit[asr]>=3.0.0`, `silero-vad==6.2.3` (the VAD does not change in C10, R6), `soundcard>=0.4.6`, and `googletrans>=4.0.2`. `ctranslate2`, `nvidia-cublas-cu12`, `transformers`, `sentencepiece`, and the direct `huggingface-hub>=2.3.0` leave `laptop`. The group `c9-eval` goes. Aren deletes the old `.venv` and makes the new one with `uv sync`.
+  2. **ASR:** a new adapter `asr/ohanasr.py` (`OhanasrTranscriber`), from `scripts/ohanasr_transcribe.py`. It uses the model's own `load_model` (`models/ohanasr-v0.1`), bfloat16 on CUDA, one segment for each call, and the 40 s model limit.
+  3. **MT:** the adapter `mt/google.py` (`GoogleTranslator`), moved from `eval/google_mt.py`. It has the values of D-079 (`raise_exception=True`, the timeout 5 s, no retries). It also has the error `mt: empty input text` of `ARCHITECTURE.md` §2.4.
+  4. **Text step:** `CascadeTextStep(transcriber, translator)` with the two new adapters. The latency line keeps `asr` and `mt`. The core `TextStep` and `STEPS` do not change.
+  5. **Removal (D-072 part 4).** The git history keeps these parts:
+     - `asr/nemo_rnnt.py`; `mt/ct2_nllb.py` with the cuBLAS preload (D-030); `text/seamless.py` and `--seamless`;
+     - the NLLB parameters `mt_compute_type` and `mt_beam_size`;
+     - the eval adapters `eval/nemo_ctc.py`, `eval/opus_ct2.py`, `eval/seamless.py`, `eval/buzz_whisper.py`, and `eval/google_mt.py`;
+     - the scripts `bakeoff.py`, `probe_cpu.py`, `probe_p4.py`, and `probe_sigint.py`, which use removed parts;
+     - `scripts/ohanasr_transcribe.py` and its lock;
+     - the tests of the removed parts.
+  6. **Eval tools:** the eval core stays. `scripts/c9_run.py` keeps its subcommands; `asr` has only the model `ohanasr`, and `mt` has only the model `google`. Both use the program adapters.
+  7. **K2 and the description:** K2 becomes "Local models for the VAD, the ASR, and the speaker labels. The MT sends each Armenian text to Google Translate over the network (D-079)." The words "Local models only" leave `pyproject.toml` and `README.md`.
+  8. **Scope:** the test changes for tuning (D-072 part 5) move from C10 to C11. The time box of C10 is 6 h.
+- **Reason (Aren's words):** "keep it as simple and sensible as possible let's create a new env and get rid of the old one, let's not bloat code too much and focus on delivering only this asr + googletrans capability"; then "confirmed".
+- **Questions raised:**
+  - Claude (R14): "a new env" can also mean a second environment for OhanASR only (option A). Claude asked; Aren confirmed B.
+  - Claude: the flags of the old pipelines. Aren: no flag stays ("2. yes").
+  - Claude: the place of the Google adapter. Aren: it moves into `mt/`, and `googletrans` moves to `laptop` ("3. yes").
+- **Revisit when:**
+  - T-SIM-02 gives an arrival gap over 64 ms with OhanASR;
+  - a model test fails on torch 2.8.0;
+  - a release of fairseq2 or `omnilingual-asr` supports a newer torch and numpy 2.
