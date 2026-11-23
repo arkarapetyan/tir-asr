@@ -41,8 +41,7 @@ markers = [
 
 [dependency-groups]
 c9-eval = [
-    "accelerate>=1.1.0",
-    "bitsandbytes>=0.50.2",
+    "googletrans>=4.0.2",
 ]
 dev = [
     "pytest>=9.1.1",
