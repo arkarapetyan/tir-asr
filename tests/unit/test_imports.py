@@ -19,6 +19,7 @@ FORBIDDEN = [
     "silero_vad",
     "soundcard",
     "transformers",
+    "googletrans",
 ]
 
 ADAPTERS = {
@@ -33,7 +34,7 @@ ADAPTERS = {
     "tir_asr.eval.seamless",
     "tir_asr.speakers.titanet",
     "tir_asr.text.seamless",
-    "tir_asr.eval.ayb",
+    "tir_asr.eval.google_mt",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.

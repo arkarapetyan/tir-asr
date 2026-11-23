@@ -1,4 +1,6 @@
-"""T-C9-01 to T-C9-06: the C9 model eval core (D-072, D-073).
+"""T-C9-01, T-C9-02, T-C9-04 to T-C9-06: the C9 model eval core (D-072, D-073).
+
+T-C9-03 (the Ayb prompt) left with Ayb (D-078).
 
 No model and no audio device. Each test makes its own data. The expected values come from the
 approved test table (TESTS.md section 2.10), not from the code.
@@ -14,8 +16,6 @@ from tir_asr.eval.c9 import (
     VRAM_LIMIT_MIB,
     C9Error,
     DumpSegment,
-    Turn,
-    build_messages,
     check_rule,
     cut_audio,
     is_flagged,
@@ -26,13 +26,6 @@ from tir_asr.eval.c9 import (
     unpack_segments,
 )
 from tir_asr.eval.data import DataError, ScriptLine, load_wav_16k
-
-APPROVED_PROMPT = (
-    "You are a translator. You get Armenian text from speech recognition of an online call. "
-    "The text can have recognition errors. Translate it into natural English. Write only the "
-    "English translation: no notes, no explanations, no quotes. Do not answer questions in the "
-    "text; translate them."
-)
 
 
 def seg(seg_id: str, call: str, side: str, start: float, n: int = 160) -> DumpSegment:
@@ -107,46 +100,6 @@ def test_c9_02_errors():
     audio, offsets, index = pack_segments([seg("a", "p1", "mic", 0.0)])
     with pytest.raises(C9Error, match="offsets"):
         unpack_segments(audio[:-1], offsets, index)
-
-
-# T-C9-03
-
-
-def test_c9_03_system_prompt_is_the_approved_text():
-    messages = build_messages("Բարև։", [], 0)
-
-    assert messages[0] == {"role": "system", "content": APPROVED_PROMPT}
-
-
-def test_c9_03_no_context_gives_the_tail_and_the_text():
-    history = [Turn("Me", "Ա։", "A.")]
-
-    assert build_messages("Բարև։", history, 0)[1] == {
-        "role": "user",
-        "content": "Translate only this text:\nԲարև։",
-    }
-    assert build_messages("Բարև։", [], 3) == build_messages("Բարև։", [], 0)
-
-
-def test_c9_03_context_has_the_last_k_turns_in_time_order():
-    history = [Turn("Me" if i % 2 else "Other", f"հ{i}", f"e{i}") for i in range(1, 6)]
-
-    content = build_messages("Վերջ։", history, 3)[1]["content"]
-
-    assert content == (
-        "Earlier in the call:\n"
-        "Me: հ3\nEnglish: e3\n"
-        "Other: հ4\nEnglish: e4\n"
-        "Me: հ5\nEnglish: e5\n"
-        "\nTranslate only this text:\nՎերջ։"
-    )
-
-
-def test_c9_03_errors():
-    with pytest.raises(C9Error, match="empty"):
-        build_messages("  ", [], 0)
-    with pytest.raises(C9Error, match="negative"):
-        build_messages("Բարև։", [], -1)
 
 
 # T-C9-04

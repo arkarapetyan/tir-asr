@@ -4,7 +4,7 @@ Subcommands (all model runs read the same segment dump, so all models get the sa
 
   dump    the VAD segments of S1-S3 and S5 with `Params()`  -> data/c9/segments.{npz,json}
   asr     one ASR model on the dump                          -> test-results/c9/asr-<model>.json
-  mt      one MT model on the reference text or an ASR file  -> test-results/c9/mt-<name>.json
+  mt      one MT model on the reference text or an ASR file  -> test-results/c9/mt-<m>+<input>.json
   report  the tables and the check of the decision rule      -> test-results/c9/report.txt
 
 OhanASR runs in its own environment (D-073): scripts/ohanasr_transcribe.py writes
@@ -14,7 +14,7 @@ Examples (D-030: no LD_LIBRARY_PATH; nothing downloads):
   uv run --no-sync python scripts/c9_run.py dump
   env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py asr --model p4
   env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --group c9-eval python scripts/c9_run.py \\
-      mt --model ayb --form nf4 --input asr-ohanasr --context 3
+      mt --model google --input asr-ohanasr
   uv run --no-sync python scripts/c9_run.py report
 
 The texts in the files are the raw model texts. The output rules of the program
@@ -35,8 +35,6 @@ from tir_asr.eval.c9 import (
     S5_CUT_S,
     SETS,
     DumpSegment,
-    Turn,
-    build_messages,
     check_rule,
     cut_audio,
     is_flagged,
@@ -259,69 +257,50 @@ def mt_items(source: str, limit: int | None) -> list[dict]:
 
 
 def cmd_mt(args: argparse.Namespace) -> int:
-    if args.context and args.model != "ayb":
-        raise SystemExit("c9_run: --context is for --model ayb only")
     items = mt_items(args.input, args.limit)
     gpu = Gpu()
     clock = time.perf_counter
     start = clock()
     extra = {}
-    if args.model == "ayb":
-        from tir_asr.eval.ayb import MODEL_DIR, AybTranslator
+    if args.model == "google":
+        from tir_asr.eval.google_mt import PARAMS, GoogleTranslator
 
-        model = AybTranslator(ROOT / MODEL_DIR, args.form)
+        model = GoogleTranslator()
         extra = {
-            "form": args.form,
-            "form_params": model.form_params,
-            "context": args.context,
-            "model_class": model.model_class,
-            "footprint_mib": model.footprint_mib,
-            "cpu_modules": model.cpu_modules,
+            "params": PARAMS,
+            "service_urls": model.service_urls,
             "versions_c9_eval": {
-                name: importlib.metadata.version(name) for name in ("accelerate", "bitsandbytes")
+                name: importlib.metadata.version(name) for name in ("googletrans", "httpx")
             },
         }
+    elif args.model == "nllb-ct2":
+        from tir_asr.mt.ct2_nllb import MT_MODEL_DIR, Ct2NllbTranslator
 
-        def translate(hy: str, history: list[Turn]) -> str:
-            return model.translate_messages(build_messages(hy, history, args.context))
+        model = Ct2NllbTranslator(Params(), ROOT / MT_MODEL_DIR)
+    else:  # seamless text to text
+        from tir_asr.eval.seamless import SeamlessText
 
-    else:
-        if args.model == "nllb-ct2":
-            from tir_asr.mt.ct2_nllb import MT_MODEL_DIR, Ct2NllbTranslator
-
-            model = Ct2NllbTranslator(Params(), ROOT / MT_MODEL_DIR)
-        else:  # seamless text to text
-            from tir_asr.eval.seamless import SeamlessText
-
-            model = SeamlessText()
-
-        def translate(hy: str, history: list[Turn]) -> str:
-            return model.translate(hy)
+        model = SeamlessText()
 
     load_s = clock() - start
     loaded = gpu.sample()
     say(f"{args.model}: load {load_s:.1f} s, VRAM +{loaded - gpu.base} MiB, {extra}")
     start = clock()
-    translate(WARMUP_TEXT, [])
+    model.translate(WARMUP_TEXT)
     warmup_s = clock() - start
-    history: dict[str, list[Turn]] = {}
     out = []
     for item in items:
-        turns = history.setdefault(item["group"], [])
         if not item["hy"]:  # D-031: no MT call for an empty text
             out.append({"id": item["id"], "hy": "", "en": "", "seconds": 0.0})
             continue
         start = clock()
-        en = translate(item["hy"], turns)
+        en = model.translate(item["hy"])
         seconds = clock() - start
         gpu.sample()
-        turns.append(Turn(item["speaker"], item["hy"], clean_english(en)))
         out.append({"id": item["id"], "hy": item["hy"], "en": en, "seconds": seconds})
         say(f"{item['id']}: {seconds:.3f} s: {en}")
-    name = args.model + (f"-{args.form}" if args.model == "ayb" else "")
-    name += f"-ctx{args.context}" if args.model == "ayb" else ""
     write_json(
-        f"mt-{name}+{args.input}",
+        f"mt-{args.model}+{args.input}",
         {
             "model": args.model,
             "input": args.input,
@@ -483,13 +462,11 @@ def main(argv: list[str] | None = None) -> int:
     asr.add_argument("--model", choices=("nemo-rnnt", "p4"), required=True)
     asr.add_argument("--limit", type=int, default=None)
     mt = sub.add_parser("mt")
-    mt.add_argument("--model", choices=("ayb", "nllb-ct2", "seamless"), required=True)
+    mt.add_argument("--model", choices=("google", "nllb-ct2", "seamless"), required=True)
     mt.add_argument("--input", required=True, help="reference, or asr-<model>")
-    mt.add_argument("--context", type=int, default=0)
-    mt.add_argument("--form", default="nf4")
     mt.add_argument("--limit", type=int, default=None)
     report = sub.add_parser("report")
-    report.add_argument("--candidate", default="ayb-nf4-ctx3+asr-ohanasr")
+    report.add_argument("--candidate", default="google+asr-ohanasr")
     report.add_argument("--added-text", type=int, default=None)
     args = parser.parse_args(argv)
     commands = {"dump": cmd_dump, "asr": cmd_asr, "mt": cmd_mt, "report": cmd_report}
