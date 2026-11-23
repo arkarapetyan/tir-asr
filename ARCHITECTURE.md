@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.38 · **Date:** 2026-10-28
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. The v0.37 change (C8) applies D-069. The v0.38 change (C8) applies D-070. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012).
+**Project:** tir-asr · **Version:** 0.39 · **Date:** 2026-11-23
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. The v0.37 change (C8) applies D-069. The v0.38 change (C8) applies D-070. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012). The v0.39 change applies D-071.
 
 ---
 
@@ -347,41 +347,11 @@ No module retries, waits with a timeout, or changes to another device or model (
 
 ## 8. Tools that the program does not use
 
-The program (`cli`, `app`, `pipeline`) does not use these tools. §8.1 is outside the `tir_asr` package. §8.2 is in the package (`tir_asr.eval`), so that the unit tests can import it.
+The program (`cli`, `app`, `pipeline`) does not use these tools. §8.2 is in the package (`tir_asr.eval`), so that the unit tests can import it.
 
-### 8.1 `scripts/export_chats.py`: chat export to Markdown (D-012)
+### 8.1 `scripts/export_chats.py` (removed)
 
-- **Purpose:** deliverable D3. The tool changes chats from the Claude data export into one Markdown file for each chat. It changes only the format. It does not change the text.
-- **Command:** `uv run python scripts/export_chats.py <EXPORT> chats/manifest.toml`
-- **Input:**
-  - `EXPORT`: the conversations JSON file from the Claude data export. The file stays outside the repository. The tool only reads it.
-  - `chats/manifest.toml`: one `[[chat]]` table for each chat, with two keys:
-    - `title`: the chat title in the app.
-    - `file`: the output file name, for example `00-kickoff.md`.
-- **Output:** for each manifest entry, the file `<file>` in the folder of the manifest. The tool replaces a file that exists. Git shows each change.
-  - **Header:** the chat title, the chat ID, `created_at`, `updated_at`, and the number of messages in the file.
-  - **Note:** the file has only the text blocks of the main branch, with no change. The note gives the number of messages in side branches, and the number of blocks of each other type in the main branch. The original chat in the app has all blocks.
-  - **Messages:** each message of the main branch, in tree order. A heading gives the number, the sender, and `created_at`. Then each `text` block of `content` follows:
-    - `human`: in a code fence. The fence has more backticks than the longest backtick sequence in the text.
-    - `assistant`: as Markdown, with no change.
-    - A message with no text block gets the line "(This message has no text blocks.)".
-  - **Terminal:** one line for each file, with the file name and the number of messages.
-- **Main branch:** the path from the root to the leaf message with the newest `created_at`. The root is the parent ID `00000000-0000-4000-8000-000000000000` (**[RUN]** in C0).
-- **Not used:** `message.text` (it has a placeholder in place of the tool calls), `account`, `attachments`, `files`, and all blocks that are not `text`.
-- **Errors (fail loudly, R10):** the tool stops with exit code 1 and the message `export_chats: <cause>`. If one chat has an error, the tool writes no file. Causes:
-  1. The export is not valid JSON, or the manifest is not valid TOML.
-  2. A key is missing, or a value has the wrong type (for example, a chat has no `chat_messages`).
-  3. A manifest `file` is not a plain file name that ends in `.md`.
-  4. Two manifest entries have the same `title` or the same `file`.
-  5. A manifest `title` matches no chat, or two or more chats.
-  6. A chat has no messages.
-  7. A parent message ID is not in the chat and is not the root ID, or the parent chain has a loop.
-  8. Two leaf messages have the same newest `created_at`.
-  9. A sender is not `human` or `assistant`.
-- **Limits:**
-  - Only the Python standard library (`json`, `tomllib`). No new dependency.
-  - The tool does not show tool calls, tool results, thinking summaries, injected prompts, documents, or side branches (D-012, option B).
-  - **[RUN]** The format facts come from one chat (C0). The final export after C8 can have a different format.
+Removed after the challenge (D-071). Until C8, it changed the Claude data export into one Markdown file for each chat in `chats/` (D-012, deliverable D3). The git history keeps the tool and its contract.
 
 ### 8.2 `tir_asr.eval`: eval tools for the bake-off (C3, D-046, D-047)
 
@@ -492,3 +462,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.36 | 2026-10-28 | C8 (§2.7), D-068: the NeMo logger level ERROR from the model load (`app.quiet_nemo`). |
 | 0.37 | 2026-10-28 | C8 (§6), D-069: `vad_max_speech_s` 10 → 15 s; `vad_min_silence_ms` stays 500 ms. |
 | 0.38 | 2026-10-28 | C8 (§5), D-070: `GIL_SWITCH_S` 1 ms → 0.5 ms. |
+| 0.39 | 2026-11-23 | C9 (§8), D-071: `scripts/export_chats.py` and its contract removed. |
