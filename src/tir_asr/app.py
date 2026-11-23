@@ -1,7 +1,7 @@
 """The program: the startup log, the two sources, the model loads, the warm-up, and the pipeline.
 
-ARCHITECTURE.md section 2.7. Decisions: D-022, D-030, D-037, D-042, D-043, D-054, D-059, D-062,
-D-063, D-068. This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py`
+ARCHITECTURE.md section 2.7. Decisions: D-022, D-037, D-042, D-043, D-054, D-059, D-062, D-063,
+D-068, D-081. This module imports the adapters, so it is in ADAPTERS of T-IMPORT-01. `cli.py`
 imports it only after the parse of the command line. Each startup line starts with "startup: ",
 so that it is easy to find. NeMo shows only its errors (D-068).
 """
@@ -22,11 +22,12 @@ from tir_asr.text.step import CascadeTextStep, TextStep
 PACKAGES = [
     "tir-asr",
     "torch",
+    "omnilingual-asr",
+    "fairseq2",
     "nemo-toolkit",
-    "ctranslate2",
-    "transformers",
     "silero-vad",
     "soundcard",
+    "googletrans",
 ]
 MIB = 2**20
 SOURCE_LABELS = ("Me", "System")  # the microphone and the system audio (F1, D-054)
@@ -70,14 +71,11 @@ def select_sources(mic: str | None, system: str | None, log: TextIO) -> list:
     return sources
 
 
-def load_models(params: Params, log: TextIO, labels: list[str], seamless: bool = False):
+def load_models(params: Params, log: TextIO, labels: list[str]):
     """Load the text step, one VAD for each source label, and the speaker model, in this order.
 
-    P1 (the default): ASR, then MT; they make `CascadeTextStep` (D-062). ASR loads first, so
-    that a missing CUDA gives `asr: CUDA is not available` (D-043, point 2a). The MT adapter
-    loads the CUDA 12 cuBLAS before its `import ctranslate2` (D-030); no other module imports
-    `ctranslate2`. P4 (`seamless`): the Seamless adapter is the text step, and it checks CUDA
-    first (`text: CUDA is not available`); NeMo ASR and NLLB do not load (D-062 part 5). Each
+    The text step is OhanASR, then Google Translate (`CascadeTextStep`, D-062, D-081). ASR loads
+    first, so that a missing CUDA gives `asr: CUDA is not available` (D-043, point 2a). Each
     source needs its own VAD, because the Silero model keeps its state (D-036, D-054). The
     speaker model loads last (D-057 part 6). Return (vads, text_step, embedder).
     """
@@ -86,13 +84,10 @@ def load_models(params: Params, log: TextIO, labels: list[str], seamless: bool =
     quiet_nemo(log)
 
     def used_mib() -> int:
-        free, total = torch.cuda.mem_get_info()  # the full device: CTranslate2 is included
+        free, total = torch.cuda.mem_get_info()  # the full device
         return (total - free) // MIB
 
-    if seamless:
-        text_step = load_seamless(log, used_mib)
-    else:
-        text_step = load_cascade(params, log, used_mib)
+    text_step = load_text_step(log, used_mib)
 
     from tir_asr.segment.silero import SileroSpeechProbability
 
@@ -133,51 +128,28 @@ def quiet_nemo(log: TextIO) -> None:
     log_line(log, "NeMo log level ERROR: the NeMo info and warning lines are hidden (D-068)")
 
 
-def load_cascade(params: Params, log: TextIO, used_mib) -> TextStep:
-    """P1: the NeMo ASR adapter, then the CTranslate2 MT adapter (D-014, D-015, D-043)."""
+def load_text_step(log: TextIO, used_mib) -> TextStep:
+    """OhanASR in this process, then Google Translate over the network (D-080, D-081)."""
     import torch
 
-    from tir_asr.asr.nemo_rnnt import NemoRnntTranscriber
+    from tir_asr.asr.ohanasr import OhanasrTranscriber
 
-    log_line(log, "text step cascade (P1): NeMo RNNT ASR, then NLLB MT")
+    log_line(log, "text step: OhanASR ASR, then Google Translate MT over the network (D-081)")
     start = time.perf_counter()
-    transcriber = NemoRnntTranscriber()  # checks CUDA first (section 2.3)
+    transcriber = OhanasrTranscriber()  # checks CUDA first (section 2.3)
     elapsed = time.perf_counter() - start
     log_line(log, f"GPU {torch.cuda.get_device_name(0)}; CUDA (torch) {torch.version.cuda}")
-    asr_used = used_mib()
-    log_line(log, f"ASR loaded in {elapsed:.2f} s; GPU memory used {asr_used} MiB")
+    log_line(log, f"ASR loaded in {elapsed:.2f} s; GPU memory used {used_mib()} MiB")
 
-    from tir_asr.mt.ct2_nllb import Ct2NllbTranslator
+    from tir_asr.mt.google import SOURCE, TARGET, TIMEOUT_S, GoogleTranslator
 
-    start = time.perf_counter()
-    translator = Ct2NllbTranslator(params)
-    elapsed = time.perf_counter() - start
-    mt_used = used_mib()
+    translator = GoogleTranslator()  # no model; the warm-up makes the first network call
     log_line(
         log,
-        f"MT loaded in {elapsed:.2f} s; "
-        f"GPU memory used {mt_used} MiB ({mt_used - asr_used:+d} MiB)",
+        f"MT Google Translate: {', '.join(translator.service_urls)}, {SOURCE} to {TARGET}, "
+        f"timeout {TIMEOUT_S} s, no retries",
     )
     return CascadeTextStep(transcriber, translator)
-
-
-def load_seamless(log: TextIO, used_mib) -> TextStep:
-    """P4: one Seamless model gives both texts (D-053, D-063)."""
-    import torch
-
-    from tir_asr.text.seamless import SeamlessTextStep
-
-    log_line(log, "text step seamless (P4): Seamless end to end, one call for both texts")
-    start = time.perf_counter()
-    text_step = SeamlessTextStep()  # checks CUDA first (section 2.9)
-    elapsed = time.perf_counter() - start
-    log_line(log, f"GPU {torch.cuda.get_device_name(0)}; CUDA (torch) {torch.version.cuda}")
-    log_line(
-        log,
-        f"Seamless loaded in {elapsed:.2f} s; GPU memory used {used_mib()} MiB; "
-        f"generate num_beams {text_step.num_beams}, max_new_tokens {text_step.max_new_tokens}",
-    )
-    return text_step
 
 
 def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
@@ -208,21 +180,17 @@ def list_devices(out: TextIO | None = None, err: TextIO | None = None) -> int:
 def main(
     mic: str | None = None,
     system: str | None = None,
-    seamless: bool = False,
     out: TextIO | None = None,
     err: TextIO | None = None,
 ) -> int:
-    """Run the startup, then the pipeline. Return the exit code (D-042, D-043, D-054, D-062).
-
-    `seamless` selects the P4 text step; the default is P1 (D-062 part 4).
-    """
+    """Run the startup, then the pipeline. Return the exit code (D-042, D-043, D-054, D-081)."""
     out = out or sys.stdout
     err = err or sys.stderr
     params = Params()
     try:
         log_versions(params, out)
         sources = select_sources(mic, system, out)
-        vads, text_step, embedder = load_models(params, out, list(SOURCE_LABELS), seamless)
+        vads, text_step, embedder = load_models(params, out, list(SOURCE_LABELS))
         asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
         log_line(out, warm_up_line(text_step, asr_s, mt_s, spk_s))
         labelers = {SPEAKER_SOURCE: speaker_labeler(embedder, params)}
@@ -245,7 +213,7 @@ def main(
 
 
 def warm_up_line(text_step: TextStep, asr_s: float, mt_s: float, spk_s: float) -> str:
-    """The warm-up times with the names of the text steps (D-063 part 2): P4 has one step."""
+    """The warm-up times with the names of the text steps (D-063 part 2; one name: one time)."""
     if len(text_step.STEPS) == 1:
         text = f"{text_step.STEPS[0]} {asr_s + mt_s:.2f} s"
     else:

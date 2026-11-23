@@ -48,7 +48,8 @@ END = None  # the end mark in the segment queue: one source has no more blocks
 STOP_POLL_S = 0.5
 # D-061: at the end of run(), the main thread waits this time in total for all threads. A thread
 # that does not stop in this time stays a daemon thread, and `err` gets a line for it (R10).
-STOP_JOIN_S = 2.0
+# D-082: 5.0 s (2.0 s until C9), because an OhanASR + Google call can take more than 2 s.
+STOP_JOIN_S = 5.0
 # D-067: the interpreter switch interval while run() runs (the Python default is 0.005 s).
 # [RUN, C7, T-SIM-03 with P4] Each arrival gap over 64 ms came during a text step call, and no
 # full GC pass came in a gap. Probable mechanism [UNVERIFIED]: the P4 worker runs the Python code

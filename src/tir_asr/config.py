@@ -11,22 +11,18 @@ SAMPLE_RATE = 16_000  # Hz. The ASR model and Silero VAD need 16 kHz.
 VAD_FRAME = 512  # samples. The only frame size that Silero VAD accepts at 16 kHz.
 WARMUP_AUDIO_S = 2.0  # s of zeros. The synthetic input of the ASR warm-up call (D-022, R11).
 WARMUP_TEXT = "Բարև, ինչպե՞ս ես։"  # The synthetic input of the MT warm-up call (D-022).
-MT_SRC_LANG = "hye_Armn"  # NLLB language code: Armenian.
-MT_TGT_LANG = "eng_Latn"  # NLLB language code: English.
 
 
 @dataclass(frozen=True)
 class Params:
     """The approved parameters. The default values are the program values."""
 
-    mt_compute_type: str = "float16"  # D-015
     vad_threshold: float = 0.5  # probability, D-026
     vad_end_threshold: float = 0.35  # probability, D-026
     vad_min_silence_ms: int = 500  # ms, D-027 (start value; 300 ms failed T-E2E-01, D-069)
     vad_speech_pad_ms: int = 30  # ms, D-026
     vad_min_speech_ms: int = 250  # ms, D-026
     vad_max_speech_s: int = 15  # s, D-069 (D-026: 10)
-    mt_beam_size: int = 2  # D-033
     spk_threshold: float = 0.50  # cosine, D-058 (start value; L-06 tests it)
     spk_min_new_s: float = 1.0  # s, D-057 part 5B, D-058 (start value; L-06 tests it)
 

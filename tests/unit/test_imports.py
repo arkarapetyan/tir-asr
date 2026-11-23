@@ -15,26 +15,21 @@ import pytest
 FORBIDDEN = [
     "torch",
     "nemo",
-    "ctranslate2",
     "silero_vad",
     "soundcard",
     "transformers",
     "googletrans",
+    "fairseq2",
+    "omnilingual_asr",
 ]
 
 ADAPTERS = {
     "tir_asr.segment.silero",
-    "tir_asr.asr.nemo_rnnt",
-    "tir_asr.mt.ct2_nllb",
+    "tir_asr.asr.ohanasr",
+    "tir_asr.mt.google",
     "tir_asr.audio.soundcard_source",
     "tir_asr.app",
-    "tir_asr.eval.nemo_ctc",
-    "tir_asr.eval.opus_ct2",
-    "tir_asr.eval.buzz_whisper",
-    "tir_asr.eval.seamless",
     "tir_asr.speakers.titanet",
-    "tir_asr.text.seamless",
-    "tir_asr.eval.google_mt",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.

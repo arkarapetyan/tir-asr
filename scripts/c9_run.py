@@ -1,4 +1,4 @@
-"""C9 model eval runner (D-072, D-073). Model level: Aren runs it on the laptop.
+"""C9 model eval runner (D-072, D-073; changed in C10, D-081). Model level: Aren runs it.
 
 Subcommands (all model runs read the same segment dump, so all models get the same segments):
 
@@ -7,14 +7,15 @@ Subcommands (all model runs read the same segment dump, so all models get the sa
   mt      one MT model on the reference text or an ASR file  -> test-results/c9/mt-<m>+<input>.json
   report  the tables and the check of the decision rule      -> test-results/c9/report.txt
 
-OhanASR runs in its own environment (D-073): scripts/ohanasr_transcribe.py writes
-test-results/c9/asr-ohanasr.json in the same format.
+C10 (D-081): the program environment has OhanASR, so `asr` runs the program adapter
+(`tir_asr.asr.ohanasr`) in this process, and `mt` runs the program adapter `tir_asr.mt.google`.
+The C9 models `nemo-rnnt`, `p4`, `nllb-ct2`, and `seamless` left with P1 and P4 (D-081 point 5);
+their C9 result files stay in test-results/c9/, and `report` still reads them.
 
-Examples (D-030: no LD_LIBRARY_PATH; nothing downloads):
+Examples (nothing downloads from Hugging Face; `mt` sends text to Google, D-079):
   uv run --no-sync python scripts/c9_run.py dump
-  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py asr --model p4
-  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --group c9-eval python scripts/c9_run.py \\
-      mt --model google --input asr-ohanasr
+  HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py asr --model ohanasr
+  HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py mt --model google --input asr-ohanasr
   uv run --no-sync python scripts/c9_run.py report
 
 The texts in the files are the raw model texts. The output rules of the program
@@ -72,7 +73,15 @@ FILES = [
         for side, name in (("mic", "mic"), ("call", "system"))
     ],
 ]
-PACKAGES = ("tir-asr", "torch", "nemo-toolkit", "ctranslate2", "transformers", "silero-vad")
+PACKAGES = (
+    "tir-asr",
+    "torch",
+    "omnilingual-asr",
+    "fairseq2",
+    "nemo-toolkit",
+    "silero-vad",
+    "googletrans",
+)
 
 
 def say(text: str) -> None:
@@ -171,22 +180,12 @@ def cmd_asr(args: argparse.Namespace) -> int:
     gpu = Gpu()
     clock = time.perf_counter
     start = clock()
-    if args.model == "nemo-rnnt":
-        from tir_asr.asr.nemo_rnnt import NemoRnntTranscriber
+    from tir_asr.asr.ohanasr import MODEL_DIR, OhanasrTranscriber
 
-        model = NemoRnntTranscriber()
+    model = OhanasrTranscriber(ROOT / MODEL_DIR)  # the program adapter (D-081)
 
-        def run(audio: np.ndarray) -> dict:
-            return {"hy": model.transcribe(audio)}
-
-    else:  # p4: the program adapter, variant V2 (D-063)
-        from tir_asr.text.seamless import SeamlessTextStep
-
-        model = SeamlessTextStep()
-
-        def run(audio: np.ndarray) -> dict:
-            result = model.process(audio, clock)
-            return {"hy": result.hy, "en": result.en}
+    def run(audio: np.ndarray) -> dict:
+        return {"hy": model.transcribe(audio)}
 
     load_s = clock() - start
     loaded = gpu.sample()
@@ -261,26 +260,16 @@ def cmd_mt(args: argparse.Namespace) -> int:
     gpu = Gpu()
     clock = time.perf_counter
     start = clock()
-    extra = {}
-    if args.model == "google":
-        from tir_asr.eval.google_mt import PARAMS, GoogleTranslator
+    from tir_asr.mt.google import PARAMS, GoogleTranslator
 
-        model = GoogleTranslator()
-        extra = {
-            "params": PARAMS,
-            "service_urls": model.service_urls,
-            "versions_c9_eval": {
-                name: importlib.metadata.version(name) for name in ("googletrans", "httpx")
-            },
-        }
-    elif args.model == "nllb-ct2":
-        from tir_asr.mt.ct2_nllb import MT_MODEL_DIR, Ct2NllbTranslator
-
-        model = Ct2NllbTranslator(Params(), ROOT / MT_MODEL_DIR)
-    else:  # seamless text to text
-        from tir_asr.eval.seamless import SeamlessText
-
-        model = SeamlessText()
+    model = GoogleTranslator()  # the program adapter (D-081)
+    extra = {
+        "params": PARAMS,
+        "service_urls": model.service_urls,
+        "versions_mt": {
+            name: importlib.metadata.version(name) for name in ("googletrans", "httpx")
+        },
+    }
 
     load_s = clock() - start
     loaded = gpu.sample()
@@ -459,10 +448,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("dump")
     asr = sub.add_parser("asr")
-    asr.add_argument("--model", choices=("nemo-rnnt", "p4"), required=True)
+    asr.add_argument("--model", choices=("ohanasr",), required=True)
     asr.add_argument("--limit", type=int, default=None)
     mt = sub.add_parser("mt")
-    mt.add_argument("--model", choices=("google", "nllb-ct2", "seamless"), required=True)
+    mt.add_argument("--model", choices=("google",), required=True)
     mt.add_argument("--input", required=True, help="reference, or asr-<model>")
     mt.add_argument("--limit", type=int, default=None)
     report = sub.add_parser("report")

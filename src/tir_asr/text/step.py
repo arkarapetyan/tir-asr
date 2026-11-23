@@ -10,8 +10,9 @@ define `process` or `warm_up` (T-TEXT-04). `STEPS` gives the names of the text s
 latency line: two names (P1: `asr`, `mt`), or one name when one step gives both texts (P4:
 `s2t`, D-063 part 2).
 
-This module is core: it imports no model package (D-021). `CascadeTextStep` (P1) gets its
-adapters as arguments. The P4 subclass is an adapter in its own file (`text/seamless.py`).
+This module is core: it imports no model package (D-021). `CascadeTextStep` gets its adapters
+as arguments: since C10, OhanASR and Google Translate (D-081). The P4 subclass left with P4
+(D-081 point 5); the template and `STEPS` stay as they are (D-081 point 4).
 """
 
 from abc import ABC, abstractmethod

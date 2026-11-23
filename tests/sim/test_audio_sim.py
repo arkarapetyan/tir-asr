@@ -1,4 +1,4 @@
-"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01 to T-SIM-03: the audio sources and the speaker labels.
+"""T-AUDIO-01 to T-AUDIO-04, T-SIM-01, T-SIM-02: the audio sources and the speaker labels.
 
 Contract: ARCHITECTURE.md sections 2.1 and 7. Decisions: D-020, D-041, D-054. The limits come
 from probe B (`scripts/probe_audio.py`; TESTS.md, "C2d audio probes").
@@ -11,7 +11,8 @@ compares the device list and the two default ids with the values that `pactl` gi
 T-SIM-01 (C4, D-054) loads two null sinks and runs the program functions with the real models
 and two sources at the same time: `pw-play` plays the two sides of eval script S1 into the two
 sinks, and the program captures their monitors. It is also a model test: run it with
-`env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1` (D-030). Its input files are local only (data/).
+`HF_HUB_OFFLINE=1`. Its input files are local only (data/). C10 (D-081): the text step is
+OhanASR, then Google Translate; the tests send Armenian text to Google over the network (D-079).
 
 T-SIM-02 (C5, D-057, D-059) is T-SIM-01 with the speaker step: "Me" plays the S1 microphone
 side, and "System" plays eval stream D (four people; the two S1 people come back after a new
@@ -19,10 +20,10 @@ person). A test wrapper on the program labeler records the times and the label o
 call. The test maps these times to the turns of stream D, with the start of the System player
 as time 0, and computes the label accuracy after the best mapping (D-057 part 2).
 
-T-SIM-03 (C6, D-062, D-063) is T-SIM-02 with the P4 text step (`load_models(…, seamless=True)`).
-Its latency lines have the step `s2t` (D-063 part 2).
+T-SIM-03 (the P4 text step) left with P4 (D-081 point 5). In C10, point (5) of T-SIM-02 (no
+arrival gap over 64 ms) is the GIL check with OhanASR in the worker thread (D-081 weak point 1).
 
-Q-10 diagnostic (C7, D-066 part 2): T-SIM-02 and T-SIM-03 also report, with no new assert, the
+Q-10 diagnostic (C7, D-066 part 2): T-SIM-02 also reports, with no new assert, the
 Python GC passes during the run (`gc.callbacks`), the times of the text step calls, and, for each
 arrival gap over 64 ms, its time, whether a text step call overlaps it, and the GC passes in it.
 
@@ -83,7 +84,6 @@ S1_FILES = {
 SCRIPTS_MD = ROOT / "docs" / "eval" / "scripts.md"
 AFTER_PLAY_S = 2.0  # each source stops this time after the length of the longest file
 START_LIMIT_S = 30.0  # test only: the time for the first block of each source
-K1_S = 5.0
 HEAD = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] (.+)$")
 TOTAL = re.compile(r"\| Total (\d+\.\d\d)s\]$")
 
@@ -542,10 +542,9 @@ def test_sim_01_two_sources_at_the_same_time(two_null_sinks, tmp_path):
     assert rates[("Me", "mic")] < rates[("Me", "call")]
     assert rates[("System", "call")] < rates[("System", "mic")]
 
-    # (4) K1.
+    # (4) The totals: a report, no assert (D-082; K1 is a throughput limit, D-071).
     totals = [block[3] for block in blocks]
     report(f"totals: max {max(totals):.2f} s, mean {sum(totals) / len(totals):.2f} s")
-    assert all(total < K1_S for total in totals), f"a total is not under {K1_S} s: {totals}"
 
     # (5) Arrival gaps of each source (Q-10), with the drift numbers (D-020).
     for source in recorded:
@@ -635,16 +634,11 @@ def report_gaps(recorded, text_calls, gc_passes) -> None:
 
 @pytest.mark.model
 def test_sim_02_speaker_labels_on_the_system_side(two_null_sinks, tmp_path):
-    speaker_labels_run(tmp_path, seamless=False)
+    speaker_labels_run(tmp_path)
 
 
-@pytest.mark.model
-def test_sim_03_speaker_labels_with_p4(two_null_sinks, tmp_path):
-    speaker_labels_run(tmp_path, seamless=True)
-
-
-def speaker_labels_run(tmp_path, seamless: bool) -> None:
-    """T-SIM-02 (P1) and T-SIM-03 (P4): the two null sinks come from the fixture of the test."""
+def speaker_labels_run(tmp_path) -> None:
+    """T-SIM-02: the two null sinks come from the fixture of the test."""
     from tir_asr.app import load_models, log_versions, speaker_labeler
     from tir_asr.audio.soundcard_source import SoundcardSource
     from tir_asr.config import Params
@@ -678,7 +672,7 @@ def speaker_labels_run(tmp_path, seamless: bool) -> None:
     log = io.StringIO()
     log_versions(params, log)
     sources = [SoundcardSource(label, f"{sink}.monitor") for label, sink in SIM_SINKS.items()]
-    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS), seamless=seamless)
+    vads, text_step, embedder = load_models(params, log, list(SIM_SINKS))
     for line in log.getvalue().splitlines():
         report(line)
     asr_s, mt_s, spk_s = warm_up(text_step, embedder, time.monotonic)
@@ -736,10 +730,9 @@ def speaker_labels_run(tmp_path, seamless: bool) -> None:
     report(f"blocks: {len(me_blocks)} Me, {len(speaker_blocks)} Speaker N, {len(blocks)} in all")
     assert me_blocks, "no Me block"
     assert len(speaker_blocks) == len(labeler.calls)
-    # The names of the text steps (D-063 part 2): P1 `asr` and `mt`, P4 one step `s2t`.
+    # The names of the text steps (D-063 part 2): `asr` and `mt`.
     latency = [line for line in out.getvalue().splitlines() if line.startswith(" [Latency: ")]
-    steps = " s2t " if seamless else " asr "
-    assert all(steps in line for line in latency), f"a latency line with no {steps!r}: {latency}"
+    assert all(" asr " in line for line in latency), f"a latency line with no ' asr ': {latency}"
 
     # (3) Label accuracy after the best mapping (D-057 part 2), with the System player start as
     # time 0 of stream D. The segment times include the player start-up and the stream latency.
@@ -764,10 +757,9 @@ def speaker_labels_run(tmp_path, seamless: bool) -> None:
     assert wrong <= MAX_WRONG, f"{wrong} wrong segments, more than {MAX_WRONG}"
     assert len(labels_used) == STREAM_D_SPEAKERS, f"{len(labels_used)} speaker labels"
 
-    # (4) K1.
+    # (4) The totals: a report, no assert (D-082; K1 is a throughput limit, D-071).
     totals = [block[3] for block in blocks]
     report(f"totals: max {max(totals):.2f} s, mean {sum(totals) / len(totals):.2f} s")
-    assert all(total < K1_S for total in totals), f"a total is not under {K1_S} s: {totals}"
 
     # (5) Arrival gaps of each source, with the speaker model in the worker (Q-10).
     for source in recorded:

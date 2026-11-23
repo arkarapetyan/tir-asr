@@ -4,6 +4,8 @@ T-CFG-01: the expected values are written out here from the section 6 table. The
 from `config.py`. A new parameter in `Params` without Aren's approval makes this test fail.
 
 T-CFG-02: the startup log has one line for each parameter, with its name and value (D-043).
+
+C10 (D-081 point 5): the NLLB parameters `mt_compute_type` and `mt_beam_size` left with NLLB.
 """
 
 from dataclasses import asdict, fields
@@ -11,14 +13,12 @@ from dataclasses import asdict, fields
 from tir_asr.config import Params, parameter_lines
 
 SECTION_6 = {
-    "mt_compute_type": "float16",
     "vad_threshold": 0.5,
     "vad_end_threshold": 0.35,
     "vad_min_silence_ms": 500,
     "vad_speech_pad_ms": 30,
     "vad_min_speech_ms": 250,
     "vad_max_speech_s": 15,
-    "mt_beam_size": 2,
     "spk_threshold": 0.50,
     "spk_min_new_s": 1.0,
 }
@@ -36,4 +36,4 @@ def test_cfg_02_startup_log_has_one_line_for_each_parameter():
     assert lines == [
         f"parameter {field.name} = {getattr(params, field.name)}" for field in fields(params)
     ]
-    assert lines[0] == "parameter mt_compute_type = float16"
+    assert lines[0] == "parameter vad_threshold = 0.5"

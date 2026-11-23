@@ -1,12 +1,12 @@
-"""T-E2E-01 to T-E2E-03: the full program with the real models (C2d, branch c2d-cli; C6).
+"""T-E2E-01, T-E2E-02: the full program with the real models (C2d, branch c2d-cli; C10).
 
-Requirements: K1 (each total < 5 s), F2, F3, F5. Decisions: D-022, D-025, D-032, D-043, D-054,
-D-059 (C5: `load_models` also loads the speaker model, and the warm-up calls it), D-062 (C6:
-`load_models` gives the text step, and `run()` and `warm_up()` get it).
-The test loads the models with the functions of the program (`app.log_versions`,
-`app.load_models`), does the warm-up, and runs the pipeline with the test WAV source as the one
-source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips is
-152 + 480 = 632 ms of silence, so both segments close (D-032).
+Requirements: F2, F3, F5; the totals are a report (D-082: K1 is a throughput limit, D-071).
+Decisions: D-022, D-025, D-032, D-043, D-054, D-059 (C5: `load_models` also loads the speaker
+model, and the warm-up calls it), D-062 (C6: `load_models` gives the text step, and `run()` and
+`warm_up()` get it). The test loads the models with the functions of the program
+(`app.log_versions`, `app.load_models`), does the warm-up, and runs the pipeline with the test WAV
+source as the one source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips
+is 152 + 480 = 632 ms of silence, so both segments close (D-032).
 
 T-E2E-02 is the automatic form of L-02 (D-044). It starts the installed command `tir-asr` in a
 new process, with the real models, the default microphone, and the monitor of the default
@@ -14,16 +14,16 @@ output (no flags, D-054), waits for "Listening", and sends SIGINT, as Ctrl+C doe
 limits are in this test only, not in the program. D-061 (C5): the output must have no abort line
 after the stop (L-02: `Aborting.` or `terminate called`, exit code 134).
 
-T-E2E-03 (C6, D-062 parts 4 and 5, D-063 part 2) is T-E2E-01 and T-E2E-02 with the P4 text step:
-(a) `load_models(…, seamless=True)` and the WAV source; (b) the installed command with
-`--seamless`. With P4, NeMo ASR and NLLB do not load, and the latency line has the step `s2t`.
+C10 (D-080, D-081): the text step is OhanASR, then Google Translate. T-E2E-03 (P4) left with P4
+(D-081 point 5). CAUTION: the warm-up and the two blocks send Armenian text to Google over the
+network (D-079). With no network, the tests fail.
 
-Run the tests with `env -u LD_LIBRARY_PATH` (D-030). The test runs on Aren's laptop only. It imports
-the program modules inside the test function, so that CI can collect this file (D-021).
+The test runs on Aren's laptop only. It imports the program modules inside the test function, so
+that CI can collect this file (D-021).
 
 Input files (local only, data/ and models/ are in .gitignore):
-  data/eval/c2-check{1,2}.16k.wav                16 kHz mono PCM
-  models/nllb-200-distilled-600M-ct2-float16/    the converted CTranslate2 model
+  data/eval/c2-check{1,2}.16k.wav   16 kHz mono PCM
+  models/ohanasr-v0.1/              the OhanASR model
 """
 
 import importlib.util
@@ -47,10 +47,12 @@ pytestmark = pytest.mark.model
 ROOT = Path(__file__).resolve().parents[2]
 CLIPS = [ROOT / "data" / "eval" / f"c2-check{n}.16k.wav" for n in (1, 2)]
 SUPPORT = ROOT / "tests" / "support" / "wav_source.py"
-K1_S = 5.0
 HEAD = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] (.+)$")
 TOTAL = re.compile(r"\| Total (\d+\.\d\d)s\]$")
 LISTENING = "Listening. Press Ctrl+C to stop."
+TEXT_STEP_LINE = (
+    "startup: text step: OhanASR ASR, then Google Translate MT over the network (D-081)"
+)
 STARTUP_LIMIT_S = 120.0  # T-E2E-02, test only: the time for the startup
 AFTER_LISTENING_S = 2.0  # T-E2E-02: the program listens for this time before the SIGINT
 STOP_LIMIT_S = 10.0  # T-E2E-02, test only: the time from the SIGINT to the end of the process
@@ -68,8 +70,8 @@ def load_wav_source():
     return module
 
 
-def wav_run(seamless: bool) -> tuple[list[str], list[str]]:
-    """T-E2E-01 and T-E2E-03 (a): the WAV source as "Me". Return (startup lines, output lines)."""
+def wav_run() -> tuple[list[str], list[str]]:
+    """T-E2E-01: the WAV source as "Me". Return (startup lines, output lines)."""
     from tir_asr.app import load_models, log_versions
     from tir_asr.pipeline import run, warm_up
 
@@ -77,7 +79,7 @@ def wav_run(seamless: bool) -> tuple[list[str], list[str]]:
     params = Params()
     log = io.StringIO()
     log_versions(params, log)
-    vads, text_step, embedder = load_models(params, log, ["Me"], seamless=seamless)
+    vads, text_step, embedder = load_models(params, log, ["Me"])
     startup = log.getvalue().splitlines()
     for line in startup:
         report(line)
@@ -104,38 +106,29 @@ def wav_run(seamless: bool) -> tuple[list[str], list[str]]:
     assert "(no text)" not in out.getvalue()
 
     totals = [float(match.group(1)) for line in lines if (match := TOTAL.search(line))]
-    report(f"totals {totals} s; K1 limit {K1_S} s")
+    report(f"totals {totals} s (a report, D-082)")
     assert len(totals) == 2
-    assert all(total < K1_S for total in totals), f"a total is not under {K1_S} s: {totals}"
     return startup, lines
 
 
 def test_e2e_01_full_pipeline_with_the_real_models():
-    startup, lines = wav_run(seamless=False)
+    startup, lines = wav_run()
 
-    assert any(line.startswith("startup: text step cascade (P1)") for line in startup)
+    assert TEXT_STEP_LINE in startup, startup
+    assert any(line.startswith("startup: ASR loaded in ") for line in startup), startup
+    assert any(line.startswith("startup: MT Google Translate: ") for line in startup), startup
+    assert not any("Seamless" in line for line in startup), startup
     latency = [line for line in lines if line.startswith(" [Latency: ")]
     assert all(" asr " in line and " mt " in line for line in latency), latency
 
 
-def test_e2e_03_a_full_pipeline_with_p4():
-    startup, lines = wav_run(seamless=True)
-
-    assert any(line.startswith("startup: text step seamless (P4)") for line in startup)
-    assert any(line.startswith("startup: Seamless loaded in ") for line in startup)
-    loaded = [line for line in startup if line.startswith(("startup: ASR ", "startup: MT "))]
-    assert loaded == [], f"P1 models loaded with P4: {loaded}"
-    latency = [line for line in lines if line.startswith(" [Latency: ")]
-    assert all(" s2t " in line and " asr " not in line for line in latency), latency
-
-
 def ctrl_c_run(args: list[str]) -> list[str]:
-    """T-E2E-02 and T-E2E-03 (b): SIGINT after "Listening". Return the lines before it."""
+    """T-E2E-02: SIGINT after "Listening". Return the lines before it."""
     command = Path(sys.executable).with_name("tir-asr")
     assert command.exists(), f"{command} does not exist; run `uv sync` one time (D-043)"
     process = subprocess.Popen(
         [str(command), *args],
-        cwd=ROOT,  # the MT model folder is relative to the project folder (section 2.4)
+        cwd=ROOT,  # the OhanASR model folder is relative to the project folder (section 2.3)
         env=dict(os.environ, HF_HUB_OFFLINE="1"),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,  # one pipe: NeMo writes its load lines to stderr
@@ -195,11 +188,4 @@ def ctrl_c_run(args: list[str]) -> list[str]:
 def test_e2e_02_ctrl_c_stops_the_program():
     before = ctrl_c_run([])
 
-    assert any(line.startswith("startup: text step cascade (P1)") for line in before)
-
-
-def test_e2e_03_b_ctrl_c_stops_the_program_with_p4():
-    before = ctrl_c_run(["--seamless"])
-
-    assert any(line.startswith("startup: text step seamless (P4)") for line in before)
-    assert any(line.startswith("startup: warm-up s2t ") for line in before), before[-4:]
+    assert TEXT_STEP_LINE in before, before[-8:]
