@@ -33,6 +33,7 @@ ADAPTERS = {
     "tir_asr.eval.seamless",
     "tir_asr.speakers.titanet",
     "tir_asr.text.seamless",
+    "tir_asr.eval.ayb",
 }
 
 # The core modules that the branch must have. Each component branch adds its own modules.
@@ -63,6 +64,7 @@ REQUIRED = {
     "tir_asr.text",
     "tir_asr.text.step",
     "tir_asr.text.clean",
+    "tir_asr.eval.c9",
 }
 
 CHECK = """

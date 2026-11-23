@@ -18,6 +18,7 @@ from tir_asr.errors import TirError
 RECORDING_RATE = 48000
 TARGET_RATE = 16000  # the same value as SAMPLE_RATE (ARCHITECTURE.md section 5)
 END_SILENCE_S = 1.0  # zeros after the end of a file, so that the last segment closes (D-048)
+PCM16_SCALE = 32768.0  # 16-bit PCM to float: x / 32768 (T-C9-01)
 
 
 class DataError(TirError):
@@ -41,11 +42,17 @@ class Label:
 
 
 def load_wav_16k(path: Path) -> np.ndarray:
-    """Read a mono float32 WAV file at 48 kHz or 16 kHz. Return float32 audio at 16 kHz."""
+    """Read a mono WAV file. Return float32 audio at 16 kHz.
+
+    Accepted: float32 at 48 kHz or 16 kHz (S1-S3, D-046), and 16-bit PCM at 16 kHz (the S5
+    recordings of C7 with `parecord`, T-C9-01). A 16-bit sample x becomes x / 32768.
+    """
     path = Path(path)
     rate, audio = wavfile.read(path)
     if audio.ndim != 1:
         raise DataError(f"data: {path.name}: {audio.shape[1]} channels, expected 1")
+    if audio.dtype == np.int16 and rate == TARGET_RATE:
+        return (audio.astype(np.float32) / PCM16_SCALE).astype(np.float32)
     if audio.dtype != np.float32:
         raise DataError(f"data: {path.name}: sample format {audio.dtype}, expected float32")
     if rate == RECORDING_RATE:

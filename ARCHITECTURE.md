@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
-**Project:** tir-asr · **Version:** 0.39 · **Date:** 2026-11-23
-**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. The v0.37 change (C8) applies D-069. The v0.38 change (C8) applies D-070. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012). The v0.39 change applies D-071.
+**Project:** tir-asr · **Version:** 0.40 · **Date:** 2026-11-23
+**Status:** v0.3 APPROVED by Aren on 2026-10-25. The v0.4 changes (C2b) apply D-036, ACCEPTED on 2026-10-25. The v0.5 and v0.6 changes (C2c) apply D-037, ACCEPTED on 2026-10-25; Aren reviews the text (see §10). The v0.7 changes (C2d) apply D-040, ACCEPTED on 2026-10-25. The v0.8 changes (C2d) apply D-041, ACCEPTED on 2026-10-26. The v0.9 changes (C2d) apply D-042, ACCEPTED on 2026-10-26. The v0.10 changes (C2d) apply D-043, ACCEPTED on 2026-10-26. The v0.11 changes (C2d) apply D-044, ACCEPTED on 2026-10-26. The v0.12 change (C2d) applies D-045. The v0.13 change (C3) applies D-046 and D-047. The v0.14 and v0.15 changes (C3) apply D-049. The v0.16 to v0.18 changes (C3) apply D-051. The v0.19 to v0.21 changes (C4) apply D-054, ACCEPTED on 2026-10-26. The v0.22 and v0.23 changes (C5) apply D-057. The v0.24 change applies D-058. The v0.25 change applies D-058 and D-059. The v0.26 change applies D-060. The v0.27 change applies D-061. The v0.28 change (C6) applies D-062. The v0.29 and v0.30 changes (C6) apply D-063 and D-062 parts 4 and 5. The v0.31 change applies D-064. The v0.32 change (C7) applies D-066 parts 1 and 3. The v0.33 change (C7) applies D-067. The v0.34 change (C7) records the live result of D-066. The v0.35 change (C7) applies D-031 for the delivery. The v0.36 change (C8) applies D-068. The v0.37 change (C8) applies D-069. The v0.38 change (C8) applies D-070. C2 contracts for the walking skeleton (microphone → VAD → ASR → MT → terminal). C4 adds the system audio, C5 adds the speakers. §8 is complete (S1, D-012). The v0.39 change applies D-071. The v0.40 change (§8.2) applies D-072 and D-073.
 
 ---
 
@@ -357,7 +357,7 @@ Removed after the challenge (D-071). Until C8, it changed the Claude data export
 
 - **Purpose:** the bake-off of the ASR and MT candidates (PLAN C3). The rules of the core modules apply: no `laptop` import (T-IMPORT-01).
 - **Eval data (D-046):**
-  - Audio: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2), 48 kHz, mono, float32. `data/` is not in git.
+  - Audio: `data/eval/raw/<s>.mic.wav` (Aren, "Me") and `data/eval/raw/<s>.call.wav` (Speaker 1 and Speaker 2), 48 kHz, mono, float32. S5 (C7, C9): `data/c7/<call>.mic.wav` and `data/c7/<call>.system.wav` for the calls `p1` and `p4`, 16 kHz, mono, 16-bit. `data/` is not in git.
   - Labels: `data/eval/raw/<s>.labels.txt`, exported from Audacity: start (s), tab, end (s), tab, line ID.
   - References: the Armenian and English columns of `docs/eval/scripts.md`.
 - **`normalize.py`** (branch `c3-normalize`, D-047): `normalize_hy(text: str) -> str`.
@@ -375,7 +375,7 @@ Removed after the challenge (D-071). Until C8, it changed the Claude data export
   - Errors: `MetricError(TirError)`: `metrics: <n> references and <m> hypotheses`; `metrics: the references have no words`.
   - Dependency: `sacrebleu` in the dev group (CI installs it).
 - **`data.py`** (branch `c3-data`, D-046, D-048, D-049):
-  - `load_wav_16k(path)`: a mono float32 WAV file at 48 kHz (resampled with `scipy.signal.resample_poly(x, 1, 3)`) or at 16 kHz (no change). Returns float32 audio at 16 kHz.
+  - `load_wav_16k(path)`: a mono float32 WAV file at 48 kHz (resampled with `scipy.signal.resample_poly(x, 1, 3)`) or at 16 kHz (no change), or a 16-bit file at 16 kHz (x / 32768, T-C9-01). Returns float32 audio at 16 kHz.
   - `with_end_silence(audio)`: adds `END_SILENCE_S` = 1.0 s of zeros, so that the last segment of a file closes (D-048).
   - `read_references(scripts_md, script) -> list[ScriptLine]`: `ScriptLine(id, speaker, side, hy, en)`, in table order; the ID has no "†"; the side is "mic" for "Me" and "call" for the other speakers.
   - `read_labels(path, lines) -> list[Label]`: `Label(id, start, end)` from an Audacity label file; each line of the script has exactly one label.
@@ -413,6 +413,17 @@ Removed after the challenge (D-071). Until C8, it changed the Claude data export
   - Removed after the sweep (D-058): `spk_ecapa.py` (SpeechBrain ECAPA, `speechbrain/spkrec-ecapa-voxceleb`) and `spk_wespeaker.py` (pyannote.audio WeSpeaker, `pyannote/wespeaker-voxceleb-resnet34-LM`, with the telemetry switch `PYANNOTE_METRICS_ENABLED=false`), and the dependency group `spk-eval`. The `c5-embed` commits keep them; `docs/eval/results.md` has their numbers.
 - **`scripts/spk_bakeoff.py`** (model level, branch `c5-embed`): `--model titanet` (the other two choices left with D-058). It loads the model (with one warm-up call of `WARMUP_AUDIO_S` zeros), then the VAD (D-043), and builds the four streams (S1, S2, S3 call sides, and D). For each stream: the segments of the program's `Endpointer` (`segment_file`, `Params()`), `embed_all`, `pairwise`, and `sweep` with both rules (`CentroidClusterer`, `NearestClusterer`) and `min_new_s` = 1.0 s. It prints a table for each rule and `pass_range`, and writes `test-results/bakeoff/spk-<model>.json` (versions, GPU, parameters, load time, VRAM, warm-up time, the segments, the pairwise values, the sweep, and the pass result).
   - Command: `env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/spk_bakeoff.py --model titanet`.
+- **`c9.py`** (branch `c9-eval`, D-072, D-073), core, for the C9 model eval:
+  - `DumpSegment(id, set, script, call, side, start, speech_end, cut, audio)`; `pack_segments(segments) -> (audio, offsets, index)` and `unpack_segments(audio, offsets, index)`: the segment dump (one float32 array, int64 offsets, a JSON index), so that all models get the same segments, also the OhanASR run in its own environment.
+  - `cut_audio(audio, cut_s)`; `S5_CUT_S` = {"p1": 234.0} (Aren).
+  - `build_messages(hy, history, k)`: the approved Ayb prompt (`SYSTEM_PROMPT`) and, for k > 0, the last k earlier turns of the call (`Turn(speaker, hy, en)`), then "Translate only this text:" and the text.
+  - `joined_texts(segments, texts)`, `score_hy(...) -> HyScore(wer, cer, parts)`, `score_en(...) -> float`: the joined text of each side of each call against the reference lines of that side, for the full list (as D-046 point 2).
+  - `is_flagged(en, hy, ref_en)`: the flag rule (D-072 part 3, condition 4).
+  - `check_rule(...)`: the four conditions of D-072 part 3; `RTF_LIMIT` = 0.5 (K1, D-071), `VRAM_LIMIT_MIB` = 8151.
+  - Errors: `C9Error(TirError)`, `c9: <cause>`.
+- **`ayb.py`** (branch `c9-eval`), adapter, in `ADAPTERS` of T-IMPORT-01: `AybTranslator(model_dir, form)` for `Metric-AI/Ayb-0.5-4B` in `models/ayb-0.5-4b`: `AutoModelForCausalLM` (the text model only), bfloat16 on `cuda`, the chat template with `enable_thinking=False`, greedy, at most 256 new tokens. Only the form "bf16" exists; other forms come after the install check (D-072 part 2). Not run yet: no access (D-074).
+- **`scripts/c9_run.py`** (model level, D-072): `dump`; `asr --model nemo-rnnt|p4`; `mt --model ayb|nllb-ct2|seamless --input reference|asr-<model> [--context k] [--form bf16]`; `report [--candidate <mt run>] [--added-text n]`. Files: `data/c9/segments.{npz,json}`, `test-results/c9/*.json`, `test-results/c9/report.txt`. The files keep the raw model texts; the output rules of `text/clean.py` (D-066) apply to the MT input and in the report.
+- **`scripts/ohanasr_transcribe.py`** (model level, D-073): `Metric-AI/OhanASR-v0.1` (omniASR_LLM_1B_v2) in its own environment: inline uv metadata with the pins of the model's `requirements.txt` (Python 3.11, torch 2.8.0, fairseq2 0.5.2, omnilingual-asr 0.2.0), and the lock `scripts/ohanasr_transcribe.py.lock`. It loads the model with the model's own `ohanasr.py`, reads the dump, and writes `test-results/c9/asr-ohanasr.json`. It does not import `tir_asr`.
 - The next branches add their contracts here.
 
 ## 9. Open points for Aren (C2)
@@ -463,3 +474,4 @@ No open points. Accepted on 2026-10-25: D-029 (queue with no size limit), D-030 
 | 0.37 | 2026-10-28 | C8 (§6), D-069: `vad_max_speech_s` 10 → 15 s; `vad_min_silence_ms` stays 500 ms. |
 | 0.38 | 2026-10-28 | C8 (§5), D-070: `GIL_SWITCH_S` 1 ms → 0.5 ms. |
 | 0.39 | 2026-11-23 | C9 (§8), D-071: `scripts/export_chats.py` and its contract removed. |
+| 0.40 | 2026-11-23 | C9, branch `c9-eval` (§8.2), D-072, D-073: `c9.py`, `ayb.py`, `scripts/c9_run.py`, `scripts/ohanasr_transcribe.py`; `load_wav_16k` reads 16-bit files at 16 kHz. |

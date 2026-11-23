@@ -583,6 +583,23 @@ Decisions: D-065 (plan), D-066 (the P4 fixes), D-067 (the GIL switch interval). 
 
 **Results (branch `c7-notext`, Aren's laptop, 2026-10-28):** ruff passes; unit 263 passed, 27 deselected (`test-results/c7-notext-unit.txt`). Model (`test-results/c7-notext-model.txt`): T-E2E-01 to T-E2E-03, 4 passed in 60.67 s; totals 0.64 s and 0.62 s (P1), 0.88 s and 0.85 s (P4); exit code 0, 1.27 s and 1.37 s after SIGINT. `output.format_block` keeps its form for an empty text (T-OUT-03, T-OUT-06 c), but the program does not call it with an empty text.
 
+### 2.10 C9 model eval (C9)
+
+Decisions: D-072 and D-073. Aren approved T-C9-01 to T-C9-06 on 2026-11-23 ("approved"), with no separate red run (D-072 part 2). Test file: `tests/unit/test_c9.py`. Module: `tir_asr/eval/c9.py` (`ARCHITECTURE.md` §8.2).
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-C9-01 | D-072 part 2: the S5 recordings are 16 kHz, 16-bit, mono. | 16-bit samples 0, 16384, −32768, 32767 at 16 kHz; 16-bit samples at 48 kHz | float32 0.0, 0.5, −1.0, 32767/32768; at 48 kHz the error of T-DATA-04, `sample format int16, expected float32` | unit | PASSES |
+| T-C9-02 | D-072 part 2: the same segments for all models (the dump). | 3 segments of 100, 37, and 250 samples; two segments with the same ID; offsets that do not agree with the audio | offsets 0, 100, 137, 387, and the same audio and keys after the unpack; `C9Error` | unit | PASSES |
+| T-C9-03 | D-072 part 2: the approved Ayb prompt and the context. | the system message; k = 0; no history with k = 3; 5 turns with k = 3; an empty text; k = −1 | the approved prompt text, word for word; the user message is only the Armenian text; the same as with k = 0; turns 3, 4, 5 in time order, then "Translate only this text:" and the text; `C9Error` | unit | PASSES |
+| T-C9-04 (changed) | D-072 part 2: the S5 cut and the scores. | 3 s of audio cut at 1.5 s, at None, at 0.0; `S5_CUT_S`; 4 segments out of time order with one empty text, and a missing text; references «ա բ» (mic) and «գ դ» (call), texts «ա բ», «գ», «ա x», «գ դ» for two calls; two equal English texts | 24000 samples, no change, `C9Error`; {"p1": 234.0}; the texts in time order with no empty text, `C9Error`; WER 2/8 for the full list; chrF 100 | unit | PASSES |
+| T-C9-05 | D-072 part 3, condition 4: the flag rule. | with the reference "Hello there": 4 and 5 words; with the Armenian text «ա բ»: 7 and 8 words; with neither | no flag, flag; no flag, flag; `C9Error` | unit | PASSES |
+| T-C9-06 | D-072 part 3: the four conditions. | a passing case; each condition failed in one place; equal values and the limits (0.5; 8151 MiB); a missing set | all True; only that condition and "all" are False; all True; `C9Error` | unit | PASSES |
+| T-IMPORT-01 (changed) | D-021. | `tir_asr.eval.c9` in `REQUIRED`; `tir_asr.eval.ayb` in `ADAPTERS`. | It passes. | unit | PASSES |
+
+- **T-C9-04 changed** after Aren's answer "just cut from 234s onwards": the eval cuts the P1 audio at 234 s before the VAD, so the "tail" count of the first proposal is not necessary.
+- **Results (Aren's laptop, 2026-11-23):** unit 284 passed, 27 deselected (`test-results/c9-unit-2.txt`). That run was on a branch without the `c9-d071` commits, so it also had the 25 converter tests (D-071). The model-level runs are the eval runs of `docs/eval/results.md`, "C9" (`test-results/c9-*.txt`).
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
