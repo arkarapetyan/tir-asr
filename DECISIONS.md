@@ -1595,3 +1595,23 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   5. **Test changes for tuning (D-072 part 5):** in C10, as planned.
 - **Reason (Aren's words):** "1. yes, not merged, agree on new branch 2. A 3. yes 4. yes 5. approved".
 - **Revisit when:** the install check shows that a form does not load or does not fit, or Ayb loses the rule (then the group `c9-eval` leaves).
+
+## D-077. Ayb prompt: the one change (D-072 part 2), and the check of the Armenian lines
+
+- **Status:** ACCEPTED (2026-11-23), option B
+- **Context:** D-072 part 2 lets the Ayb prompt change one time, with a record. The first `nf4` runs on the reference text used the prompt of D-072 (83 lines; `test-results/c9-mt-ayb-nf4-ctx0-reference.txt`, `c9-mt-ayb-nf4-ctx3-reference.txt`, `c9-report-ayb-ref.txt`).
+- **Facts [RUN, Aren's laptop, 2026-11-23, the prompt of D-072]:**
+  - **Context 0** (the user message is only the Armenian text): 25 of 83 English lines have Armenian letters: a copy of the text, a corrected text, or an answer in Armenian (s2-07, s5-16). 2 more lines have added English text (s2-02 "I will translate your request into English."; s2-10 "I'm ready to assist. Please provide the Armenian text for translation."). chrF 56.2 / 44.2 (S1–S3 / S5).
+  - **Context 3** (the user message ends with "Translate only this text:" and the text): 1 problem line (s5-42: the three context lines again, then the Armenian text). chrF 73.1 / 71.9. The first line of each script has no history, so it gets the form of context 0; these 4 lines are correct in both runs.
+  - For comparison, on the reference text: Seamless text to text 61.1 / 65.3; NLLB 56.3 / 59.2. P4 end to end (audio): 59.0 / 65.3.
+  - The flag rule (T-C9-05) marked only s2-10 and s5-42. It counts words, so it does not mark an Armenian line of normal length.
+  - Time per line: 0.570 s (context 0) and 0.589 s (context 3) mean. VRAM peak over the base: 3,248 MiB and 3,294 MiB. Condition 3 with context 3 [calc]: 4,646 + 3,294 + 148 + 200 = 8,288 MiB, 137 MiB more than 8,151 MiB.
+- **Parts and decision:**
+  1. **Armenian lines.** Claude proposed a flag for an English line with an Armenian letter, with tests. Aren: "no need to hard test it but we check the results". Thus `is_flagged` and T-C9-05 do not change. For each Ayb run, Claude counts the English lines with an Armenian letter (a read-only check of the run file) and lists them with the flagged lines. Aren reads them, and his count is `--added-text` (condition 4).
+  2. **The prompt change.** Options:
+     - **A.** No change; the rule candidate is context 3. Weak point: a program also sends the plain form for the first line of each meeting, and that form failed on about 30 % of the lines.
+     - **B.** The user message always has "Translate only this text:" before the text, also with no history. `SYSTEM_PROMPT` does not change. Weak point: the change comes after the results on the eval lines. It copies a form that was fixed before the first run, with no new word. Fact that can show B is wrong: context 0 with the new form still has many problem lines.
+     - Claude's preference: B. **Decision: B.** This is the one change of D-072 part 2; the prompt does not change again in this eval. T-C9-03 changes in one case (k = 0).
+  3. **The runs again.** All Ayb runs are done again with the new form: `nf4` on the reference text and on the OhanASR text, and `bf16-cpu` on the reference text, each with context 0 and 3. The run files of the first prompt move to `test-results/c9/prompt1/`, so that the report does not read them.
+- **Reason (Aren's words):** "no need to hard test it but we check the results"; "approve b".
+- **Revisit when:** —
