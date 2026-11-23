@@ -1722,7 +1722,25 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   - Claude (R14): "a new env" can also mean a second environment for OhanASR only (option A). Claude asked; Aren confirmed B.
   - Claude: the flags of the old pipelines. Aren: no flag stays ("2. yes").
   - Claude: the place of the Google adapter. Aren: it moves into `mt/`, and `googletrans` moves to `laptop` ("3. yes").
+- **Results [RUN, C10 tests, `TESTS.md` §2.11]:** no weak point occurred. Weak point 1: T-SIM-02 had no arrival gap over 64 ms (largest 47.4 ms). Weak point 2: T-MODEL-VAD-01, T-MODEL-SPK-01, and T-MODEL-SPK-02 pass on torch 2.8.0. Weak point 3: T-MODEL-ENV-01 gave the TitaNet cosine 1.000000 and the Silero difference 0. T-MODEL-ASR-02: the program adapter gives the same 136 texts as the C9 run. New facts: D-082.
 - **Revisit when:**
   - T-SIM-02 gives an arrival gap over 64 ms with OhanASR;
   - a model test fails on torch 2.8.0;
   - a release of fairseq2 or `omnilingual-asr` supports a newer torch and numpy 2.
+
+## D-082. C10 test results: the Google timeout 10 s, `STOP_JOIN_S` 5 s, and the line totals as a report
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** the first C10 test runs (`test-results/c10-model.txt`, `c10-sim.txt`, Aren's laptop, 2026-11-23).
+- **Facts [RUN]:**
+  - T-SIM-01, run 1: passed; the largest `mt` step was 1.31 s, the largest total 2.50 s. Run 2: the `mt` steps of four lines were 4.75, 3.05, 3.03, and 3.29 s; two totals were over 5 s (5.97 and 5.73 s), so the check "each total < 5 s" failed. The `mt` step is the Google network time. In C9, the longest Google call was 3.023 s (D-080).
+  - One Google call took 4.75 s, 0.25 s under the timeout of 5 s (D-079). A call over the timeout stops the program, because there are no retries (R10).
+  - The check "each total < 5 s" in T-E2E-01, T-SIM-01, and T-SIM-02 point (4) is the old K1. D-071 replaced that latency limit with a throughput limit (0.5 model s per audio s).
+  - [calc] With OhanASR + Google, one text step call can take longer than `STOP_JOIN_S` (2.0 s): about 2.5 s of ASR for a 15 s segment, and a Google call of up to 4.75 s [RUN].
+- **Options and decision (Claude's preference in brackets):**
+  1. **The totals:** A, a report with no assert [Claude: A]; B, keep the 5 s check. Weak point of A: a slow line fails no test; only the report shows it. **Decision: A.** T-E2E-01, T-SIM-01, and T-SIM-02 report the totals. The throughput check is T-MODEL-ASR-02.
+  2. **The Google timeout (`TIMEOUT_S` in `mt/google.py`):** A, keep 5 s; B, 10 s, about 2 times the longest measured call [Claude: B]. Weak points of B: when Google is slow, a line can come up to 10 s late, and the next segments wait in the queue; a hung connection stops the program after 10 s. Test that can show B is wrong: a live meeting with calls over 10 s, or with late lines that are of no use. **Decision: B, 10 s.** This replaces the timeout value of D-079; the other values of D-079 do not change.
+  3. **`STOP_JOIN_S` in `pipeline.py`:** A, keep 2.0 s; B, 8.0 s [Claude: A]. **Decision: 5.0 s** (Aren). Weak point: a Ctrl+C during a Google call of more than about 5 s still gives the line `stop: thread worker did not stop in 5.0 s`; the exit code stays 0 (D-061).
+- **Test runs:** one program load needs about 4.9 GB on the 8 GB GPU. Thus T-E2E-01, T-E2E-02, T-SIM-01, and T-SIM-02 each run in their own pytest process. [RUN] T-E2E-02 ran out of GPU memory in the same process as T-E2E-01, and T-SIM-02 in the same process as a failed T-SIM-01 (pytest keeps the objects of a failed test).
+- **Reason (Aren's words):** "A, B, change it to 5s and make sure to run essential tests so the app can be run".
+- **Revisit when:** a live meeting shows Google calls over 10 s, or a Ctrl+C gives an abort line.
