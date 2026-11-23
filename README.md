@@ -228,7 +228,7 @@ The project was built with Claude (Anthropic) in one Claude Project, by the rule
 - **Measure, do not guess:** each model choice comes from the bake-off numbers in `docs/eval/results.md`.
 - **The human owns the repository:** Aren ran all tests and did all git operations. Claude wrote only in the project folder.
 
-The chats are in [`chats/`](chats/), one Markdown file for each chat. They contain the text messages; the original chats in the Claude app also have the tool calls (D-012).
+The chats are in the Claude Project in the Claude app, not in the repository (D-071). Until C8, the repository had a Markdown copy of each chat in `chats/`; the git history keeps those files.
 
 ## 10. Development and tests
 
