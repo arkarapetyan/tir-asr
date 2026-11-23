@@ -194,7 +194,7 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 ### Conditions
 
 - **Laptop (Aren), 2026-11-23:** NVIDIA GeForce RTX 5070 Laptop GPU. Main environment: torch 2.14.1, NeMo 3.0.0, CTranslate2 4.8.3, transformers 5.20.2, silero-vad 6.2.3. OhanASR environment (D-073): Python 3.11, torch 2.8.0, fairseq2 0.5.2, omnilingual-asr 0.2.0.
-- **Models:** `Metric-AI/OhanASR-v0.1` (omniASR_LLM_1B_v2, 2,279,634,560 parameters, bfloat16 on CUDA, the model's own `ohanasr.py`); `nemo-rnnt` (P1); P4 (the program adapter, variant V2). **Ayb-0.5-4B was not measured:** Hugging Face answered "Access denied. Model 'Metric-AI/Ayb-0.5-4B' requires approval" (`test-results/c9-dl-ayb.txt`).
+- **Models:** `Metric-AI/OhanASR-v0.1` (omniASR_LLM_1B_v2, 2,279,634,560 parameters, bfloat16 on CUDA, the model's own `ohanasr.py`); `nemo-rnnt` (P1); P4 (the program adapter, variant V2). **Ayb-0.5-4B was not measured:** Hugging Face answered "Access denied. Model 'Metric-AI/Ayb-0.5-4B' requires approval" (`test-results/c9-dl-ayb.txt`). Ayb was measured later: see "Ayb-0.5-4B" below.
 - **Data:** one segment dump for all models (`scripts/c9_run.py dump`, `Params()`): S1–S3, 34 segments, 161.0 s; S5, both calls and both sides, 102 segments, 356.2 s. The P1 recordings are cut at 234 s (Aren); the last P1 segments (s5-48, s5-49) end at 229.6 s and 231.9 s. No hard cut.
 - **Scores:** the joined text of each side of each call against the reference lines of that side (D-046 point 2); the output rules of `text/clean.py` on all texts (D-066); WER and CER with `normalize_hy` (D-047, N1: no number rule); chrF with `sacrebleu` 2.6.0.
 - **Times:** each call after one warm-up call; "model s per audio s" is the sum of the call times divided by the segment audio. **VRAM:** the peak used memory minus the used memory before the load (148 MiB in each run).
@@ -232,3 +232,24 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 1. **ASR:** OhanASR gives the best Armenian text on casual speech (S5: 6.3 % against 10.0 % and 13.0 %). On S1–S3, its digits count as errors under N1 (9.1 %); with the digits as words, it is also the best (5.3 % [calc]).
 2. **MT:** with the OhanASR text, no available text translator reaches the English of P4: Seamless text to text is 3.0 / 2.4 points lower, NLLB 6.7 / 6.6 points lower. Seamless text to text on the reference text is the same as P4 on S5 (65.3), so the end-to-end English of P4 is near the best that a text translator gives with perfect Armenian text.
 3. **Decision rule (D-072 part 3) with no Ayb:** no cascade with OhanASR passes condition 2. A combination of the OhanASR Armenian line and the P4 English line (audio to English) passes condition 2 (equal chrF), and condition 1 on S5; on S1–S3 it passes only with the digits as words. Its VRAM is 4646 + 3082 + 148 + 200 (TitaNet) = 8076 MiB [calc], 75 MiB under 8151 MiB, with a second CUDA context not counted; only a run with both models loaded can show it.
+
+### Ayb-0.5-4B (D-076, D-077, D-078)
+
+- **Conditions:** the laptop and the dump as above. `Metric-AI/Ayb-0.5-4B`, the text model (`Qwen3_5ForCausalLM`, 4,211,977,216 parameters [RUN: checkpoint header]); transformers 5.20.2, accelerate 1.16.0, bitsandbytes 0.50.2; the linear attention with the torch code of transformers (no `fla`, no `causal_conv1d`). Greedy, thinking off, at most 256 new tokens.
+- **Forms (D-076):** `nf4` (4-bit NF4, double quantization, compute bfloat16; weights 2,928 MiB); `bf16-cpu` (bfloat16, layers 26–31 and the final norm in CPU memory; weights 8,033 MiB).
+- **Prompt:** the system prompt of D-072 part 2. "Prompt 1": with no context, the user message is only the Armenian text. "Prompt 2" (D-077): "Translate only this text:" before the text in each user message. Context 3: the last 3 lines of the call, Armenian and English, before that.
+- **Problem lines:** "Armenian" = the English output has an Armenian letter (a copy of the text, a corrected text, or an answer in Armenian). "Added" = the output has text that is not the translation (the earlier lines again, a note, or an answer).
+
+| Run | Prompt | Lines | Armenian | Added | chrF S1–S3 / S5 | Time per line, mean / max | VRAM peak |
+|---|---|---|---|---|---|---|---|
+| `nf4`, context 0, reference | 1 | 83 | 25 | 2 | 56.2 / 44.2 | 0.570 / 1.248 s | +3,248 MiB |
+| `nf4`, context 3, reference | 1 | 83 | 1 | 1 | **73.1 / 71.9** | 0.589 / 2.237 s | +3,294 MiB |
+| `nf4`, context 0, reference | 2 | 83 | 6 | 1 | not measured | 0.539 / 0.985 s | +3,248 MiB |
+| `nf4`, context 3, reference | 2 | 83 | 1 | 1 | not measured | 0.596 / 2.330 s | +3,294 MiB |
+| `nf4`, context 0, OhanASR | 2 | 136 | 21 | 0 | not measured | 0.522 / 0.911 s | +3,248 MiB |
+| `nf4`, context 3, OhanASR (rule candidate) | 2 | 136 | 5 | 7 | not measured | 0.634 / 4.070 s | +3,298 MiB |
+| `bf16-cpu`, context 0, reference | 2 | 83 | 8 | 0 | not measured | 2.694 / 4.476 s | +6,936 MiB |
+| `bf16-cpu`, context 3, reference | 2 | 83 | 3 | 1 | not measured | 2.903 / 11.542 s | +6,984 MiB |
+
+- **Rule (D-072 part 3) for the candidate:** condition 3 fails: VRAM 4,646 + 3,298 + 148 + 200 = 8,292 MiB [calc], more than 8,151 MiB; the speed passes (0.282 / 0.348 model s per audio s). Condition 4 fails: 7 lines with added text. Aren stopped the eval before the report of prompt 2 (D-078), so condition 2 has no number.
+- **Findings:** with context 3, Ayb gave the best English on the reference text of all MT models (prompt 1: 73.1 / 71.9 against 61.1 / 65.3 for Seamless text to text). With no context, Ayb often corrects or copies the Armenian text in place of a translation. With context 3, it sometimes writes the earlier lines again. The `bf16-cpu` form has the same problems, so the 4-bit form is not their cause.
