@@ -40,6 +40,10 @@ markers = [
 ]
 
 [dependency-groups]
+c9-eval = [
+    "accelerate>=1.1.0",
+    "bitsandbytes>=0.50.2",
+]
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
