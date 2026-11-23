@@ -1615,3 +1615,43 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
   3. **The runs again.** All Ayb runs are done again with the new form: `nf4` on the reference text and on the OhanASR text, and `bf16-cpu` on the reference text, each with context 0 and 3. The run files of the first prompt move to `test-results/c9/prompt1/`, so that the report does not read them.
 - **Reason (Aren's words):** "no need to hard test it but we check the results"; "approve b".
 - **Revisit when:** —
+
+## D-078. C9 result for Ayb-0.5-4B: Ayb fails the rule and leaves the project
+
+- **Status:** ACCEPTED (2026-11-23)
+- **Context:** D-072 part 3 (the rule), D-076 (the forms), D-077 (the one prompt change). The runs with the prompt of D-077: `test-results/c9-ayb-v2-*.txt` and `test-results/c9/mt-ayb-*.json`. The runs with the first prompt: `test-results/c9/prompt1/`.
+- **Facts [RUN, Aren's laptop, 2026-11-23]:**
+  - **Rule candidate** `ayb-nf4-ctx3+asr-ohanasr` (136 lines): 7 lines with added text, for example the earlier context lines again (p1.call.012, p1.mic.020, p4.call.011, p4.call.022, p4.call.023, p4.mic.020, p4.mic.009); 5 lines end with the Armenian text. Model s per audio s (OhanASR + Ayb): 0.282 (S1–S3) and 0.348 (S5). VRAM peak over the base: 3,298 MiB.
+  - **Condition 3** [calc]: 4,646 + 3,298 + 148 + 200 = 8,292 MiB, more than 8,151 MiB.
+  - `nf4`, context 0, OhanASR text: 21 of 136 lines stay in Armenian (5 exact copies).
+  - Reference text (83 lines), Armenian lines / added-text lines: `nf4` context 0: 6 / 1; context 3: 1 / 1. `bf16-cpu` context 0: 8 / 0; context 3: 3 / 1. Thus the 4-bit form is not the cause.
+  - chrF with the first prompt (D-077): reference text, context 3: 73.1 / 71.9. With the prompt of D-077: not measured (Aren stopped the Ayb eval before the report).
+- **Decision:**
+  1. Ayb fails conditions 3 and 4 of D-072 part 3. It is not a candidate.
+  2. **Removal** (as D-058): `ayb.py`; the Ayb parts of `scripts/c9_run.py` (`--form`, `--context`, the context history) and of `c9.py` (`SYSTEM_PROMPT`, `Turn`, `build_messages`), with T-C9-03; accelerate and bitsandbytes leave the group `c9-eval`. The commits of branch `c9-ayb` keep the code, and `docs/eval/results.md` keeps the numbers.
+- **Claude's note (R14):** with context 3, Ayb gave the best English on the reference text (73.1 / 71.9, against 61.1 / 65.3 for Seamless text to text; first prompt). Ayb failed because of the VRAM next to OhanASR and the repeated context, not because of the translation quality [inference]. A later eval can try it again, for example with a smaller form or a context with no English lines.
+- **Reason (Aren's words):** "no scratch ayb"; "1. yes".
+- **Revisit when:** a smaller Ayb form, or a smaller ASR, leaves space for Ayb in 8 GB.
+
+## D-079. MT candidate: Google Translate through `googletrans`
+
+- **Status:** ACCEPTED (2026-11-23), option B
+- **Context:** Aren (2026-11-23): "at this point should the new ASR model provide the best ASR capability if so, then we finish this project with using googletrans api for mt". The answer to the ASR part: with D-075, OhanASR has the lowest WER on both sets (5.3 % [calc] and 6.3 %, against P4 7.1 % and 13.0 %, and P1 10.6 % and 10.0 %).
+- **Facts (R8):**
+  - `googletrans` 4.0.2 [SOURCE: the wheel on PyPI; piwheels; Snyk]: "An unofficial Google Translate API for Python"; it uses the servers of the Google Translate website; released on 2025-01-01; Snyk rates the maintenance "Inactive"; version 4 is async only; dependency `httpx[http2]>=0.27.2`; Armenian (`hy`) is in `LANGUAGES`.
+  - With the default `raise_exception=False`, a failed call returns the input text as the translation [SOURCE: `client.py`, `DUMMY_DATA`]. The timeout is the httpx default, 5 s [SOURCE: httpx 0.28.1, `_config.py`].
+  - Cloud Translation API [SOURCE: cloud.google.com/translate/pricing]: the first 500,000 characters per month are free (a $10 credit), then $20 per million characters. It needs a Google Cloud project with billing and a key.
+  - VRAM with Google as the MT [calc]: 4,646 (OhanASR) + 200 (TitaNet) + 148 = 4,994 MiB.
+- **Options:**
+  - **A.** Cloud Translation API. Weak point: an account with billing, and a key.
+  - **B.** `googletrans`. Weak point: it is unofficial and can break at any time.
+  - Claude's preference: A. Fact that can show it is wrong: Aren cannot make the Cloud account, or `googletrans` works through a one-hour live test with no failure.
+- **Decision:** B.
+  - Eval adapter `tir_asr/eval/google_mt.py`: source `hy`, target `en`, `raise_exception=True`, timeout 5 s, explicit (Aren: "2. yes"). No retries.
+  - `googletrans>=4.0.2` in the group `c9-eval`.
+  - Runs: the reference text and the OhanASR text. Then the rule of D-072 part 3 with the candidate `google+asr-ohanasr`.
+- **Risks (R14, named one time):** the text of all people in the meeting goes to Google; with no network there is no English, and the program must then stop or show the error (R10); the project description "Local models only" changes if Google wins.
+- **Consent:** Aren: "yes I intend to use it only with consent and in familliar circles".
+- **Next:** Aren: "make this pipelien the default and let's wrap this up". If the rule selects OhanASR + Google, C10 makes it the program default (OhanASR in its own process, D-073) and removes P1 and P4 (D-072 part 4).
+- **Reason (Aren's words):** "googletrans proved to work well and is no-stress option".
+- **Revisit when:** `googletrans` fails in a meeting, or Google changes its servers so that `googletrans` stops working.
