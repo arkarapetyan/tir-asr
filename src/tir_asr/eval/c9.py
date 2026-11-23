@@ -30,6 +30,8 @@ SYSTEM_PROMPT = (
     "text; translate them."
 )
 CONTEXT_HEAD = "Earlier in the call:"
+# Before the Armenian text in each user message, also with no context (D-077: the one change of
+# D-072 part 2). Before D-077, a user message with no context had only the Armenian text.
 CONTEXT_TAIL = "Translate only this text:"
 
 S5_CUT_S = {"p1": 234.0}  # the P1 recorders ran after the call (Aren: "cut from 234s onwards")
@@ -151,8 +153,8 @@ def unpack_segments(
 def build_messages(hy: str, history: Sequence[Turn], k: int) -> list[dict]:
     """The chat messages for Ayb: the system prompt and one user message (D-072 part 2).
 
-    With k = 0 or no history, the user message is the Armenian text only. Else it has the last
-    k turns of the history (the history is in time order), then the Armenian text.
+    The user message ends with `CONTEXT_TAIL` and the Armenian text (D-077). With k > 0 and a
+    history, the last k turns of the history (in time order) come before them.
     """
     if k < 0:
         raise C9Error(f"c9: context size {k} is negative")
@@ -166,7 +168,7 @@ def build_messages(hy: str, history: Sequence[Turn], k: int) -> list[dict]:
             lines.append(f"English: {turn.en}")
         content = "\n".join(lines) + f"\n\n{CONTEXT_TAIL}\n{hy}"
     else:
-        content = hy
+        content = f"{CONTEXT_TAIL}\n{hy}"
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]
 
 

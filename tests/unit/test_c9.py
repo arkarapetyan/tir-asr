@@ -118,10 +118,13 @@ def test_c9_03_system_prompt_is_the_approved_text():
     assert messages[0] == {"role": "system", "content": APPROVED_PROMPT}
 
 
-def test_c9_03_no_context_gives_only_the_text():
+def test_c9_03_no_context_gives_the_tail_and_the_text():
     history = [Turn("Me", "Ա։", "A.")]
 
-    assert build_messages("Բարև։", history, 0)[1] == {"role": "user", "content": "Բարև։"}
+    assert build_messages("Բարև։", history, 0)[1] == {
+        "role": "user",
+        "content": "Translate only this text:\nԲարև։",
+    }
     assert build_messages("Բարև։", [], 3) == build_messages("Բարև։", [], 0)
 
 
