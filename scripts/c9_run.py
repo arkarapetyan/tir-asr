@@ -13,8 +13,8 @@ test-results/c9/asr-ohanasr.json in the same format.
 Examples (D-030: no LD_LIBRARY_PATH; nothing downloads):
   uv run --no-sync python scripts/c9_run.py dump
   env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py asr --model p4
-  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --no-sync python scripts/c9_run.py \\
-      mt --model ayb --input asr-ohanasr --context 3
+  env -u LD_LIBRARY_PATH HF_HUB_OFFLINE=1 uv run --group c9-eval python scripts/c9_run.py \\
+      mt --model ayb --form nf4 --input asr-ohanasr --context 3
   uv run --no-sync python scripts/c9_run.py report
 
 The texts in the files are the raw model texts. The output rules of the program
@@ -270,7 +270,17 @@ def cmd_mt(args: argparse.Namespace) -> int:
         from tir_asr.eval.ayb import MODEL_DIR, AybTranslator
 
         model = AybTranslator(ROOT / MODEL_DIR, args.form)
-        extra = {"form": args.form, "context": args.context, "model_class": model.model_class}
+        extra = {
+            "form": args.form,
+            "form_params": model.form_params,
+            "context": args.context,
+            "model_class": model.model_class,
+            "footprint_mib": model.footprint_mib,
+            "cpu_modules": model.cpu_modules,
+            "versions_c9_eval": {
+                name: importlib.metadata.version(name) for name in ("accelerate", "bitsandbytes")
+            },
+        }
 
         def translate(hy: str, history: list[Turn]) -> str:
             return model.translate_messages(build_messages(hy, history, args.context))
@@ -290,6 +300,7 @@ def cmd_mt(args: argparse.Namespace) -> int:
 
     load_s = clock() - start
     loaded = gpu.sample()
+    say(f"{args.model}: load {load_s:.1f} s, VRAM +{loaded - gpu.base} MiB, {extra}")
     start = clock()
     translate(WARMUP_TEXT, [])
     warmup_s = clock() - start
@@ -475,10 +486,10 @@ def main(argv: list[str] | None = None) -> int:
     mt.add_argument("--model", choices=("ayb", "nllb-ct2", "seamless"), required=True)
     mt.add_argument("--input", required=True, help="reference, or asr-<model>")
     mt.add_argument("--context", type=int, default=0)
-    mt.add_argument("--form", default="bf16")
+    mt.add_argument("--form", default="nf4")
     mt.add_argument("--limit", type=int, default=None)
     report = sub.add_parser("report")
-    report.add_argument("--candidate", default="ayb-bf16-ctx3+asr-ohanasr")
+    report.add_argument("--candidate", default="ayb-nf4-ctx3+asr-ohanasr")
     report.add_argument("--added-text", type=int, default=None)
     args = parser.parse_args(argv)
     commands = {"dump": cmd_dump, "asr": cmd_asr, "mt": cmd_mt, "report": cmd_report}
