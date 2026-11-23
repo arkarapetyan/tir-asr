@@ -605,6 +605,58 @@ Decisions: D-072 and D-073. Aren approved T-C9-01 to T-C9-06 on 2026-11-23 ("app
 - **Armenian lines (D-077 part 1):** T-C9-05 does not change. For each Ayb run, Claude counts the English lines with an Armenian letter (a read-only check of the run file) and lists them with the flagged lines. Aren reads them.
 - **Results (Aren's laptop, 2026-11-23):** unit 284 passed, 27 deselected (`test-results/c9-unit-2.txt`). That run was on a branch without the `c9-d071` commits, so it also had the 25 converter tests (D-071). The model-level runs are the eval runs of `docs/eval/results.md`, "C9" (`test-results/c9-*.txt`).
 
+### 2.11 C10: OhanASR + Google as the text step of the program (C10)
+
+Decisions: D-080, D-081, D-072 part 4. Branch: `c10-ohanasr`. The test changes for tuning (D-072 part 5) move to C11 (D-081 point 8).
+Input files (local only): the two clips of §2.3 (`data/eval/c2-check{1,2}.16k.wav`, `.hy.txt`, `.en.txt`); `models/ohanasr-v0.1`; the C9 dump (`data/c9/segments.{npz,json}`) and the C9 file `test-results/c9/asr-ohanasr.json`.
+**Caution:** the Google tests (T-MODEL-MT-01, T-MODEL-ERR-02, T-E2E-01, T-E2E-02, T-SIM-01, T-SIM-02) send Armenian text to Google over the network (D-079). With no network, they fail.
+
+**New names and messages (contracts for `ARCHITECTURE.md` §2.3, §2.4, §2.7):**
+
+- `asr/ohanasr.py`: `OhanasrTranscriber(model_dir=MODEL_DIR)`, with `MODEL_DIR = models/ohanasr-v0.1` (relative to the project folder, as the old MT model folder). Errors: `asr: CUDA is not available`; `asr: OhanASR model not found: <model_dir>/model.pt`; `asr: segment of <n> samples is over the model limit of 640000 samples (40 s)`.
+- `mt/google.py`: `GoogleTranslator()`, with the values of D-079. Errors: `mt: empty input text`; `mt: Google Translate failed: <type>: <message>`.
+- Startup lines (§2.7): the versions line has `tir-asr`, `torch`, `omnilingual-asr`, `fairseq2`, `nemo-toolkit`, `silero-vad`, `soundcard`, and `googletrans`. The text step lines are `startup: text step: OhanASR ASR, then Google Translate MT over the network (D-081)`, `startup: GPU <name>; CUDA (torch) <version>`, `startup: ASR loaded in <s> s; GPU memory used <MiB> MiB`, and `startup: MT Google Translate: <service URL>, hy to en, timeout 5.0 s, no retries`.
+
+**Unit (CI):**
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SETUP-01 (changed) | D-081 point 1: the package installs on Python 3.11. | As in §2.1. | As in §2.1, and `sys.version_info[:2]` is `(3, 11)`. | unit | APPROVED |
+| T-CFG-01, T-CFG-02 (changed) | R10, §6, D-081 point 5: the NLLB parameters leave. | `config.py`. | `Params` has no `mt_compute_type` and no `mt_beam_size`. The other values are equal to the §6 table. The first parameter line is `parameter vad_threshold = 0.5`. | unit | APPROVED |
+| T-CLI-02 (changed) | F1, §2.7, D-081 point 5: no `--seamless`. | As in §2.6. | As in §2.6. Each call of `app.main` has only `mic` and `system`. | unit | APPROVED |
+| T-IMPORT-01 (changed) | D-021, D-081. | `ADAPTERS`: `tir_asr.asr.ohanasr` and `tir_asr.mt.google` come in; `tir_asr.asr.nemo_rnnt`, `tir_asr.mt.ct2_nllb`, `tir_asr.text.seamless`, `tir_asr.eval.nemo_ctc`, `tir_asr.eval.opus_ct2`, `tir_asr.eval.buzz_whisper`, `tir_asr.eval.seamless`, and `tir_asr.eval.google_mt` go. `FORBIDDEN`: `fairseq2` and `omnilingual_asr` come in; `ctranslate2` goes. T-CLI-01 gets the same `FORBIDDEN` change. | It passes. | unit | APPROVED |
+
+**Model (Aren's laptop):**
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-INSTALL-01 (changed) | D-016, D-081 point 1: the new environment uses the RTX 5070. | A test function in `tests/model/test_install_check.py`, in the new `.venv`. | Python 3.11. `torch` 2.8.0. `torch.cuda.is_available()` is True. The capability is (12, 0). A bfloat16 matrix product runs on the GPU. The CTranslate2 part goes. Report: the versions of `torch`, `fairseq2`, `omnilingual-asr`, `nemo-toolkit`, `silero-vad`, `soundcard`, `googletrans`, and `numpy`. | model | APPROVED |
+| T-MODEL-ASR-01 (changed) | §2.3, D-022, D-081 point 2: the OhanASR adapter with the synthetic warm-up. | `OhanasrTranscriber()`. Warm-up with 2 s of zeros. Then clip 1, clip 2, clip 1, clip 2. | The model is on the GPU (`torch.cuda.memory_allocated() > 0`). No text is empty. Each text has Armenian letters (U+0531 to U+0587). Clip 1 two times gives the same text. The first real call takes no more than 3 times the median of the next 3 calls. Report: the load time, the warm-up time and text, the time and text of each call, the reference texts, the peak torch VRAM. | model | APPROVED |
+| T-MODEL-ASR-02 (new) | D-080, D-081 point 6: the program adapter gives the eval result. | Aren keeps a copy of the C9 file. Then `scripts/c9_run.py asr --model ohanasr` (the program adapter, the new environment) on the C9 dump, then `report`. | The WER on S1–S3 and on S5 (the report, N1) is not higher than with the C9 file. The speed is at most 0.5 model s per audio s (K1). Report: the number of segments with a text that differs from the C9 file, both WER values, the speed, and the VRAM. Claude reads the two files. | model | APPROVED |
+| T-MODEL-ERR-01 (changed) | §2.3, §7, R10: no OhanASR model. | `OhanasrTranscriber(model_dir=<tmp>/no-such-model)`. | `AsrError`: `asr: OhanASR model not found: <tmp>/no-such-model/model.pt`. | model | APPROVED |
+| T-MODEL-ERR-03 (changed) | §2.3, §7, R10: no CUDA, no CPU fallback. | `torch.cuda.is_available` patched to False (`monkeypatch`). `OhanasrTranscriber()`. | `AsrError`: `asr: CUDA is not available`. The model does not load. | model | APPROVED |
+| T-MODEL-ERR-05 (new) | §2.3, §7, R10: the 40 s model limit. | After the load: `transcribe` with 640001 zeros (40 s + 1 sample). | `AsrError`: `asr: segment of 640001 samples is over the model limit of 640000 samples (40 s)`. | model | APPROVED |
+| T-MODEL-MT-01 (changed) | §2.4, D-022, D-079, D-081 point 3: the Google adapter. | `GoogleTranslator()`. Warm-up with `WARMUP_TEXT`. Then text 1, text 2, text 1, text 2 (the Armenian reference texts). | No English text is empty. Each English text has Latin letters and no Armenian letter. Text 1 two times gives the same English text. There is no time limit, because the time is network time (D-080). Report: the service URL, the time and text of each call, the English reference texts. | model | APPROVED |
+| T-MODEL-ERR-02 (changed) | §2.4, §7, R10, D-079: a failed call raises; it does not give the input text. | `TIMEOUT_S` of `mt/google.py` patched to 0.001 s before the constructor. `translate(text 1)`. | `MtError` with a message that starts with `mt: Google Translate failed: `. | model | APPROVED |
+| T-MODEL-ERR-04 (changed) | §2.4, §7, R10: empty input. | `GoogleTranslator().translate("")`. | `MtError`: `mt: empty input text`. | model | APPROVED |
+| T-MODEL-ENV-01 (new) | D-081 weak point 3: fairseq2 and NeMo in one process. | One process. `TitanetEmbedder()`: embed clip 1 (e1). `SileroSpeechProbability()`: the probabilities of clip 1 (p1). Then `OhanasrTranscriber()` and one call on clip 1. Then embed clip 1 again (e2), and the probabilities of clip 1 with a new Silero instance (p2). | cos(e1, e2) ≥ 0.999 (as T-MODEL-SPK-01). The largest difference between p1 and p2 is at most 1e-6. Report: the cosine, the largest difference, and the GPU memory (`nvidia-smi`) after each load. | model | APPROVED |
+| T-MODEL-VAD-01, T-INSTALL-04, T-MODEL-SPK-01, T-MODEL-SPK-02 | D-081 weak point 2: torch 2.8.0. | As before, in the new environment. | As before. | model | APPROVED (run again) |
+| T-E2E-01 (changed) | K1, F2, F3, F5, D-081: the program with OhanASR + Google. | As in §2.8, with `load_models(params, log, ["Me"])` (no `seamless` argument). | As before. The startup log has the text step line, the `ASR loaded` line, and the `MT Google Translate` line of this section, and no `Seamless` line. Report: the GPU memory after each load. | model | APPROVED |
+| T-E2E-02 | L-02, §2.6, D-061. | As before (the installed command; the warm-up calls Google). | As before. | model | APPROVED (run again) |
+| T-SIM-01 | F1, F5, D-054. | As before, with the new text step. | As before. | sim, model | APPROVED (run again) |
+| T-SIM-02 (changed) | F4, F5, K1, Q-10, D-081 weak point 1: the GIL with OhanASR. | As before, with the new text step. | The results (1) to (5) of §2.7. Point (5), no arrival gap over 64 ms, is the GIL check. Report: as before, and the `asr` and `mt` steps of each line. | sim, model | APPROVED |
+
+**Removed (D-081 point 5; the git history keeps them):** T-INSTALL-02 and T-INSTALL-03 (NeMo RNNT and NLLB); T-MODEL-P4-01, T-MODEL-P4-02, and T-PERF-P4-01; T-CLI-03; T-E2E-03; T-SIM-03. The IDs T-MODEL-ASR-01, T-MODEL-ERR-01, and T-MODEL-ERR-03 now test the OhanASR adapter; the IDs T-MODEL-MT-01, T-MODEL-ERR-02, and T-MODEL-ERR-04 now test the Google adapter.
+
+**No change:** T-TEXT-01 to T-TEXT-07 and T-PIPE-01 to T-PIPE-15 use `CascadeTextStep` or fakes. T-OUT-06 and T-PIPE-14 test the core `STEPS` with one name, and the core keeps it (D-081 point 4). T-C9-01, T-C9-02, and T-C9-04 to T-C9-06 do not change.
+
+**Notes:**
+
+- **Approval:** Aren approved the tests of this section on 2026-11-23 ("tests approved proceed immediately").
+- **Commands:** `LD_LIBRARY_PATH` is empty on the laptop (Aren, 2026-11-23). Thus the C10 test commands have no `env -u LD_LIBRARY_PATH`, and `run.sh` does not change.
+- **Red run (R5):** after the environment change and before the code. Expected red: T-CFG-01, T-CFG-02, T-CLI-02, and T-IMPORT-01 (unit); the model tests of the new adapters (`ModuleNotFoundError`).
+- **T-SIM-02, point (3):** the label accuracy uses the program values. A change of the ASR model can change the segments with an empty text, and thus the labeler calls. If point (3) fails, we discuss it before a change (D-072 part 5 is in C11).
+
 ## 3. QA questions
 
 We add a question here when we find it during the work (tip T4).
