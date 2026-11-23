@@ -244,12 +244,29 @@ TitaNet with rule A, accuracy by count on stream D: 52.6 % (0.20–0.25), 78.9 %
 |---|---|---|---|---|---|---|---|
 | `nf4`, context 0, reference | 1 | 83 | 25 | 2 | 56.2 / 44.2 | 0.570 / 1.248 s | +3,248 MiB |
 | `nf4`, context 3, reference | 1 | 83 | 1 | 1 | **73.1 / 71.9** | 0.589 / 2.237 s | +3,294 MiB |
-| `nf4`, context 0, reference | 2 | 83 | 6 | 1 | not measured | 0.539 / 0.985 s | +3,248 MiB |
-| `nf4`, context 3, reference | 2 | 83 | 1 | 1 | not measured | 0.596 / 2.330 s | +3,294 MiB |
-| `nf4`, context 0, OhanASR | 2 | 136 | 21 | 0 | not measured | 0.522 / 0.911 s | +3,248 MiB |
-| `nf4`, context 3, OhanASR (rule candidate) | 2 | 136 | 5 | 7 | not measured | 0.634 / 4.070 s | +3,298 MiB |
-| `bf16-cpu`, context 0, reference | 2 | 83 | 8 | 0 | not measured | 2.694 / 4.476 s | +6,936 MiB |
-| `bf16-cpu`, context 3, reference | 2 | 83 | 3 | 1 | not measured | 2.903 / 11.542 s | +6,984 MiB |
+| `nf4`, context 0, reference | 2 | 83 | 6 | 1 | 69.1 / 66.9 | 0.539 / 0.985 s | +3,248 MiB |
+| `nf4`, context 3, reference | 2 | 83 | 1 | 1 | 72.8 / 71.9 | 0.596 / 2.330 s | +3,294 MiB |
+| `nf4`, context 0, OhanASR | 2 | 136 | 21 | 0 | 56.3 / 57.2 | 0.522 / 0.911 s | +3,248 MiB |
+| `nf4`, context 3, OhanASR (rule candidate) | 2 | 136 | 5 | 7 | 63.4 / 63.6 | 0.634 / 4.070 s | +3,298 MiB |
+| `bf16-cpu`, context 0, reference | 2 | 83 | 8 | 0 | 66.5 / 68.2 | 2.694 / 4.476 s | +6,936 MiB |
+| `bf16-cpu`, context 3, reference | 2 | 83 | 3 | 1 | 72.8 / 69.1 | 2.903 / 11.542 s | +6,984 MiB |
 
-- **Rule (D-072 part 3) for the candidate:** condition 3 fails: VRAM 4,646 + 3,298 + 148 + 200 = 8,292 MiB [calc], more than 8,151 MiB; the speed passes (0.282 / 0.348 model s per audio s). Condition 4 fails: 7 lines with added text. Aren stopped the eval before the report of prompt 2 (D-078), so condition 2 has no number.
+- **Rule (D-072 part 3) for the candidate:** condition 3 fails: VRAM 4,646 + 3,298 + 148 + 200 = 8,292 MiB [calc], more than 8,151 MiB; the speed passes (0.282 / 0.348 model s per audio s). Condition 4 fails: 7 lines with added text. Condition 2 also fails on S5: 63.6 against 65.3 (the chrF of prompt 2 came with the report of D-080).
 - **Findings:** with context 3, Ayb gave the best English on the reference text of all MT models (prompt 1: 73.1 / 71.9 against 61.1 / 65.3 for Seamless text to text). With no context, Ayb often corrects or copies the Armenian text in place of a translation. With context 3, it sometimes writes the earlier lines again. The `bf16-cpu` form has the same problems, so the 4-bit form is not their cause.
+
+### Google Translate through `googletrans` (D-079, D-080)
+
+- **Conditions:** `googletrans` 4.0.2 and httpx 0.28.1, over the network from the laptop (2026-11-23). Source `hy`, target `en`; `raise_exception=True`; timeout 5 s; the service URL `translate.googleapis.com`. The MT input: the reference text and the OhanASR text (output rules applied, D-066). VRAM: +0 MiB.
+
+| MT input | Lines | chrF S1–S3 / S5 | Problem lines | Time per line, mean / max | Model s per audio s (OhanASR + Google), S1–S3 / S5 |
+|---|---|---|---|---|---|
+| Reference text | 83 | **76.2 / 75.0** | 0 | 1.085 / 2.360 s | — |
+| OhanASR text | 136 | **67.5 / 69.3** | 0 | 0.989 / 3.023 s | 0.401 / 0.429 |
+
+- **Rule (D-072 part 3) for OhanASR + Google:**
+  1. WER: passes with D-075 (5.3 % [calc] / 6.3 %, against the lower values of P1 and P4, 7.1 % / 10.0 %). The report uses N1 and gives False (9.1 % on S1–S3).
+  2. chrF: passes (67.5 / 69.3 against P4 59.0 / 65.3).
+  3. VRAM and speed: passes (4,994 MiB [calc]; 0.429 against 0.5).
+  4. Added text: passes (0 lines; Aren's count).
+- **Result (D-080):** OhanASR + Google replaces P1 and P4. C10 makes it the program default.
+- **Findings:** Google gives the best English of all MT candidates, on the reference text and on the OhanASR text. Its time is network time: the speed margin is 0.07 under the limit.

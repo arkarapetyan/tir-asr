@@ -596,10 +596,11 @@ Decisions: D-072 and D-073. Aren approved T-C9-01 to T-C9-06 on 2026-11-23 ("app
 | T-C9-05 | D-072 part 3, condition 4: the flag rule. | with the reference "Hello there": 4 and 5 words; with the Armenian text «ա բ»: 7 and 8 words; with neither | no flag, flag; no flag, flag; `C9Error` | unit | PASSES |
 | T-C9-06 | D-072 part 3: the four conditions. | a passing case; each condition failed in one place; equal values and the limits (0.5; 8151 MiB); a missing set | all True; only that condition and "all" are False; all True; `C9Error` | unit | PASSES |
 | T-IMPORT-01 (changed) | D-021. | `tir_asr.eval.c9` in `REQUIRED`; `tir_asr.eval.ayb` in `ADAPTERS`. | It passes. | unit | PASSES |
-| T-IMPORT-01 (changed) | D-021, D-079. | `tir_asr.eval.google_mt` in `ADAPTERS` in place of `tir_asr.eval.ayb`; `googletrans` in `FORBIDDEN`. | It passes. | unit | TO RUN |
+| T-IMPORT-01 (changed) | D-021, D-079. | `tir_asr.eval.google_mt` in `ADAPTERS` in place of `tir_asr.eval.ayb`; `googletrans` in `FORBIDDEN`. | It passes. | unit | PASSES |
 
 - **T-C9-04 changed** after Aren's answer "just cut from 234s onwards": the eval cuts the P1 audio at 234 s before the VAD, so the "tail" count of the first proposal is not necessary.
 - **T-C9-03 changed** (D-077, the one prompt change of D-072 part 2): with k = 0, the user message was only the Armenian text. Now it is "Translate only this text:", a new line, and the text, as after a context. The system prompt does not change.
+- **Results on branch `c9-ayb` (Aren's laptop, 2026-11-23):** ruff passes each time. Unit 259 passed, 27 deselected after D-076 (`test-results/c9-unit-4.txt`) and after D-077 (`c9-unit-5.txt`); 255 passed, 27 deselected after D-078 and D-079 (`c9-unit-6.txt`). The model-level runs are the eval runs of `docs/eval/results.md`, "C9".
 - **T-C9-03 removed** (D-078): Ayb left the project with its prompt (`build_messages`). The unit count goes down by its 4 test functions.
 - **Armenian lines (D-077 part 1):** T-C9-05 does not change. For each Ayb run, Claude counts the English lines with an Armenian letter (a read-only check of the run file) and lists them with the flagged lines. Aren reads them.
 - **Results (Aren's laptop, 2026-11-23):** unit 284 passed, 27 deselected (`test-results/c9-unit-2.txt`). That run was on a branch without the `c9-d071` commits, so it also had the 25 converter tests (D-071). The model-level runs are the eval runs of `docs/eval/results.md`, "C9" (`test-results/c9-*.txt`).
