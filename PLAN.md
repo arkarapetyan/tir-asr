@@ -1,8 +1,8 @@
 # PLAN.md: Plan of Completion
 
 **Project:** Live Armenian Transcription to English Translation (Mathrix AI coding challenge)
-**Version:** 0.24 · **Date:** 2026-11-23
-**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5). v0.21 applies D-071 (after the challenge). v0.22 starts C9 (D-072, D-073). v0.23 gives the C9 status (D-074, D-075). v0.24 logs the C9 time to the wait for Ayb.
+**Version:** 0.25 · **Date:** 2026-11-23
+**Status:** APPROVED by Aren on 2026-10-23 (v0.4). v0.5 applies D-011. v0.6 applies the C1 decisions (D-013 to D-020). v0.7 logs the C1 time. v0.8 applies the C2 decisions (D-021 to D-035) and splits the C2 code work into C2b, C2c, and C2d (D-035). v0.9 logs the C2b time. v0.10 gives the C2c status (D-037 to D-039) and logs the C2c time. v0.11 gives the C2d status (D-040, D-041) and the C2d time so far. v0.12 closes C2d (M1, D-040 to D-045) and logs the C2d time. v0.13 closes C3 (D-046 to D-053) and gives C6 the P4 implementation. v0.14 closes C4 (D-054, D-055; M2 reached) and logs the C4 time. v0.15 applies D-056 (Q16 closed; the C6 scope; C5 before C6). v0.16 closes C5 (D-057 to D-061; M3 reached), adds the C7 work from D-060, and logs the C5 time. v0.17 starts C6 (D-062: the order, the design, the flag, the tests, and the C6 time box). v0.18 closes C6 (D-062 to D-064), gives C7 a first part for P4 (D-064), and logs the C6 time. v0.19 closes C7 (D-065 to D-067). v0.20 closes C8 (D-068 to D-070; M5). v0.21 applies D-071 (after the challenge). v0.22 starts C9 (D-072, D-073). v0.23 gives the C9 status (D-074, D-075). v0.24 logs the C9 time to the wait for Ayb. v0.25 closes C9 (D-076 to D-080).
 
 ---
 
@@ -165,8 +165,8 @@ Phase order: option B, skeleton first (D-002).
 | C7 | Live test and reliability | Live test with two or more people; error behaviour check; latency report; the D-060 measurements (VAD for fast changes and noises) and the speaker diagnostic line | M4 | 1.5 h |
 | C8 | Delivery | Full README, `chats/`, rehearsal checklist | M5 | 1 h |
 | S1 | Side chat: export format | Format of the full data export; converter decision, if necessary (D-011) | — | 0.5 h |
-| C9 | Model eval: OhanASR and Ayb | Eval against P1 and P4 with the rule of D-072; decision D-074 | — | 3 h |
-| C10 | Integration | The C9 winner in the program; removal of the losing pipelines; test changes for tuning | — | (C10) |
+| C9 | Model eval: OhanASR and Ayb | Eval against P1 and P4 with the rule of D-072; decisions D-074 to D-080 (winner: OhanASR + Google, D-080) | — | 3 h |
+| C10 | Integration | OhanASR + Google as the program default (D-080); removal of P1 and P4; test changes for tuning | — | (C10) |
 | C11 | VAD and speaker values | Measured values for the D-060 items; live test | — | (C11) |
 | — | Buffer | — | — | 1 h |
 | | **Total** | | | **25.5 h** |
@@ -407,7 +407,9 @@ ASR: automatic speech recognition. MT: machine translation.
   5. Results in `docs/eval/results.md`; decision D-074.
 - **Data:** S1–S3 (labels) and S5 (`data/c7/`, both calls; the P1 files cut at 234 s).
 - **Done when:** the rule of D-072 part 3 gives a result with Ayb, or Aren stops the wait (D-074).
-- **Status (2026-11-23): open, waiting for the Ayb access (D-074).**
+- **Status (2026-11-23): closed (D-080).** The first part waited for the Ayb access (D-074); the notes below are from that part.
+  - Second part (handover `09b-ayb.md`): Ayb forms and the group `c9-eval` (D-076); the one prompt change (D-077); Ayb fails conditions 3 and 4 and leaves (D-078); Google Translate through `googletrans` as the MT candidate (D-079).
+  - **Result (D-080):** OhanASR + Google passes the rule (condition 1 with D-075): chrF 67.5 / 69.3 against P4 59.0 / 65.3; 0.429 model s per audio s; 4,994 MiB [calc]. C10 makes it the default. Handover: `docs/handovers/10-integration.md`.
   - Done: the OhanASR install check (own environment, D-073); the eval tools on `c9-eval`; the runs of OhanASR, `nemo-rnnt`, P4, NLLB, and Seamless text to text; `docs/eval/results.md`, "C9: OhanASR-v0.1".
   - Result: OhanASR gives the best Armenian text (S5: 6.3 %; S1–S3: 5.3 % with the digits as correct, D-075). With the OhanASR text, no available text translator reaches the English of P4. The program does not change now (D-074).
   - Next, when the access comes: the Ayb install check, the Ayb runs, the rule (D-072 part 3). Option B of D-074 ("P6") stays a candidate.
@@ -415,7 +417,7 @@ ASR: automatic speech recognition. MT: machine translation.
 
 #### C10. Integration of the eval winner
 
-- **Goal:** the winner of C9 in the program (a new text step in the Template Method, D-062), the program environment (two processes if necessary, D-073), and the removal of the losing pipelines (D-072 part 4). The test changes for tuning (D-072 part 5).
+- **Goal:** OhanASR + Google (`googletrans`) as the program default (D-080): OhanASR in its own process (D-073), Google as the MT (D-079), TitaNet as now. The removal of P1 and P4 (D-072 part 4). The test changes for tuning (D-072 part 5).
 - **Time box:** C10 proposes it.
 
 #### C11. VAD and speaker values
@@ -604,7 +606,7 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | C7 | 1.5 h + 10 min (the calls, Aren) | 1.62 h | 2026-10-28, 11:23–11:50 (27 min); the two S5 calls (10 min, Aren); 13:32–14:32 (60 min). The break is not counted. Inside the time box. |
 | C8 | 1 h | about 1.0 h (Aren corrects) | 2026-10-28, 14:35–14:55 (README, D-068); the live test (Aren, not counted here); 20:01–20:40 (D-069, D-070, the chat end). Estimate from the chat times. |
 | S1 | 0.5 h | | |
-| C9 | 3 h (D-072) | about 1.8 h so far (Aren corrects) | 2026-11-23, 11:11–13:00 (estimate from the chat times): the decisions D-071 to D-075, the eval tools, the OhanASR runs, the results. Open: the Ayb part (D-074). |
+| C9 | 3 h (D-072) | about 3.3 h (Aren corrects) | 2026-11-23, 11:11–13:00 (D-071 to D-075, the eval tools, the OhanASR runs); 18:41–20:10 (the Ayb part and Google, D-076 to D-080). Estimates from the chat times. About 0.3 h over the time box. |
 | Buffer | 1 h + 0.7 h (from C1) | 1.0 h | 1.0 h used by C0. C1 added 0.7 h. Buffer left: 0.7 h. |
 | **Total** | **25.5 h** | about 23.4 h | C0 to C8 (C8 an estimate). Over the "about 20 hours" of the brief: S1, D-035 (C2b–C2d), and the overruns of C0, C2d, and C5 (R16 notes in §5.1). |
 
@@ -638,3 +640,4 @@ No calendar (Aren's decision, 2026-10-23). We record the time only (RULES.md R16
 | 0.22 | 2026-11-23 | C9 started: D-072 (scope, eval, decision rule, C10 and C11), D-073 (eval environment); the converter removed (D-071); §4, §5.1, §5.2 C9 to C11, §11. |
 | 0.23 | 2026-11-23 | C9 status: the OhanASR results; wait for the Ayb access (D-074); digits in the Armenian text are correct (D-075). |
 | 0.24 | 2026-11-23 | C9 time so far; the handover `09b-ayb.md` for the Ayb part. |
+| 0.25 | 2026-11-23 | C9 closed: D-076 to D-080 (Ayb out, OhanASR + Google wins); §5.1, §5.2 C9 and C10, §11; the handover `10-integration.md`. |
