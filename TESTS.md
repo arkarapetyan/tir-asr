@@ -674,6 +674,7 @@ Input files (local only): the two clips of §2.3 (`data/eval/c2-check{1,2}.16k.w
 - **T-E2E-01:** 2 blocks, totals 1.82 s and 1.67 s; GPU memory 4,694 MiB after the ASR load and 4,894 MiB after the speaker model. **T-E2E-02:** exit code 0, 1.67 s after SIGINT, no abort line.
 - **T-SIM-01, run 1:** 14 blocks, totals 1.19–2.50 s, largest gap 47.1 ms; WER 3.4 % (Me) and 8.0 % (System).
 - **T-SIM-02:** 24 blocks (5 Me, 19 Speaker N); 19 of 19 labels correct, 4 labels; totals 1.08–4.71 s, mean 2.02 s; largest gap 47.4 ms (Me) and 43.7 ms (System), no gap over 64 ms; no generation 2 GC pass. Thus D-081 weak point 1 did not occur. The run took 213 s.
+- **Live test (Aren, 2026-11-24, no output file):** "STT works excellent, but diarization creates too many speakers for a single person". Thus the ASR passes live, and F4 (one label for each person) fails live. C11 works on the speaker labels and the split (`PLAN.md` §5.2 C11).
 
 ## 3. QA questions
 
