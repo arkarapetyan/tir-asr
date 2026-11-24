@@ -1,6 +1,6 @@
 # TESTS.md
 
-**Project:** tir-asr · **Date:** 2026-11-23
+**Project:** tir-asr · **Date:** 2026-11-24
 **Rules:** RULES.md R5 (test-driven development) and D-006 (test runs).
 
 Each test comes from a requirement in the brief (F, K, D in `PLAN.md` §1) or from a module contract in `ARCHITECTURE.md`.
@@ -675,6 +675,59 @@ Input files (local only): the two clips of §2.3 (`data/eval/c2-check{1,2}.16k.w
 - **T-SIM-01, run 1:** 14 blocks, totals 1.19–2.50 s, largest gap 47.1 ms; WER 3.4 % (Me) and 8.0 % (System).
 - **T-SIM-02:** 24 blocks (5 Me, 19 Speaker N); 19 of 19 labels correct, 4 labels; totals 1.08–4.71 s, mean 2.02 s; largest gap 47.4 ms (Me) and 43.7 ms (System), no gap over 64 ms; no generation 2 GC pass. Thus D-081 weak point 1 did not occur. The run took 213 s.
 - **Live test (Aren, 2026-11-24, no output file):** "STT works excellent, but diarization creates too many speakers for a single person". Thus the ASR passes live, and F4 (one label for each person) fails live. C11 works on the speaker labels and the split (`PLAN.md` §5.2 C11).
+
+### 2.12 C11: one label for one person (C11)
+
+Decisions: D-083, D-072 part 5. Branch: `c11-speakers`. No separate red run (D-083 part 5): after Aren approves this section, Claude writes the tests and the code in one step, and Aren does only the green run.
+Input files (local only): the eval data of §2.7; `data/c7/p1.system.wav` and `data/c7/p4.system.wav`; later `data/c11/r1.system.wav` (D-083 part 3).
+
+**Part 1: the test changes for tuning (D-072 part 5).** A test that checks a rule gets its own fixed parameters, `RULE_PARAMS`, with each of the 8 values written out. Thus a new program value does not change its result. A test that runs the full program keeps `Params()`. It checks only rules, and it reports the quality numbers. T-CFG-01 still checks the program values, so it changes with each value that Aren approves.
+
+| ID | Requirement | Change | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-SEG-01 to T-SEG-09 | §2.2, D-072 part 5. | `RULE_PARAMS` in `test_segment_endpoint.py` has all 8 values written out. Now it writes only `vad_min_silence_ms` (500) and `vad_max_speech_s` (10); the other values come from `Params()`, and `MID` = 0.4 needs `vad_end_threshold` 0.35 and `vad_threshold` 0.5. The pad test of T-SEG-08 uses `replace(RULE_PARAMS, vad_speech_pad_ms=100)`. T-SEG-09 uses `RULE_PARAMS` in place of `Params()`. | No change. | unit | APPROVED |
+| T-PIPE-01 to T-PIPE-15 | §2.6, D-072 part 5. | Each `Params()` in `test_pipeline.py` becomes `RULE_PARAMS`, with the C10 values written out (0.5, 0.35, 500, 30, 250, 15, 0.50, 1.0). [RUN] D-069: with 300 ms, T-PIPE-01, 06, 07, 09, and 14 failed only on the `vad` latency text. | No change. | unit | APPROVED |
+| T-RUN-01 | §8.2, D-072 part 5. | `segment_file(…, Params())` becomes `segment_file(…, RULE_PARAMS)` (the C10 values). | No change. | unit | APPROVED |
+| T-CFG-02 | D-043, D-072 part 5. | The first line is `f"parameter vad_threshold = {params.vad_threshold}"`, not the fixed text `parameter vad_threshold = 0.5`. | No change. The check of the order stays. | unit | APPROVED |
+| T-MODEL-VAD-01 | §2.2, D-072 part 5. | `Params()` becomes `RULE_PARAMS` (the C10 values). | No change: 2 segments on the two clips. | model | APPROVED |
+| T-E2E-01 | D-072 part 5 (option a). | It keeps `Params()` (the program). The block count becomes a report. | At least 1 block; each block has `Me`; the blocks are in time order; no `(no text)`; one total for each block. Report: the block count (2 with the C10 values). | model | APPROVED |
+| T-SIM-02, point (3) | F4, D-072 part 5 (option a). | It keeps `Params()`. The wrong count and the label count become a report (`MAX_WRONG` and `STREAM_D_SPEAKERS` go). New rule check (F4): in the order of the labeler calls, the first `Speaker k+1` comes after the first `Speaker k`, with no gap in the numbers. | (3): the rule check passes. Report: the accuracy by count and by time, the wrong count, and the labels. Points (1), (2), and (5) do not change. | sim, model | APPROVED |
+
+No change: T-SPK-01 to T-SPK-11 and T-PIPE-05 (the test gives the clusterer values); T-SIM-01 (its checks are rules: the labels, the time order, and the text of each side); T-E2E-02; T-CFG-01 (until Aren approves a new value).
+
+**Part 2: the replay core** (`tir_asr/eval/spk_replay.py`, D-083 part 3; it imports no model, D-021). Contracts for `ARCHITECTURE.md` §8.2:
+
+- `GRID_THRESHOLDS = (0.40, 0.45, 0.50)`; `GRID_MIN_NEW_S = (1.0, 1.5, 2.0, 2.5, 3.0)`; `MAX_LABELS_ONE = 2`; `MIN_SHARE_ONE = 0.95`; `STREAM_D_SPEAKERS = 4`. The maximum wrong count is `MAX_WRONG` (1) of `spk_run`.
+- `Decision(label, kind, best, second)`: `kind` is `new`, `join`, `short`, or `none`. `best` and `second` are the two highest similarities before the decision (`None` when fewer speakers exist).
+- `decisions(items, threshold, min_new_s) -> list[Decision]`: it uses a subclass of `CentroidClusterer` that records the similarities. Thus the labels are the labels of the program rule.
+- `GridPoint(min_new_s, point)`, where `point` is a `SweepPoint` (§8.2). `grid(items, thresholds, min_new_values) -> list[GridPoint]`: `sweep` for each `min_new_s`, in the given order.
+- One-person streams: each segment with a text gets the true speaker `person`. Then `accuracy_time` is the share of the largest label in the labelled speech time (the best mapping maps `person` to that label), and `speakers` is the label count.
+- `select(one_person, eval_streams, d_name) -> Selection(passing, chosen)`: the rule of D-083 part 4. `passing` is the list of the points (`min_new_s`, threshold) that pass; `chosen` is the selected point, or `None`. Error: `spk_replay: the streams have different grid points`.
+
+Vectors at an angle a, as in §2.7; "long" = 3.0 s.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-C11-01 | D-083 part 3: `decisions`. | Threshold 0.9, `min_new_s` 1.0. 0° (0.5 s), 0° (long), 20° (long), 90° (long), 85° (0.5 s), 45° (long). | (1) `None`, `none`, no similarities. (2) `Speaker 1`, `new`, no similarities. (3) `Speaker 1`, `join`, best cos 20° = 0.940. (4) `Speaker 2`, `new`, best cos 80° = 0.174 (the centroid is at 10°). (5) `Speaker 2`, `short`, best cos 5° = 0.996, second cos 75° = 0.259. (6) `Speaker 3`, `new`, best cos 35° = 0.819, second cos 45° = 0.707. The labels are equal to the labels of `CentroidClusterer(0.9, 1.0)` on the same inputs. | unit | APPROVED |
+| T-C11-02 | D-083 part 3: `grid`. | The T-SPK-08 inputs: 0° (4 s, A), 30° (2 s, A), 100° (3 s, B), 130° (1 s, B), 200° (3 s, no turn). Thresholds 0.5 and 0.95; `min_new_s` 1.0 and 2.5. | 4 points in the order (1.0, 0.5), (1.0, 0.95), (2.5, 0.5), (2.5, 0.95). The two points with 1.0: as T-SPK-08. The two points with 2.5: accuracy 1.0 (time and count), 0 wrong, 4 scored, 3 speakers (the 2 s and 1 s segments are short, so they get the nearest speaker). | unit | APPROVED |
+| T-C11-03 | D-083 part 4: `select`. | Streams `p1` (one person), `s1` and `d` (eval). Points (`min_new_s`, threshold); a value that is not given is 0 wrong, and `d` has 4 speakers. (a) (1.0, 0.45): `p1` 2 speakers, share 0.96; `d` 1 wrong. (1.0, 0.50): `p1` 3 speakers, share 0.90. (2.0, 0.45): `p1` 1 speaker, share 1.0; `d` 1 wrong. (2.0, 0.50): `p1` 2 speakers, share 0.95; `s1` 1 wrong. (b) As (a), but `d` has 3 speakers at (2.0, 0.50). (c) As (a), but `s1` has 2 wrong at each point. (d) `d` has one point fewer than the other streams. | (a) passing (1.0, 0.45), (2.0, 0.45), (2.0, 0.50); chosen (2.0, 0.50), the highest threshold (a share of 0.95 and 1 wrong are at the limit, and they pass). (b) chosen (1.0, 0.45): on an equal threshold, the smallest `min_new_s`. (c) passing is empty; chosen is `None`. (d) `spk_replay: the streams have different grid points`. | unit | APPROVED |
+| T-IMPORT-01 (changed) | D-021. | `tir_asr.eval.spk_replay` in `REQUIRED`. | It passes. | unit | APPROVED |
+
+**Part 3: the run** (`scripts/c11_spk.py`, model level, Aren's laptop):
+
+- `embed --name <name> …`: the names are `p1`, `p4`, `s1`, `s2`, `s3`, `d`, `r1`, and `r2` (`data/c11/<name>.system.wav`). `p1`, `p4`, `r1`, and `r2` are one-person streams. For each name:
+  - the segments with `Params()` and Silero, as `c9_run.py dump` (`p1` is cut at 234 s);
+  - the OhanASR text of each segment after the output rules (`clean_armenian`), as in the text step;
+  - a TitaNet embedding only for a segment with a text (D-059 point 3A).
+  - The load order is OhanASR, TitaNet, Silero (D-043). It writes `data/c11/replay/<name>.{npz,json}`. A missing input file is an error (R10).
+- `grid`: it reads all saved names, with no model. It writes `test-results/c11/grid.txt` and `grid.json`.
+
+| ID | Requirement | Input | Expected result | Level | Status |
+|---|---|---|---|---|---|
+| T-C11-RUN | D-083 parts 3 and 4. | Now: `embed --name p1 p4 s1 s2 s3 d`, then `grid`. After the recording: `embed --name r1`, then `grid`. | Report (not pass or fail): for each name, the segments, the segments with a text, and the speech time; the grid table of each stream; the decision log of each one-person stream at the program values (0.50, 1.0 s) and at the selected point; the passing points and the selected point. Claude compares the `r1` log at the program values with `test-results/c11-rec1.txt`, segment by segment. If the labels differ, we discuss it before the decision. Aren approves a new value (R10). | model | APPROVED |
+| L-07 | F4, D-083 part 4, D-072 part 6. | The selected values. A Telegram call of 20 min or more with one person on the call side; both sides saved (`data/c11/r2.{system,mic}.wav`); the output in `test-results/c11-live.txt`. The other person agrees to the recording. | A maximum of 2 labels, and the largest label has 95 % or more of the labelled speech time (from the output, and from `c11_spk.py` on `r2`). | live | APPROVED |
+
+**Approval:** Aren approved the tests of this section on 2026-11-24 ("approved").
 
 ## 3. QA questions
 
