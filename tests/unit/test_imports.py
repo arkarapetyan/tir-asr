@@ -61,6 +61,7 @@ REQUIRED = {
     "tir_asr.text.step",
     "tir_asr.text.clean",
     "tir_asr.eval.c9",
+    "tir_asr.eval.spk_replay",
 }
 
 CHECK = """
