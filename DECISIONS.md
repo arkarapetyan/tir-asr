@@ -1744,3 +1744,44 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Test runs:** one program load needs about 4.9 GB on the 8 GB GPU. Thus T-E2E-01, T-E2E-02, T-SIM-01, and T-SIM-02 each run in their own pytest process. [RUN] T-E2E-02 ran out of GPU memory in the same process as T-E2E-01, and T-SIM-02 in the same process as a failed T-SIM-01 (pytest keeps the objects of a failed test).
 - **Reason (Aren's words):** "A, B, change it to 5s and make sure to run essential tests so the app can be run".
 - **Revisit when:** a live meeting shows Google calls over 10 s, or a Ctrl+C gives an abort line.
+
+## D-083. C11 scope: one label for one person, the A+B grid, and the decision rule
+
+- **Status:** ACCEPTED (2026-11-24)
+- **Context:** Aren's live test after C10 (2026-11-24, no output file): "STT works excellent, but diarization creates too many speakers for a single person". Aren's two requests: "let's penalize new cluster creations in diarization", and "let's improve the split part so that speech of same people does not go into the same box". D-072 part 1 gave the speaker values to C11.
+- **Facts:**
+  - Aren's live test (Aren, 2026-11-24): one person on the call side; up to 11 labels; Telegram; a long meeting; the audio was not saved. The extra labels came on short lines, with words that the person said (no invented text).
+  - [RUN] C7 (`test-results/c7-live-p1.txt`, `c7-live-p4.txt`): one person on the call side gave one label. C8 (`test-results/c8-live.txt`): 2 people gave 7 labels; Speakers 3–7 had 1–2 short fragments each (D-069).
+  - [RUN] C5 sweep (D-058): no eval segment was shorter than 2.40 s. TitaNet with rule A had zero errors from 0.40 to 0.60. At 0.35, two S1 voices got one label.
+  - [RUN] T-MODEL-SPK-01: two clips of Aren gave a cosine of 0.788.
+  - Claude's first idea: OhanASR gives a text for noise (T-MODEL-ASR-01: an invented sentence for 2 s of zeros), so noise gets to the clusterer. Aren's answer (no invented text on the extra lines) is a fact against it. Thus the short segments of the person are the most probable cause [inference].
+- **Parts and decision:**
+  1. **Scope.** The split request has three readings: A, two different people in one block (D-060 part 3, Q-04); B, one person with two or more labels; C, a different meaning. Claude's reading was A.
+     - **Decision:** B (Aren). Thus C11 has one goal: one person on the call side keeps one label for the full session. Q-04 stays open.
+  2. **Options (a cost for a new speaker):**
+     - **A.** A higher `spk_min_new_s` (1.0 → 1.5 … 3.0 s). Weak point: the short lines of a new person get the label of a different person until a long segment comes, and F4 keeps them wrong.
+     - **B.** A lower `spk_threshold` (0.50 → 0.45 or 0.40). Weak points: 0.40 is the measured limit (D-058); there is less margin against one label for two people; it does not aim at short segments.
+     - **C.** A pending speaker: a segment under the threshold becomes a candidate and gets the nearest label; a second segment that agrees with the candidate starts the speaker. Weak points: the first line of each new person is wrong (F4); two similar noises can still start a speaker; more code.
+     - **D.** A maximum speaker count, as a flag (for example `--speakers 2`). Weak points: Aren must set it for each meeting; a noise can take a place before the second person speaks.
+     - **E.** A separate, lower threshold for a new speaker. Weak point: it must stay near 0.40 (at 0.35, two voices got one label), so it gives almost the result of B [inference].
+     - **Claude's preference:** measure A and B together as a grid first: `spk_min_new_s` from 1.0 to 3.0 s in steps of 0.5, and `spk_threshold` from 0.40 to 0.50 in steps of 0.05. C or D only if no grid point passes. Reasons: the extra labels came on short lines; A and B need no new program code and no new parameter; the grid runs with no model. Weak points: (1) A gives wrong labels to the first short replies of a new person; (2) the eval data cannot measure this cost (no segment under 2.40 s), and only a call with 2–3 people can; (3) one Telegram call is a small sample, so the value can fit that call only. Fact that can show the preference is wrong: the extra labels start on segments of 3 s or more.
+     - **Decision:** as proposed.
+  3. **Measurement (R6).** A script `scripts/c11_spk.py` with a core module `tir_asr/eval/spk_replay.py`. It cuts each System WAV file into segments with `Params()` (as `c9_run.py dump`), gets the OhanASR text of each segment, and makes a TitaNet embedding only for a segment with a text (D-059 point 3A). Then it runs the clusterer for each grid point, with no model. Data:
+     - **M1:** `data/c7/p1.system.wav` (cut at 234 s, D-072) and `data/c7/p4.system.wav`, each with one person on the call side.
+     - **M2:** the four eval streams (S1, S2, S3, and stream D) with the D-057 metric.
+     - **M3:** `data/c11/r1.system.wav`, a new Telegram call of 20 min or more with one person on the call side. Both sides are saved with `parecord`. The other person agrees to the recording (D-072 part 6).
+     - **Decision:** as proposed. Aren records M3 later in C11.
+  4. **Decision rule** (fixed before the run). A grid point passes when both conditions are true:
+     1. on M1 and M3, each session has a maximum of 2 labels, and the largest label has 95 % or more of the labelled speech time;
+     2. on M2, each stream has a maximum of one wrong segment, and stream D has 4 labels (D-057).
+     - Among the passing points, the highest `spk_threshold` wins. On an equal threshold, the smallest `spk_min_new_s` wins. If no point passes, we discuss C and D. Aren approves the selected values (R10). Then the final live test runs with the audio of both sides saved (L-07, D-072 part 6).
+     - **Decision:** as proposed.
+  5. **Process.** No separate red run in C11, as in C5 (D-057 part 8). Claude (R14, one time): a test that cannot fail stays hidden. Mitigation: the tests come from the table that Aren approves.
+  6. **Branch:** `c11-speakers`, from `c10-ohanasr`, because `c10-ohanasr` is not in `main` yet. A later merge of `c11-speakers` into `main` also brings the C10 commits.
+  7. **Time box:** 5 h (Claude; Aren: "you set it").
+  8. **Other points:**
+     - The diagnostic line of D-060 part 6 stays as it is (Aren). The replay script gives the data of each segment.
+     - The models that the project does not use leave the laptop (not git): `models/ayb-0.5-4b`, `models/nllb-200-distilled-600M-ct2-float16`, `models/opus-mt-hy-en-ct2-float16`, `models/spkrec-ecapa-voxceleb`, and the Hugging Face cache entries of the removed models. `models/ohanasr-v0.1` and the TitaNet cache entry stay.
+- **Tests:** `TESTS.md` §2.12, with the test changes of D-072 part 5.
+- **Reason (Aren's words):** "agree not merged for now, provide commands"; "only one person, up to 11 speakers, telegram, it was a long meeting, audio not saved, came with short lines but not a text that nobody said"; "B"; "you set it, it doesnt matter anymore"; "yes" (the models); "no need to search for it. leave it as it is"; "ok" (the recording); then "1. ok", "2. yes".
+- **Revisit when:** no grid point passes; on M3, the replay at the program values does not give the labels of the program output; or L-07 shows extra labels again.
