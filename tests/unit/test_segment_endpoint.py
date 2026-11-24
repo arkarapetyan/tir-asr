@@ -4,7 +4,11 @@ Frame `k` arrives at (k + 1) x 0.032 s, so its start time is k x 0.032 s (TESTS.
 The fake SpeechProbability returns the next number of a list. The audio of frame `k` is a
 ramp: sample `n` of the stream has the value `n`, so a test can see which samples a
 segment holds.
+
+C11 (D-072 part 5): `RULE_PARAMS` writes out each value, and no test uses `Params()`.
 """
+
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -22,9 +26,19 @@ SILENT = 0.1
 MID = 0.4  # between vad_end_threshold (0.35) and vad_threshold (0.5)
 
 # The frame counts of these tests use a minimum silence of 500 ms (16 frames) and a maximum
-# length of 10 s. These tests check the rules, not the program values; T-CFG-01 checks the
-# values (D-069: the program uses 15 s).
-RULE_PARAMS = Params(vad_min_silence_ms=500, vad_max_speech_s=10)
+# length of 10 s; MID needs the two thresholds 0.35 and 0.5. These tests check the rules, not the
+# program values, so each value is written out here (D-072 part 5): a new program value does not
+# change them. T-CFG-01 checks the program values (D-069: the program uses 15 s).
+RULE_PARAMS = Params(
+    vad_threshold=0.5,
+    vad_end_threshold=0.35,
+    vad_min_silence_ms=500,
+    vad_speech_pad_ms=30,
+    vad_min_speech_ms=250,
+    vad_max_speech_s=10,
+    spk_threshold=0.50,
+    spk_min_new_s=1.0,
+)
 
 
 class FakeVad:
@@ -170,7 +184,7 @@ def test_seg_08_start_at_frame_0_has_no_start_pad():
 def test_seg_08_pad_longer_than_one_frame_is_limited_to_the_samples_that_exist():
     # vad_speech_pad_ms = 100 is 1600 samples (3.125 frames). Speech starts at frame 2,
     # so only 1024 samples exist before it. The second segment has the full pad.
-    params = Params(vad_min_silence_ms=500, vad_max_speech_s=10, vad_speech_pad_ms=100)
+    params = replace(RULE_PARAMS, vad_speech_pad_ms=100)
     probabilities = [SILENT] * 2 + [SPEECH] * 10 + [SILENT] * 16 + [SPEECH] * 10 + [SILENT] * 20
     endpointer = Endpointer(params, FakeVad(probabilities))
     found = [
@@ -198,7 +212,7 @@ def test_seg_08_start_pad_of_a_segment_that_starts_right_after_a_close():
 
 
 def test_seg_09_wrong_frame_length_fails_before_the_vad_is_called():
-    endpointer = Endpointer(Params(), FakeVad([]))  # a call to the fake would fail
+    endpointer = Endpointer(RULE_PARAMS, FakeVad([]))  # a call to the fake would fail
     bad = AudioBlock(source="Me", samples=np.zeros(500, dtype=np.float32), arrival=0.032)
 
     with pytest.raises(SegmentError) as error:
@@ -208,7 +222,7 @@ def test_seg_09_wrong_frame_length_fails_before_the_vad_is_called():
 
 
 def test_seg_09_probability_outside_0_to_1_fails():
-    endpointer = Endpointer(Params(), FakeVad([1.2]))
+    endpointer = Endpointer(RULE_PARAMS, FakeVad([1.2]))
 
     with pytest.raises(SegmentError) as error:
         endpointer.push(block(0))

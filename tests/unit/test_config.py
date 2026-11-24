@@ -6,6 +6,8 @@ from `config.py`. A new parameter in `Params` without Aren's approval makes this
 T-CFG-02: the startup log has one line for each parameter, with its name and value (D-043).
 
 C10 (D-081 point 5): the NLLB parameters `mt_compute_type` and `mt_beam_size` left with NLLB.
+
+C11 (D-072 part 5): T-CFG-02 checks the format and the order of the lines, not a value.
 """
 
 from dataclasses import asdict, fields
@@ -36,4 +38,4 @@ def test_cfg_02_startup_log_has_one_line_for_each_parameter():
     assert lines == [
         f"parameter {field.name} = {getattr(params, field.name)}" for field in fields(params)
     ]
-    assert lines[0] == "parameter vad_threshold = 0.5"
+    assert lines[0] == f"parameter vad_threshold = {params.vad_threshold}"

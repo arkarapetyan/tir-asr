@@ -6,7 +6,9 @@ model, and the warm-up calls it), D-062 (C6: `load_models` gives the text step, 
 `warm_up()` get it). The test loads the models with the functions of the program
 (`app.log_versions`, `app.load_models`), does the warm-up, and runs the pipeline with the test WAV
 source as the one source "Me": clip 1, then clip 2, at real-time speed. The gap between the clips
-is 152 + 480 = 632 ms of silence, so both segments close (D-032).
+is 152 + 480 = 632 ms of silence, so both segments close (D-032). C11 (D-072 part 5, option a):
+T-E2E-01 runs with the program values (`Params()`) and checks only rules; the block count is a
+report (2 with the C10 values).
 
 T-E2E-02 is the automatic form of L-02 (D-044). It starts the installed command `tir-asr` in a
 new process, with the real models, the default microphone, and the monitor of the default
@@ -98,16 +100,16 @@ def wav_run() -> tuple[list[str], list[str]]:
     assert err.getvalue() == ""
 
     heads = [HEAD.match(line) for line in lines if HEAD.match(line)]
-    assert len(heads) >= 2, "a clip ends with less than 512 ms of silence (D-032)"
-    assert len(heads) == 2, f"{len(heads)} blocks, expected 2"
-    assert [head.group(4) for head in heads] == ["Me", "Me"]
+    report(f"blocks {len(heads)} (a report, D-072 part 5; 2 with the C10 values)")
+    assert heads, "no block"
+    assert [head.group(4) for head in heads] == ["Me"] * len(heads)
     seconds = [int(h.group(1)) * 3600 + int(h.group(2)) * 60 + int(h.group(3)) for h in heads]
     assert seconds == sorted(seconds), f"the blocks are not in time order: {seconds}"
     assert "(no text)" not in out.getvalue()
 
     totals = [float(match.group(1)) for line in lines if (match := TOTAL.search(line))]
     report(f"totals {totals} s (a report, D-082)")
-    assert len(totals) == 2
+    assert len(totals) == len(heads)
     return startup, lines
 
 

@@ -87,10 +87,8 @@ START_LIMIT_S = 30.0  # test only: the time for the first block of each source
 HEAD = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] (.+)$")
 TOTAL = re.compile(r"\| Total (\d+\.\d\d)s\]$")
 
-# T-SIM-02 (D-057, D-059)
+# T-SIM-02 (D-057, D-059). C11 (D-072 part 5): the label accuracy is a report, not an assert.
 RAW = ROOT / "data" / "eval" / "raw"
-MAX_WRONG = 1  # the pass rule of D-057 part 3: at most 1 wrong segment
-STREAM_D_SPEAKERS = 4
 
 
 def report(line: str) -> None:
@@ -754,8 +752,13 @@ def speaker_labels_run(tmp_path) -> None:
         f"labelled segments {len(labeler.calls)}, scored {len(scored)}, wrong {wrong}; accuracy "
         f"{by_count:.3f} (count), {by_time:.3f} (time); labels {labels_used}"
     )
-    assert wrong <= MAX_WRONG, f"{wrong} wrong segments, more than {MAX_WRONG}"
-    assert len(labels_used) == STREAM_D_SPEAKERS, f"{len(labels_used)} speaker labels"
+    report("the D-057 rule (at most 1 wrong, 4 labels) is a report since C11 (D-072 part 5)")
+    # The rule check (F4): the labels come in the order of their first use, with no gap.
+    first_use = list(
+        dict.fromkeys(label for _, _, label in labeler.calls if label.startswith("Speaker "))
+    )
+    expected = [f"Speaker {k}" for k in range(1, len(first_use) + 1)]
+    assert first_use == expected, f"the labels in the order of their first use: {first_use}"
 
     # (4) The totals: a report, no assert (D-082; K1 is a throughput limit, D-071).
     totals = [block[3] for block in blocks]

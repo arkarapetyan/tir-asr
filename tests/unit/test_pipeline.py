@@ -26,6 +26,8 @@ block and no clock read for a write; the shutdown line still counts it.
 
 T-PIPE-15 (C7, `c7-p4`, D-067): during `run()`, the interpreter switch interval is
 `GIL_SWITCH_S`; after `run()`, also after an error, it has its old value again.
+C11 (D-072 part 5): the tests use `RULE_PARAMS`, with each value written out, not `Params()`.
+Thus a new program value does not change them (D-069: 300 ms changed the `vad` latency text).
 """
 
 import _thread
@@ -52,6 +54,17 @@ LISTENING = "Listening. Press Ctrl+C to stop.\n"
 WAIT_S = 5.0  # test only: a limit for each wait, so that a failed test does not hang
 NOT_DONE_S = 0.3  # T-PIPE-07: run() must not return in this time after the end of Me
 BLOCK_SLEEP_S = 0.001  # T-PIPE-11, T-PIPE-12: the time between two blocks of an endless source
+# The rule values of these tests (the C10 program values); T-CFG-01 checks the program values.
+RULE_PARAMS = Params(
+    vad_threshold=0.5,
+    vad_end_threshold=0.35,
+    vad_min_silence_ms=500,
+    vad_speech_pad_ms=30,
+    vad_min_speech_ms=250,
+    vad_max_speech_s=15,
+    spk_threshold=0.50,
+    spk_min_new_s=1.0,
+)
 
 
 def probabilities(count: int, regions: list[tuple[int, int]]) -> list[float]:
@@ -227,7 +240,7 @@ def start(frames, regions, transcriber, translator, clock):
     code = run(
         [(FakeSource(frames), FakeVad(probabilities(frames, regions)))],
         CascadeTextStep(transcriber, translator),
-        Params(),
+        RULE_PARAMS,
         clock,
         out,
         err,
@@ -289,7 +302,7 @@ def test_pipe_02_error_in_the_capture_thread():
     code = run(
         [(FakeSource(10), FakeVad([1.2] * 10))],
         CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0]),
         out,
         err,
@@ -368,7 +381,7 @@ def test_pipe_06_two_sources_give_labelled_blocks_and_summed_counts():
             (system, FakeVad(probabilities(100, [(30, 36), (60, 79)]))),  # 30-36: short
         ],
         CascadeTextStep(FakeTranscriber(["բարև", "բարև"]), translator),
-        Params(),
+        RULE_PARAMS,
         clock,
         out,
         err,
@@ -406,7 +419,7 @@ def test_pipe_07_done_only_after_the_end_of_each_source():
                 (system, FakeVad(probabilities(50, [(5, 24)]))),
             ],
             CascadeTextStep(FakeTranscriber(["բարև"]), FakeTranslator("hi")),
-            Params(),
+            RULE_PARAMS,
             FakeClock([0.0, 1.400, 1.500, 1.510]),
             out,
             err,
@@ -441,7 +454,7 @@ def test_pipe_08_error_line_names_the_capture_thread_of_the_source():
     code = run(
         [(FakeSource(10), FakeVad([SILENCE] * 10)), (system, FakeVad([]))],
         CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0]),
         out,
         err,
@@ -468,7 +481,7 @@ def test_pipe_09_system_lines_get_the_speaker_label_and_the_spk_step():
             (system, FakeVad(probabilities(140, [(30, 36), (60, 79), (100, 119)]))),
         ],
         CascadeTextStep(FakeTranscriber(["բարև", "բարև", ""]), FakeTranslator("hi")),
-        Params(),
+        RULE_PARAMS,
         clock,
         out,
         err,
@@ -503,7 +516,7 @@ def test_pipe_10_error_in_the_labeler():
     code = run(
         [(FakeSource(111, label="System"), FakeVad(probabilities(111, [(5, 24)])))],
         CascadeTextStep(FakeTranscriber(["բարև"]), FakeTranslator("hi")),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0, 1.400, 1.500]),
         out,
         err,
@@ -535,7 +548,7 @@ def test_pipe_11_ctrl_c_closes_the_sources_and_ends_the_threads():
     code = run(
         [(source, EndlessVad())],
         CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0]),
         out,
         err,
@@ -562,7 +575,7 @@ def test_pipe_12_an_error_closes_the_sources_and_ends_the_threads():
     code = run(
         [(source, EndlessVad([(5, 24)]))],
         CascadeTextStep(transcriber, FakeTranslator()),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0]),
         out,
         err,
@@ -592,7 +605,7 @@ def test_pipe_13_a_thread_that_does_not_stop_gives_an_error_line(monkeypatch):
         code = run(
             [(source, EndlessVad())],
             CascadeTextStep(FakeTranscriber([]), FakeTranslator()),
-            Params(),
+            RULE_PARAMS,
             FakeClock([0.0]),
             out,
             err,
@@ -626,7 +639,7 @@ def test_pipe_14_the_line_gets_the_step_names_of_the_text_step():
     code = run(
         [(FakeSource(111), FakeVad(probabilities(111, [(5, 24)])))],
         OneStep(),
-        Params(),
+        RULE_PARAMS,
         FakeClock([0.0, 1.400, 1.500, 1.510]),
         out,
         err,
@@ -667,7 +680,7 @@ def test_pipe_15_gil_switch_interval_during_run(error):
     code = run(
         [(FakeSource(111), FakeVad(probabilities(111, [(5, 24)])))],
         step,
-        Params(),
+        RULE_PARAMS,
         clock,
         io.StringIO(),
         io.StringIO(),

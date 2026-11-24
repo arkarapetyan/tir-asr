@@ -1,7 +1,8 @@
 """T-RUN-01 to T-RUN-05: the bake-off core with fakes (D-046, D-048, D-051).
 
 No model and no audio device. The expected values come from the approved test table
-(TESTS.md section 2.5), not from the code.
+(TESTS.md section 2.5), not from the code. C11 (D-072 part 5): T-RUN-01 uses `RULE_PARAMS`,
+with each value written out, so a new program value does not change it.
 """
 
 import numpy as np
@@ -11,6 +12,18 @@ from tir_asr.config import SAMPLE_RATE, VAD_FRAME, Params
 from tir_asr.eval.data import Label, ScriptLine
 from tir_asr.eval.run import score_side, segment_file, transcribe_all, translate_all
 from tir_asr.types import Segment
+
+# The rule values of T-RUN-01 (the C10 program values); T-CFG-01 checks the program values.
+RULE_PARAMS = Params(
+    vad_threshold=0.5,
+    vad_end_threshold=0.35,
+    vad_min_silence_ms=500,
+    vad_speech_pad_ms=30,
+    vad_min_speech_ms=250,
+    vad_max_speech_s=15,
+    spk_threshold=0.50,
+    spk_min_new_s=1.0,
+)
 
 
 def loud_frame_vad(samples: np.ndarray) -> float:
@@ -69,7 +82,7 @@ def test_run_01_segments_in_audio_time_with_the_end_rule():
     audio[10 * VAD_FRAME : 40 * VAD_FRAME] = 0.5
     audio[80 * VAD_FRAME :] = 0.5  # loud to the last sample of the file
 
-    segments = segment_file(audio, loud_frame_vad, Params())
+    segments = segment_file(audio, loud_frame_vad, RULE_PARAMS)
 
     assert len(segments) == 2
     assert segments[0].start == pytest.approx(0.320)

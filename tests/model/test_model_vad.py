@@ -3,7 +3,8 @@
 Contract: ARCHITECTURE.md section 2.2. Decisions: D-026, D-027. The test plays clip 1 and then
 clip 2 frame by frame, with no added silence (D-032), through one adapter and one Endpointer.
 Clip 1 ends 152 ms after its speech. The 500 ms rule closes the segment of clip 1 in the
-silence at the start of clip 2 (T-INSTALL-04 shows the pauses).
+silence at the start of clip 2 (T-INSTALL-04 shows the pauses). C11 (D-072 part 5): the test
+uses `RULE_PARAMS`, with each value written out, so a new program value does not change it.
 
 The test runs on Aren's laptop only. It imports the adapter inside the test function, so that
 CI can collect this file without the `laptop` dependency group (D-021).
@@ -30,6 +31,17 @@ ROOT = Path(__file__).resolve().parents[2]
 EVAL_DIR = ROOT / "data" / "eval"
 CLIPS = ["c2-check1", "c2-check2"]
 FRAME_S = VAD_FRAME / SAMPLE_RATE
+# The rule values of this test (the C10 program values); T-CFG-01 checks the program values.
+RULE_PARAMS = Params(
+    vad_threshold=0.5,
+    vad_end_threshold=0.35,
+    vad_min_silence_ms=500,
+    vad_speech_pad_ms=30,
+    vad_min_speech_ms=250,
+    vad_max_speech_s=15,
+    spk_threshold=0.50,
+    spk_min_new_s=1.0,
+)
 
 
 def report(line: str) -> None:
@@ -61,8 +73,7 @@ def test_model_vad_01_silero_adapter_and_endpointer():
         probabilities.append(probability)
         return probability
 
-    params = Params()
-    endpointer = Endpointer(params, recorded)
+    endpointer = Endpointer(RULE_PARAMS, recorded)
     segments = []
     frame = 0  # the frame counter goes on from clip 1 to clip 2
     start = time.perf_counter()
