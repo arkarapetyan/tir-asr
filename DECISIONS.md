@@ -1785,3 +1785,30 @@ Quotes from Aren come from the chat. Claude corrected only the spelling.
 - **Tests:** `TESTS.md` §2.12, with the test changes of D-072 part 5.
 - **Reason (Aren's words):** "agree not merged for now, provide commands"; "only one person, up to 11 speakers, telegram, it was a long meeting, audio not saved, came with short lines but not a text that nobody said"; "B"; "you set it, it doesnt matter anymore"; "yes" (the models); "no need to search for it. leave it as it is"; "ok" (the recording); then "1. ok", "2. yes".
 - **Revisit when:** no grid point passes; on M3, the replay at the program values does not give the labels of the program output; or L-07 shows extra labels again.
+
+## D-084. MT errors during the run: the block shows the error, and the program continues
+
+- **Status:** ACCEPTED (2026-11-25)
+- **Context:** C11 live test `r1` (2026-11-25, Telegram, 3 people on the call side). At 02:28, the program stopped with `tir-asr: mt: Google Translate failed: Exception: Unexpected status code "500" from ['translate.googleapis.com']` (exit code 1, `test-results/c11-rec-r1.txt`). One minute later, a new start (`r2`) stopped at the MT warm-up with `ReadTimeout` (`test-results/c11-rec-r2.txt`). D-079 and D-081: an MT error stops the program; no retries; no fallback; `raise_exception=True`. Aren asked why he never saw such errors before, and if googletrans can work without this web address.
+- **Facts:**
+  - [SOURCE: googletrans 4.0.2, `client.py` lines 130–144, `constants.py` line 461] The default is `raise_exception=False`. With it, a request that fails (for example, HTTP 500) gives the input text as the translation, with no error. A timeout raises with both values, because googletrans has no `try` around the httpx call.
+  - [SOURCE: `client.py` lines 72–95] googletrans has two modes: `gtx` (`translate.googleapis.com`, the program) and `webapp` (`translate.google.com`, with a token from the web page). Both are free web addresses of the same Google service, with no guarantee.
+  - [SOURCE: the README of `@vitalets/google-translate-api`] The free web addresses give code 429 when one IP address sends too many requests.
+  - [SOURCE: cloud.google.com/translate/pricing] The official Cloud Translation API: the first 500,000 characters each month are free (a $10 credit), then $20 for each million characters. It needs a Google Cloud project, a billing account, and an API key.
+  - [RUN] `r1`: 307 Armenian characters per minute on the call side.
+- **Options:**
+  - **A.** Keep D-079: an MT error stops the program. Weak point: one Google error ends the transcript of the meeting (`r1`: after 2.5 min).
+  - **B.** Show the error in the block, and continue. No retry, no other translator.
+  - **C.** One retry. R10 forbids automatic retries.
+  - **D.** The official Cloud Translation API. Fewer errors [UNVERIFIED]. It needs an account and billing, and it can also fail, so it does not replace A or B.
+  - **Claude's preference:** B. Weak points: (1) R10 forbids `except` blocks that "only log it and continue"; B shows the error in the output block, not only in a log, but it is near that limit, so B is an exception that Aren approves; (2) while Google stays down, the blocks have no English; (3) if the errors come from a rate limit, more requests can make the outage longer. Fact that can show the preference is wrong: the error count on the shutdown line of the next live test.
+- **Decision:** B (Aren). Details:
+  1. A failed call of the English step during the run gives a block with the Armenian text, the speaker label, and the line ` EN: [MT error: <message>]`. Then the program continues with the next segment.
+  2. Only a failed translation call continues. The Google adapter raises `MtCallError`, which is an `MtError` and a `TranslationError` (core, `errors.py`). Each other error stops the program as before (R10): the ASR, the speaker step, an empty MT input (`MtError`), and any other exception.
+  3. The warm-up does not change: an MT error at startup stops the program (as in `r2`).
+  4. The shutdown line counts the MT errors: `…, not processed: N, MT errors: N.`
+  5. No retry, no other translator, and `raise_exception` stays True (D-079).
+  6. D-079 stays in force, except for its part "an MT error stops the program", which now applies only at startup. D (the official API) is for later, if the live tests show frequent MT errors.
+- **Tests:** `TESTS.md` §2.13.
+- **Reason (Aren's words):** "ok let's go for b for the translation and we'll redo the live test".
+- **Revisit when:** a live test shows frequent MT errors (then option D), or an MT error that the block does not show.
